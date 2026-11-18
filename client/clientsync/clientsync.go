@@ -77,9 +77,10 @@ func Of(err error) Outcome {
 	if gwerr.IsSourceDisabled(ce) {
 		return OutcomeDisabled
 	}
-	switch ce.Code() {
-	case connect.CodeFailedPrecondition:
+	if gwerr.IsConflict(ce) {
 		return OutcomeConflict
+	}
+	switch ce.Code() {
 	case connect.CodeUnavailable, connect.CodeDeadlineExceeded, connect.CodeCanceled:
 		return OutcomeTransport
 	}

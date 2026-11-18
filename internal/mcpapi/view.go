@@ -156,7 +156,7 @@ func refusalWords(err error) error {
 		return errors.New("disabled: " + why)
 	case gwerr.IsDeadLink(err):
 		return errors.New("dead link: " + why)
-	case st.Code() == gcodes.FailedPrecondition:
+	case gwerr.IsConflict(err):
 		return errors.New("conflict: " + why + " (read it again)")
 	case gwerr.IsTransport(err):
 		return errors.New("unreachable: " + why)

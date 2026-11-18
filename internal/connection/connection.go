@@ -331,7 +331,7 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 	// A connection whose landing contradicts the stored one serves nothing:
 	// these ids were written against the node that is no longer there.
 	if st := s.stateOf(first); st.mismatch {
-		return nil, "", status.Error(codes.FailedPrecondition, "connection: "+st.detail)
+		return nil, "", landingRefusal(st.detail)
 	}
 	lc, err := s.ensureLive(c)
 	if err != nil {
@@ -424,19 +424,17 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	if err == nil && s.dial == nil {
 		err = errors.New("no dialer")
 	}
-	dialed, client, closer := false, namespace.Namespace(nil), func() {}
+	client, closer := namespace.Namespace(nil), func() {}
 	if err == nil {
-		dialed = true
 		client, closer, err = s.dial(cfg)
 	}
 	if err != nil {
 		s.mu.Unlock()
 		trace.Emit("connection", "dial", "dial failed: "+err.Error(), kv)
 		s.setHealth(name, func(f *connFacts, _ uint64) { f.dialErr = err.Error() })
-		if dialed {
-			return nil, gwerr.Unheard("connection: connection %q: %v", name, err)
-		}
-		return nil, status.Errorf(codes.FailedPrecondition, "connection: connection %q: %v", name, err)
+		// A config that stopped resolving will not dial either: dark, as
+		// one that cannot reach the far node is.
+		return nil, gwerr.Unheard("connection: connection %q: %v", name, err)
 	}
 	trace.Emit("connection", "dial", "dial ok", kv)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -513,7 +511,14 @@ func (s *Server) noteLandingMismatch(name, stored, answered string) error {
 	if s.setHealth(name, func(f *connFacts, at uint64) { f.landing, f.mismatch = reading{detail: msg, at: at}, true }) {
 		log.Printf("gridwell: %s (stored landing %s, the far node answered %s)", msg, stored, answered)
 	}
-	return status.Error(codes.FailedPrecondition, "connection: "+msg)
+	return landingRefusal(msg)
+}
+
+// landingRefusal is what every read through a mismatched connection gets:
+// InvalidArgument, the ids naming a node that is no longer there, so no
+// reader takes it for a stale claim (gwerr.IsConflict).
+func landingRefusal(detail string) error {
+	return status.Error(codes.InvalidArgument, "connection: "+detail)
 }
 
 // kickRootFetch learns and verifies a connection's landing in the background,

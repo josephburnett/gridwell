@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/shellwire"
 	"github.com/josephburnett/gridwell/internal/namespace"
@@ -283,9 +284,9 @@ func shellReadFrame(ctx context.Context, cancel context.CancelFunc, conn *websoc
 	}
 }
 
-// shellEndVerdict is the one classification of why the attachment ended:
-// NotFound and FailedPrecondition are the PTY owner's codes for "this tmux
-// no longer exists", anything else a failure the client may retry.
+// shellEndVerdict is the one classification of why the attachment ended: the
+// tmux is gone (gwerr.IsTmuxGone), or anything else is a failure the client
+// may retry.
 func shellEndVerdict(err error) (message string, tmuxGone bool) {
 	if err == nil || errors.Is(err, io.EOF) {
 		return "", false
@@ -294,12 +295,8 @@ func shellEndVerdict(err error) (message string, tmuxGone bool) {
 	if !ok {
 		return err.Error(), false
 	}
-	switch st.Code() {
-	case gcodes.OK:
+	if st.Code() == gcodes.OK {
 		return "", false
-	case gcodes.NotFound, gcodes.FailedPrecondition:
-		return st.Message(), true
-	default:
-		return st.Message(), false
 	}
+	return st.Message(), gwerr.IsTmuxGone(err)
 }

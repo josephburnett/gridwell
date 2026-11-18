@@ -74,17 +74,18 @@ listings still answer, so it rides a healthy `EventSourceHealth` as
 event the OS delivers ends it. `told` is the files' one freshness fact: the
 watch is healthy.
 
-**3. The transport** — `internal/connection/connection.go`. Reachability is
-cached, not only announced when it changes, and every way a connection
-fails is the same record: a refused dial, a failed learn, a dead stream
-(`fanInRemote`, looping `namespace.Follow`) and a moved landing all go
-through `note`, the one writer of `s.health`, which publishes one
-`EventSourceHealth` per transition, not one per retry. `Server.Subscribe`
-opens with `healthNow()`, so a subscriber attaching after the machine died is
-told. Landing is checked, not learned: `learnRoot` refuses a connection
-whose far node answers a home other than the stored one
-(`noteLandingMismatch`), and that refusal is a FailedPrecondition on every
-read, never a staleness.
+**3. The transport** — `internal/connection/connection.go`, `health.go`.
+Reachability is held, not only announced when it changes. Each thing the
+transport learns of a connection is a fact with one writer: a refused dial
+(`ensureLive`), the event stream (`fanInRemote`, looping `namespace.Follow`),
+the landing's Info (`learnRoot`), the far node's refusal of the share
+(`tellFar`) and the user's disable. `derive` alone reads them into up and
+told, and `setHealth` publishes one `EventSourceHealth` per transition, not
+one per retry. `Server.Subscribe` opens with `healthNow()`, so a subscriber
+attaching after the machine died is told. Landing is checked, not learned:
+`learnRoot` refuses a connection whose far node answers a home other than
+the stored one (`noteLandingMismatch`), and that refusal is an
+InvalidArgument on every read, never a staleness (`gwerr.IsConflict`).
 
 **4. The source cache** — `internal/sourcecache/`. In front of the
 transport only, over the disposable `cache.db`. A cached grid serves
