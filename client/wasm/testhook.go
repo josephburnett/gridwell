@@ -52,7 +52,7 @@ type e2e struct {
 // through the same geometry helpers the input handlers hit-test against, so
 // a spec learns where to click while the server's GetGrid stays the
 // independent oracle for what was created. shellVisitURL, setTransitionMs and
-// setBackstopMs are the three that mutate.
+// setBackstopMs are the three that mutate, and panic ends the program.
 func (a *App) installTestHook() {
 	query := js.Global().Get("location").Get("search").String()
 	if !strings.Contains(query, "e2e=1") {
@@ -82,6 +82,8 @@ func (a *App) installTestHook() {
 			}
 			return nil
 		}),
+		// A Go panic in an event handler: the death web/index.html reports.
+		"panic": js.FuncOf(func(js.Value, []js.Value) any { panic("e2e panic hook") }),
 		"setBackstopMs": js.FuncOf(func(_ js.Value, args []js.Value) any {
 			// Retunes the outbox re-post cadence, restarting the wait in
 			// flight, so a spec can bound the backstop from both sides

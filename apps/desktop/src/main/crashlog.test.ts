@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { crashFileName, crashText, dumpsDir, LineTail, redact, rendererCrashed } from './crashlog';
+import { rendererLogLine } from './viewutil';
 
 const here = dirname(fileURLToPath(import.meta.url)); // apps/desktop/src/main
 const repoRoot = resolve(here, '../../../..');
@@ -84,6 +85,20 @@ test('a crash file says what died and holds both tails', () => {
   assert.match(text, /\ncode: 2\nsignal: \n/);
   assert.match(text, /node output, last 2 lines ---\npanic: boom\ngoroutine 1/);
   assert.match(text, /renderer console, last 1 lines ---\n\[renderer:error\] x\n/);
+});
+
+// The seam between the page's loader and main: a Go panic's stack reaches the
+// crash file only at the level the loader logs stderr at, since main drops
+// info, which is where wasm_exec.js left both streams.
+test('a client exit writes the Go stack the loader logged as an error', () => {
+  const stack = 'panic: boom\n\ngoroutine 1 [running]:\nmain.main()';
+  assert.equal(rendererLogLine(1, stack), null, "main drops info, wasm_exec.js's own level");
+  const tail = new LineTail();
+  tail.push(rendererLogLine(3, stack)!);
+  const text = crashText({ cause: 'client-exit', kv: { code: '2', reason: 'panic: boom' }, when: new Date(0), sidecar: [], renderer: tail.lines() });
+  assert.match(text, /^gridwell desktop crash: client-exit\n/);
+  assert.match(text, /\ncode: 2\nreason: panic: boom\n/);
+  assert.match(text, /renderer console, last 1 lines ---\n\[renderer:error\] panic: boom\n\ngoroutine 1 \[running\]:/);
 });
 
 test('every renderer ending is a crash but one it was asked for', () => {

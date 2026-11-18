@@ -14,3 +14,10 @@ test('a drop on the page is cancelled, so it cannot replace the client', async (
   );
   expect(cancelled).toEqual(['dragover:true', 'drop:true']);
 });
+
+// In a browser there is no main to write a crash file, so the screen alone
+// says the client stopped, and why.
+test('a client panic says so on screen', async ({ window }) => {
+  await window.evaluate(() => (window as any).__gridwellTest.panic());
+  await expect(window.locator('#gw-boot.failed #gw-boot-msg')).toContainText('panic: e2e panic hook', { timeout: 10_000 });
+});

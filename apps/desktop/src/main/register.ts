@@ -18,12 +18,14 @@ import {
   MirroredArgs,
   MoveArgs,
   KeyboardArgs,
+  ClientExitArgs,
 } from './ipc';
 import { forwardedDragStep, ipcRefusal, IpcSender, toContentPoint } from './viewutil';
 import { choiceMenuTemplate } from './contextmenu';
 import { WebviewRegistry } from './webviews';
 import { handOverTrace, logLine, trace } from './trace';
-import { menuChose, menuOpened } from './viewtrace';
+import { clientExited, menuChose, menuOpened } from './viewtrace';
+import { reportCrash } from './crashlog';
 
 // The renderer's declared choices, as a trace record names them; webviews.ts
 // names the live view's page menu.
@@ -155,6 +157,13 @@ export function registerWebviewIpc(
   });
 
   handle(CH.handOverTrace, (): Promise<string> => handOverTrace());
+
+  // A Go exit leaves the renderer alive, so render-process-gone never fires;
+  // the loader's report is the client's death.
+  handle(CH.clientExit, (a: ClientExitArgs): void => {
+    trace(clientExited(a.code, a.reason));
+    reportCrash('client-exit', { code: String(a.code), reason: a.reason });
+  });
 }
 
 // forwarder pushes a registry callback's event onto its EV channel unchanged;

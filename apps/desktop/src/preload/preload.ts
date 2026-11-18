@@ -68,9 +68,16 @@ const VERBS = {
   handOverTrace: CH.handOverTrace,
 } as const;
 
+// The verbs web/index.html's loader calls, outside the wasm, which
+// webview-vocabulary.test.ts pins against the page.
+const LOADER = {
+  // The Go program ended; see ClientExitArgs.
+  reportExit: CH.clientExit,
+} as const;
+
 const verbs = Object.fromEntries(
-  Object.entries(VERBS).map(([name, channel]) => [name, (args: unknown) => ipcRenderer.invoke(channel, args)]),
-) as Record<keyof typeof VERBS, (args: unknown) => Promise<unknown>>;
+  Object.entries({ ...VERBS, ...LOADER }).map(([name, channel]) => [name, (args: unknown) => ipcRenderer.invoke(channel, args)]),
+) as Record<keyof typeof VERBS | keyof typeof LOADER, (args: unknown) => Promise<unknown>>;
 
 const api = {
   version: 1,

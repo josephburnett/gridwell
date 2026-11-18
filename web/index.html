@@ -228,7 +228,40 @@
           loaded = await load(true);
         }
         boot.remove();
-        loaded.go.run(loaded.result.instance);
+        // wasm_exec.js logs Go's stdout and stderr alike at info, which main
+        // drops (viewutil.rendererLogLine); stderr holds a panic's stack, so
+        // it is logged as an error, and its first line is what the screen says.
+        const decoder = new TextDecoder("utf-8");
+        const pending = {};
+        let firstErr = "";
+        globalThis.fs.writeSync = (fd, buf) => {
+          pending[fd] = (pending[fd] || "") + decoder.decode(buf);
+          const nl = pending[fd].lastIndexOf("\n");
+          if (nl !== -1) {
+            const text = pending[fd].substring(0, nl);
+            pending[fd] = pending[fd].substring(nl + 1);
+            if (fd === 2) {
+              console.error(text);
+              firstErr = firstErr || text.split("\n")[0];
+            } else console.log(text);
+          }
+          return buf.length;
+        };
+        let code = -1;
+        let thrown = "";
+        loaded.go.exit = (c) => { code = c; };
+        try {
+          await loaded.go.run(loaded.result.instance);
+        } catch (e) {
+          thrown = e && e.message ? e.message : String(e);
+        }
+        // The client never returns, so an end is a death: the boot overlay's
+        // failure says so, and main writes the crash file.
+        const reason = firstErr || thrown || "exit code " + code;
+        document.body.appendChild(boot);
+        boot.classList.add("failed");
+        msg.textContent = "gridwell stopped: " + reason;
+        if (window.gridwell) window.gridwell.reportExit({ code, reason });
       } catch (e) {
         boot.classList.add("failed");
         msg.textContent = "gridwell failed to load: " + (e && e.message ? e.message : e);

@@ -28,6 +28,7 @@ export const CH = {
   setKeyboard: 'gw:setKeyboard', // KeyboardArgs → void: the keyboard's owner
   handOverTrace: 'gw:handOverTrace', // void → string: '' once the node holds
                                      // main's trace records, else why not.
+  clientExit: 'gw:clientExit', // ClientExitArgs → void: from web/index.html's loader
 } as const;
 
 // Live url view's preload → main (send, fire-and-forget), from every frame of
@@ -142,6 +143,13 @@ export interface MoveArgs {
 // sends it whenever it applies the owner, and main makes it true.
 export interface KeyboardArgs {
   paneId: string;
+}
+
+// The Go program ended, which the client never does but by dying. code is
+// its exit code, -1 when it threw instead; reason is what the screen says.
+export interface ClientExitArgs {
+  code: number;
+  reason: string;
 }
 
 // The live panes whose preview another pane shows, pane.Mirrored's answer, which

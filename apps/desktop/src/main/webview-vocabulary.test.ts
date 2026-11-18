@@ -50,6 +50,14 @@ test('the wasm calls exactly the bridge verbs the preload exposes', () => {
   );
 });
 
+test("the page's loader calls exactly the loader verbs the preload exposes", () => {
+  const table = read(PRELOAD).match(/const LOADER = \{([\s\S]*?)\n\} as const;/);
+  assert.ok(table, `no LOADER table found in ${PRELOAD}`);
+  const preload = matches(table![1], /^\s*(\w+):/gm);
+  const page = [...new Set(matches(read('web/index.html'), /window\.gridwell\.(\w+)\(/g))];
+  assert.deepEqual(page, preload, 'web/index.html drifted from the LOADER table in preload.ts (the owner); the loader would call a non-function');
+});
+
 test('the wasm subscribes exactly the listeners the preload table declares', () => {
   const table = read(PRELOAD).match(/const LISTENERS = \{([\s\S]*?)\n\} as const;/);
   assert.ok(table, `no LISTENERS table found in ${PRELOAD}`);

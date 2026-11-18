@@ -133,6 +133,11 @@ export function windowGone(reason: string, exitCode: number): TraceEvent {
   return { src: WINDOW, kind: 'gone', msg: 'root renderer', kv: { reason, exitCode: String(exitCode) } };
 }
 
+// The Go program in the root renderer ended; see ClientExitArgs.
+export function clientExited(code: number, reason: string): TraceEvent {
+  return { src: WINDOW, kind: 'client-exit', msg: reason, kv: { code: String(code) } };
+}
+
 // Chromium's hang verdict on the root renderer and its recovery, one kind
 // each, so a frozen canvas reads as the span between them.
 export function windowResponsive(responsive: boolean): TraceEvent {

@@ -72,7 +72,7 @@ export function crashFileName(now: Date): string {
 }
 
 interface CrashReport {
-  // Which death: 'sidecar-exit' or 'renderer-gone'.
+  // Which death: 'sidecar-exit', 'renderer-gone' or 'client-exit'.
   cause: string;
   kv: Record<string, string>;
   when: Date;

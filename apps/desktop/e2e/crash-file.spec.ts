@@ -65,3 +65,19 @@ test('a dead canvas is traced and leaves a crash file', async ({ electronApp, wi
     })
     .toMatchObject({ reason: expect.any(String), exitCode: expect.any(String) });
 });
+
+// A Go panic ends the program and leaves the renderer alive, so Chromium sees
+// no death: the page's loader reports the exit, and main writes the file.
+test('a client panic leaves a crash file holding its stack and says so on screen', async ({ window, home }) => {
+  await window.evaluate(() => (window as any).__gridwellTest.panic());
+
+  await expect
+    .soft(window.locator('#gw-boot.failed #gw-boot-msg'), 'the screen says the client stopped')
+    .toContainText('panic: e2e panic hook', { timeout: 10_000 });
+  await expect.poll(() => crashFiles(home).length, { timeout: 10_000, message: 'a crash file was written' }).toBe(1);
+  const text = crashFiles(home)[0];
+  expect(text).toMatch(/^gridwell desktop crash: client-exit\n/);
+  expect(text).toContain('code: 2');
+  expect(text, 'the Go stack').toContain('panic: e2e panic hook');
+  expect(text, 'the Go stack').toContain('goroutine ');
+});
