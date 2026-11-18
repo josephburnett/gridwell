@@ -154,49 +154,13 @@ func TestDescendAscentRoundTripClosedStaysClosed(t *testing.T) {
 	}
 }
 
-func TestTransferFocusReturnsChangedAndClosesMenu(t *testing.T) {
+// A menu whose pane is gone, so no pane or another holds focus, is closed.
+func TestSyncFocusClosesWhenItsPaneIsGone(t *testing.T) {
 	s := New()
 	s.Open("p1")
-	if !s.TransferFocus("p1", "p2") {
-		t.Fatal("TransferFocus must report true when focus changed")
-	}
-	if s.IsOpen() {
-		t.Fatal("TransferFocus must close the menu when focus moves away from its pane")
-	}
-}
-
-func TestTransferFocusNoopWhenFocusUnchanged(t *testing.T) {
-	s := New()
-	s.Open("p1")
-	if s.TransferFocus("p1", "p1") {
-		t.Fatal("TransferFocus must report false when focus did not change")
-	}
-	if !s.OpenOn("p1") {
-		t.Fatal("TransferFocus must leave the menu untouched when focus did not change")
-	}
-}
-
-func TestTransferFocusMenuClosedNoChange(t *testing.T) {
-	s := New()
-	// A closed menu still reports the focus change.
-	if !s.TransferFocus("p1", "p2") {
-		t.Fatal("TransferFocus must still report true when focus changed (menu already closed)")
-	}
-	if s.IsOpen() {
-		t.Fatal("TransferFocus on an already-closed menu must leave it closed")
-	}
-}
-
-// The menu closes whenever focus moves, whichever gesture moved it.
-func TestTransferFocusForwardedPathClosesMenu(t *testing.T) {
-	s := New()
-	s.Open("p1")
-	changed := s.TransferFocus("p1", "p2")
-	if !changed {
-		t.Fatal("forwarded press that changes focus must report changed=true")
-	}
-	if s.IsOpen() {
-		t.Fatal("forwarded press must close the menu on the de-focused pane")
+	s.SyncFocus("")
+	if s.IsOpen() || s.PaneID() != "" {
+		t.Fatal("a menu must close when no pane is focused")
 	}
 }
 

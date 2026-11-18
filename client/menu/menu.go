@@ -102,20 +102,12 @@ func (s *State) SetHover(i int) (changed bool) {
 	return true
 }
 
-// SyncFocus closes a menu open on a pane that is no longer focused, so no
-// focus path has to close the menu itself.
+// SyncFocus closes a menu open on a pane that is not the focused one, ""
+// when no pane is: the menu's lifetime is its pane's focus. The App applies
+// it at every draw, which every change of focus or of the pane tree ends in,
+// so no path that moves focus or removes a pane closes the menu itself.
 func (s *State) SyncFocus(focusedPaneID string) {
 	if s.open && s.paneID != focusedPaneID {
 		s.Close()
 	}
-}
-
-// TransferFocus reports whether focus changed and syncs the menu when it did.
-// Every path that moves wasm focus calls it; calling it on no move is safe.
-func (s *State) TransferFocus(prevID, newID string) bool {
-	if prevID == newID {
-		return false
-	}
-	s.SyncFocus(newID)
-	return true
 }

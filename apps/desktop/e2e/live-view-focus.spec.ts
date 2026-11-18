@@ -89,7 +89,7 @@ test('left-clicking a live URL pane closes the + menu on the previously-focused 
   await gw.clickScreen(urlPane.x + urlPane.w / 2, urlPane.y + urlPane.h / 2);
   await gw.waitIdle();
 
-  // focusToPane closes the menu through menu.TransferFocus.
+  // The draw after the focus move closes the menu (menu.State.SyncFocus).
   expect((await gw.menu()).open, 'menu closed after focus moved to URL pane').toBe(false);
 
   expect((await gw.focused()).id, 'focus moved to the URL pane').toBe(urlPaneId);

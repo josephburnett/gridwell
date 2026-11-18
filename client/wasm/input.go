@@ -228,12 +228,12 @@ func (a *App) tileAtCell(p *pane.Pane, cellX, cellY int64) *gridwellv1.Tile {
 }
 
 // focusToPane is the single focus-transfer owner; every press path calls it,
-// and it is a no-op on the same pane. A real change tells menu.TransferFocus,
-// which closes a menu left on the old pane.
+// and it is a no-op on the same pane. Its draw closes a menu left on the old
+// pane (menu.State.SyncFocus).
 func (a *App) focusToPane(p *pane.Pane) bool {
 	prev := a.tree.Focus
 	_ = a.tree.SetFocus(p.ID)
-	if !a.menu.TransferFocus(prev, a.tree.Focus) {
+	if prev == a.tree.Focus {
 		return false
 	}
 	a.emit(traceevent.Focus(prev, a.tree.Focus))
@@ -821,14 +821,10 @@ func (a *App) storedRootView(anchor string, s zoomtrans.Size) (rpc.Framing, bool
 // splitBelowForOpen runs pane.SplitBelowForOpen, the one programmatic split,
 // for the focused pane p. The shed ascent is unanimated: no ascent was asked.
 func (a *App) splitBelowForOpen(p *pane.Pane) (target *pane.Pane, split bool) {
-	prev := a.tree.Focus
 	target, split, shed := a.tree.SplitBelowForOpen(paneRectFor(a, p))
 	if split {
 		a.emit(traceevent.PaneSplit(target.ID, p.ID))
 	}
-	// The split moves focus to the new pane, so the menu has to be told, or
-	// it stays open on a pane that no longer has focus.
-	a.menu.TransferFocus(prev, a.tree.Focus)
 	if shed {
 		a.ascend(target, 1, false)
 	}

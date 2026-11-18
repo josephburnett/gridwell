@@ -370,6 +370,11 @@ func menuSections(items []menuItem) []int {
 const ghostSizeLerpAlpha = 0.20
 
 func (a *App) draw() {
+	focused := ""
+	if p := a.tree.FocusedPane(); p != nil {
+		focused = p.ID
+	}
+	a.menu.SyncFocus(focused)
 	a.fetch.bodies.Begin()
 	defer func() { a.readBodies(a.fetch.bodies.End()) }()
 	if a.ghost != nil {
@@ -403,12 +408,8 @@ func (a *App) draw() {
 		a.drawPane(p, r)
 	}
 
-	if a.menu.IsOpen() {
-		if mp := a.tree.FindPane(a.menu.PaneID()); mp != nil {
-			if _, ok := rects[mp.ID]; ok {
-				a.drawMenu(mp)
-			}
-		}
+	if _, ok := rects[a.menu.PaneID()]; ok {
+		a.drawMenu(a.tree.FindPane(a.menu.PaneID()))
 	}
 
 	if a.rightDrag != nil {
