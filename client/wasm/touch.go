@@ -49,13 +49,15 @@ func (a *App) installOverlayTouch(el js.Value, claim func(pts []touchgest.Point)
 	active := false
 	opts := js.Global().Get("Object").New()
 	opts.Set("passive", false)
-	handler := func(phase string) js.Func {
-		return js.FuncOf(func(_ js.Value, args []js.Value) any {
+	feeds := []func([]touchgest.Point, float64) []touchgest.Action{a.touch.Start, a.touch.Move, a.touch.End, a.touch.Cancel}
+	fns := make([]js.Func, len(feeds))
+	for i, name := range []string{"touchstart", "touchmove", "touchend", "touchcancel"} {
+		feed, start := feeds[i], i == 0
+		fns[i] = js.FuncOf(func(_ js.Value, args []js.Value) any {
 			ev := args[0]
-			touches := ev.Get("touches")
-			pts := touchPoints(touches)
+			pts := touchPoints(ev.Get("touches"))
 			if !active {
-				if phase != "start" || (claim != nil && !claim(pts)) {
+				if !start || (claim != nil && !claim(pts)) {
 					return nil
 				}
 				active = true
@@ -64,24 +66,13 @@ func (a *App) installOverlayTouch(el js.Value, claim func(pts []touchgest.Point)
 				a.touchDownTarget = el
 			}
 			ev.Call("preventDefault")
-			t := touchNow()
-			switch phase {
-			case "start":
-				a.dispatchTouchActions(a.touch.Start(pts, t))
+			a.dispatchTouchActions(feed(pts, touchNow()))
+			if start {
 				js.Global().Call("setTimeout", a.touchTimerCb, int(touchgest.HoldMs)+5)
-			case "move":
-				a.dispatchTouchActions(a.touch.Move(pts, t))
-			default: // end / cancel
-				a.dispatchTouchActions(a.touch.End(pts, t))
-				if touches.Get("length").Int() == 0 {
-					active = false
-				}
 			}
+			active = len(pts) > 0
 			return nil
 		})
-	}
-	fns := []js.Func{handler("start"), handler("move"), handler("end"), handler("end")}
-	for i, name := range []string{"touchstart", "touchmove", "touchend", "touchcancel"} {
 		el.Call("addEventListener", name, fns[i], opts)
 	}
 	return fns
@@ -121,6 +112,8 @@ func (a *App) dispatchTouchActions(actions []touchgest.Action) {
 			a.dispatchMouse(a.canvas, "mouseup", act, 0)
 		case touchgest.Wheel:
 			a.dispatchWheel(act.Pos.X, act.Pos.Y, act.DeltaY)
+		case touchgest.Cancel: // Esc's undo; a finger owns no key, so no selection clears
+			a.cancelGesture(false, false)
 		case touchgest.Select: // the mouse's shift + left press, in the bar or on its tile
 			if sx, sy := canvasXY(act.Pos.X, act.Pos.Y, a.canvas); a.bottomBarClick(sx, sy, 0, traceevent.Mods{Shift: true}, true) {
 				continue

@@ -295,3 +295,76 @@ func TestThreeFingersGoDead(t *testing.T) {
 		t.Fatalf("three-finger move emitted %+v", as)
 	}
 }
+
+// ── cancel ───────────────────────────────────────────────────────────────────
+
+// TestCancelCommitsNothing plays a touchcancel in every state of the machine:
+// a press the shell holds is let go of by Cancel, Esc's undo, and nothing is
+// pressed, released or selected.
+func TestCancelCommitsNothing(t *testing.T) {
+	o := pt(100, 100)
+	pair := []Point{pt(80, 100), pt(120, 100)}
+	cases := []struct {
+		name   string
+		reach  func(m *Machine)
+		cancel bool
+	}{
+		{"idle", func(m *Machine) {}, false},
+		{"one finger, unclassified", func(m *Machine) { m.Start([]Point{o}, 0) }, false},
+		{"left drag", func(m *Machine) {
+			m.Start([]Point{o}, 0)
+			m.Move([]Point{pt(140, 100)}, 20)
+		}, true},
+		{"long-press held in place", func(m *Machine) {
+			m.Start([]Point{o}, 0)
+			m.Timer(HoldMs)
+		}, true},
+		{"long-press dragged", func(m *Machine) {
+			m.Start([]Point{o}, 0)
+			m.Timer(HoldMs)
+			m.Move([]Point{pt(160, 100)}, HoldMs+20)
+		}, true},
+		{"two fingers, unclassified", func(m *Machine) { m.Start(pair, 0) }, false},
+		{"two fingers, one lifted", func(m *Machine) {
+			m.Start(pair, 0)
+			m.End(pair[:1], 20)
+		}, false},
+		{"pinch", func(m *Machine) {
+			m.Start(pair, 0)
+			m.Move([]Point{pt(60, 100), pt(140, 100)}, 20)
+		}, false},
+		{"two-finger scroll", func(m *Machine) {
+			m.Start(pair, 0)
+			m.Move([]Point{pt(80, 60), pt(120, 60)}, 20)
+		}, false},
+		{"dead", func(m *Machine) {
+			m.Start([]Point{o, pt(110, 100), pt(120, 100)}, 0)
+		}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := New()
+			c.reach(m)
+			got := m.Cancel(nil, 100)
+			if c.cancel != (len(got) == 1 && got[0].Kind == Cancel) || !c.cancel && len(got) > 0 {
+				t.Fatalf("actions = %+v, want a Cancel: %v", got, c.cancel)
+			}
+			// The machine is idle again: the next touch is a fresh tap.
+			m.Start([]Point{o}, 1000)
+			wantActions(t, m.End(nil, 1050),
+				Action{Kind: MouseDown, Pos: o, Button: 0},
+				Action{Kind: MouseUp, Pos: o, Button: 0})
+		})
+	}
+}
+
+// TestCancelWithFingersLeftSwallowsTheRest: a cancel that leaves fingers down
+// lets go of the press, and those fingers' lift commits nothing either.
+func TestCancelWithFingersLeftSwallowsTheRest(t *testing.T) {
+	m := New()
+	m.Start([]Point{pt(100, 100)}, 0)
+	m.Move([]Point{pt(140, 100)}, 20)
+	wantActions(t, m.Cancel([]Point{pt(140, 100)}, 30), Action{Kind: Cancel, Pos: pt(140, 100)})
+	wantActions(t, m.Move([]Point{pt(150, 100)}, 40))
+	wantActions(t, m.End(nil, 60))
+}

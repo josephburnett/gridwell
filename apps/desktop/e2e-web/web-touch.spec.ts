@@ -237,3 +237,60 @@ test('touch: a long-press lifted in place on a door crumb toggles the door in it
   await gw.waitIdle();
   await expect.poll(selection, { message: 'a second hold toggled it out' }).toEqual([]);
 });
+
+// A touch the system takes (a swipe home, a call, a palm) ends in touchcancel,
+// which lets go of the gesture as Esc does (gesture.Escape): a drag snaps
+// back, a hold selects nothing, an unclassified touch is no tap, and nothing
+// is asked of the node.
+test('touch: a cancelled touch commits nothing', async ({ gw, window }) => {
+  await gw.enterSource('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  await gw.openMenu();
+  await gw.dragCreate('markdown', cx, cy);
+  const t = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
+  expect(t, 'markdown tile created').toBeTruthy();
+  await gw.waitClientTileAt(f.id, cx, cy, t.id);
+  const from = await gw.cellCenter(f.id, cx, cy);
+  const to = await gw.cellCenter(f.id, cx + 1, cy);
+
+  const asked: string[] = [];
+  await window.route('**/gridwell.v1.Gridwell/{MoveTile,CopyTile,DeleteTile,SetSelection}', async (r: any) => {
+    asked.push(r.request().url().split('/').pop());
+    await r.continue().catch(() => {});
+  });
+  const steps = Array.from({ length: 8 }, (_, i) => ({
+    x: from.x + ((to.x - from.x) * (i + 1)) / 8,
+    y: from.y + ((to.y - from.y) * (i + 1)) / 8,
+  }));
+  const cancelled = async (holdMs: number, path: { x: number; y: number }[]) => {
+    const s = await window.context().newCDPSession(window);
+    await s.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [from] });
+    if (holdMs) await window.waitForTimeout(holdMs);
+    for (const p of path) await s.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [p] });
+    await s.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
+    await s.detach();
+    await gw.waitIdle();
+  };
+  const clientAt = () =>
+    window.evaluate(
+      ([id, x, y]) => (window as any).__gridwellTest.tileAt(id, x, y),
+      [f.id, cx, cy] as [string, number, number],
+    );
+
+  await cancelled(0, steps); // a drag
+  expect(await clientAt(), 'the dragged tile snapped back').toBe(t.id);
+  await cancelled(550, steps); // a long-press drag, a copy
+  expect(await clientAt(), 'the copied tile stayed').toBe(t.id);
+  await cancelled(550, []); // a hold in place, a select
+  await cancelled(0, []); // an unclassified touch, a tap
+  const p = await gw.focused();
+  expect(p.textFocus, 'no tap descended').toBe('');
+  expect(p.placeDepth, 'no tap descended').toBe(f.placeDepth);
+  expect(asked, 'nothing was asked of the node').toEqual([]);
+  const g = await gw.getGrid(f.gridID);
+  expect(tileAt(g, 'text', cx, cy)?.id, 'the tile is where it was').toBe(t.id);
+  expect((g.tiles ?? []).filter((n) => n.kind === 'text').length, 'no copy was made').toBe(1);
+  expect(g.grid?.selection ?? [], 'nothing was selected').toEqual([]);
+});

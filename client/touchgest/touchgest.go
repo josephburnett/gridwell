@@ -11,9 +11,10 @@
 //	two-finger tap     → middle click      (ascend)
 //	two-finger pinch   → wheel at midpoint (zoom; spread = wheel-up = zoom in)
 //	two-finger scroll  → wheel at midpoint (doc scroll, matching a trackpad)
+//	touchcancel        → Cancel            (Esc's undo of the press in flight)
 //
 // It is js-free. client/wasm/touch.go feeds it timestamped events and
-// dispatches every returned Action but Select as a synthetic DOM event.
+// dispatches every Action but Select and Cancel as a synthetic DOM event.
 package touchgest
 
 import "math"
@@ -31,6 +32,8 @@ const (
 	// Select is a long-press lifted in place, sent before its right release:
 	// it toggles the tile the right press holds and is nothing anywhere else.
 	Select
+	// Cancel lets go of the press in flight, as Esc does.
+	Cancel
 )
 
 // Action is one synthetic input event for the shell to dispatch. Button
@@ -119,22 +122,11 @@ func (m *Machine) Start(pts []Point, t float64) []Action {
 			m.twoT0 = t
 			m.accDist, m.accTrav = 0, 0
 			return nil
-		case dragLeft, dragRight:
-			as := []Action{{Kind: MouseUp, Pos: m.last, Button: m.dragButton()}}
-			m.st = dead
-			return as
 		default:
-			m.st = dead
-			return nil
+			return m.abandon(MouseUp)
 		}
 	default:
-		if m.st == dragLeft || m.st == dragRight {
-			as := []Action{{Kind: MouseUp, Pos: m.last, Button: m.dragButton()}}
-			m.st = dead
-			return as
-		}
-		m.st = dead
-		return nil
+		return m.abandon(MouseUp)
 	}
 }
 
@@ -206,16 +198,12 @@ func (m *Machine) Move(pts []Point, t float64) []Action {
 	}
 }
 
-// End takes the remaining touch list, on touchend and touchcancel.
+// End takes the remaining touch list on touchend.
 func (m *Machine) End(remaining []Point, t float64) []Action {
 	if len(remaining) > 0 {
 		// Hardware and CDP injection both lift one finger per event, so this
 		// is the ordinary end of a two-finger gesture.
 		switch m.st {
-		case dragLeft, dragRight:
-			as := []Action{{Kind: MouseUp, Pos: m.last, Button: m.dragButton()}}
-			m.st = dead
-			return as
 		case twoDown:
 			// The tap window stays open until the second finger lifts.
 			m.st = twoLift
@@ -223,8 +211,7 @@ func (m *Machine) End(remaining []Point, t float64) []Action {
 		case idle:
 			return nil
 		default:
-			m.st = dead
-			return nil
+			return m.abandon(MouseUp)
 		}
 	}
 	st := m.st
@@ -273,4 +260,24 @@ func (m *Machine) dragButton() int {
 		return 2
 	}
 	return 0
+}
+
+// Cancel takes touchcancel with End's arguments: the press the shell holds is
+// let go of by a Cancel, Esc's undo (gesture.Escape), and nothing is committed.
+func (m *Machine) Cancel(remaining []Point, _ float64) []Action {
+	as := m.abandon(Cancel)
+	if len(remaining) == 0 {
+		m.st = idle
+	}
+	return as
+}
+
+// abandon swallows the gesture until every finger lifts, ending a drag by end.
+func (m *Machine) abandon(end Kind) []Action {
+	var as []Action
+	if m.st == dragLeft || m.st == dragRight {
+		as = []Action{{Kind: end, Pos: m.last, Button: m.dragButton()}}
+	}
+	m.st = dead
+	return as
 }
