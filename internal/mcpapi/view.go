@@ -137,10 +137,18 @@ func gridOf(g *pb.Grid) Grid {
 
 func dead(err error) bool { return gwerr.IsDeadLink(err) }
 
-// refusal is a router answer as a tool error: what kind of no it is, then the
-// router's own reason. The kinds are the verdicts the client tells apart
-// (clientsync.Of), read here off the gRPC status the router answers.
-func refusal(err error) error {
+// refusal is a router answer as a tool error: its words over the router's
+// status, which status.FromError still reads.
+func refusal(err error) error { return worded{refusalWords(err), err} }
+
+type worded struct{ words, router error }
+
+func (w worded) Error() string { return w.words.Error() }
+func (w worded) Unwrap() error { return w.router }
+
+// refusalWords is what kind of no err is, one of the verdicts the client
+// tells apart (clientsync.Of), then the router's own reason.
+func refusalWords(err error) error {
 	st := status.Convert(err)
 	why := st.Message()
 	switch {

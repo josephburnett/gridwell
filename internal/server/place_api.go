@@ -76,7 +76,7 @@ func (s *Server) servePlace(w http.ResponseWriter, r *http.Request, st pane.URLS
 	}
 	resp, err := rt.GetTile(ctx, &pb.GetTileRequest{TileId: id})
 	if err != nil {
-		refusedWeb(r.URL.Path, httpStatusError(w, err), err.Error(), nil)
+		answerJSON(w, r.URL.Path, nil, err)
 		return
 	}
 	row := resp.GetTile()
@@ -120,8 +120,7 @@ func textType(row *pb.Tile) string {
 // answerJSON writes a read's answer as the MCP API's JSON, or its refusal.
 func answerJSON(w http.ResponseWriter, path string, v any, err error) {
 	if err != nil {
-		refusedWeb(path, http.StatusBadGateway, err.Error(), nil)
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		refusedWeb(path, httpStatusError(w, err), err.Error(), nil)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
