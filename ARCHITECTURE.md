@@ -188,7 +188,7 @@ derived placement among them (`cellFree`).
 The Gridwell layer over a directory is every home row on a grid keyed at
 or under its path (`store/overlay.go`). A move of the directory within
 Gridwell rewrites those keys and the files' rows under it in one
-transaction (`store.FileRows.Rekey`), so the tiles keep their ids, cells,
+transaction (`store.FileRows.Move`), so the tiles keep their ids, cells,
 framing and selection; a delete sends the directory to the OS trash and
 its Gridwell tiles to home's (`store.FileRows.TrashOver`). A directory gone
 underneath Gridwell is listed in its parent from the rows, a door with

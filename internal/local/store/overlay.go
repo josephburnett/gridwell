@@ -2,7 +2,7 @@ package store
 
 // The Gridwell layer over a directory as a whole: every home row on a grid
 // keyed at or under a path. A directory moved within Gridwell carries it
-// (Rekey), and one deleted sends it to the trash (TrashOver); one gone
+// (FileRows.Move), and one deleted sends it to the trash (TrashOver); one gone
 // underneath Gridwell is listed for it (HeldAt, HeldUnder), and a move
 // onto it is refused.
 
@@ -53,79 +53,86 @@ func heldAt(ctx context.Context, q gridReader, path string) (bool, error) {
 	return one == 1, err
 }
 
-// Rekey carries the directory moved from from to to: every grids row keyed
+// rekey carries the directory moved from from to to: every grids row keyed
 // at or under from, its framing and selection with it, and the files' live
 // rows under from, follow to the same place under to, so the Gridwell tiles
-// on those grids keep their ids and cells. A grid row a vanished directory
-// left at or under to holds no Gridwell tile, or the move is refused, and is
-// vacated, its key spelled as no path ('#' and its id), so it reads dead.
-// Each moved grid tells GridChanged under both spellings and each Gridwell
-// tile on one TileChanged under its new grid.
-func (n *FileRows) Rekey(from, to string) error {
-	ctx := context.Background()
-	return n.s.withMutation(ctx, "Rekey", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		held, err := heldAt(ctx, tx, to)
-		if err != nil {
+// on those grids keep their ids and cells. The rename proved nothing is at
+// to, so what the rows still name there is stale: a grid row holds no
+// Gridwell tile, or the move is refused, and is vacated, its key spelled as
+// no path ('#' and its id), so it reads dead; a live row retires, as a
+// listing's sweep retires it. Each moved grid tells GridChanged under both
+// spellings and each Gridwell tile on one TileChanged under its new grid.
+func (n *FileRows) rekey(ctx context.Context, tx *sql.Tx, events *[]*gridwellv1.Event, from, to string) error {
+	held, err := heldAt(ctx, tx, to)
+	if err != nil {
+		return err
+	}
+	if held {
+		return fmt.Errorf("%w: %s holds a gone directory's Gridwell tiles; move them out first", ErrInvalidArgument, to)
+	}
+	cond, args := atOrUnder("key", to)
+	if _, err := tx.ExecContext(ctx, `UPDATE grids SET key = '#' || id WHERE key != '' AND `+cond, args...); err != nil {
+		return err
+	}
+	stale, err := tileIDs(ctx, tx, `key != '' AND tombstoned = 0 AND `+cond, args...)
+	for _, id := range stale {
+		if err == nil {
+			err = n.retireTx(ctx, tx, id)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	cond, args = atOrUnder("key", from)
+	rows, err := tx.QueryContext(ctx, `SELECT id, key FROM grids WHERE key != '' AND `+cond, args...)
+	if err != nil {
+		return err
+	}
+	type moved struct {
+		id       int64
+		old, new string
+	}
+	grids, err := collect(rows, func(rows *sql.Rows) (moved, error) {
+		var m moved
+		err := rows.Scan(&m.id, &m.old)
+		m.new = to + m.old[len(from):]
+		return m, err
+	})
+	if err != nil {
+		return err
+	}
+	now := n.s.now().Unix()
+	for _, g := range grids {
+		if _, err := tx.ExecContext(ctx, `UPDATE grids SET key = ?, updated_at = ? WHERE id = ?`, g.new, now, g.id); err != nil {
 			return err
 		}
-		if held {
-			return fmt.Errorf("%w: %s holds a gone directory's Gridwell tiles; move them out first", ErrInvalidArgument, to)
-		}
-		cond, args := atOrUnder("key", to)
-		if _, err := tx.ExecContext(ctx, `UPDATE grids SET key = '#' || id WHERE key != '' AND `+cond, args...); err != nil {
-			return err
-		}
-		cond, args = atOrUnder("key", from)
-		rows, err := tx.QueryContext(ctx, `SELECT id, key FROM grids WHERE key != '' AND `+cond, args...)
-		if err != nil {
-			return err
-		}
-		type moved struct {
-			id       int64
-			old, new string
-		}
-		grids, err := collect(rows, func(rows *sql.Rows) (moved, error) {
-			var m moved
-			err := rows.Scan(&m.id, &m.old)
-			m.new = to + m.old[len(from):]
-			return m, err
-		})
-		if err != nil {
-			return err
-		}
-		now := n.s.now().Unix()
-		for _, g := range grids {
-			if _, err := tx.ExecContext(ctx, `UPDATE grids SET key = ?, updated_at = ? WHERE id = ?`, g.new, now, g.id); err != nil {
-				return err
-			}
-		}
-		p := below(from)
-		if _, err := tx.ExecContext(ctx, `UPDATE tiles SET key = ? || substr(key, length(?) + 1), updated_at = ?
+	}
+	p := below(from)
+	if _, err := tx.ExecContext(ctx, `UPDATE tiles SET key = ? || substr(key, length(?) + 1), updated_at = ?
 			WHERE key != '' AND tombstoned = 0 AND substr(key, 1, length(?)) = ?`, below(to), p, now, p, p); err != nil {
+		return err
+	}
+	for _, g := range grids {
+		for _, key := range []string{g.old, g.new} {
+			*events = append(*events, &gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{
+				GridChanged: &gridwellv1.GridChanged{GridId: rpc.KeyTileID(key)}}})
+		}
+		ids, err := tileIDs(ctx, tx, `grid_id = ? AND key = ''`, g.id)
+		if err != nil {
 			return err
 		}
-		for _, g := range grids {
-			for _, key := range []string{g.old, g.new} {
-				*events = append(*events, &gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{
-					GridChanged: &gridwellv1.GridChanged{GridId: rpc.KeyTileID(key)}}})
-			}
-			ids, err := homeRowsOn(ctx, tx, g.id)
-			if err != nil {
+		for _, id := range ids {
+			if _, err := n.s.emitTileChanged(ctx, tx, id, events); err != nil {
 				return err
 			}
-			for _, id := range ids {
-				if _, err := n.s.emitTileChanged(ctx, tx, id, events); err != nil {
-					return err
-				}
-			}
 		}
-		return nil
-	}, "~:rekey/"+from)
+	}
+	return nil
 }
 
-// homeRowsOn is the Gridwell tiles on grid gridID, by id.
-func homeRowsOn(ctx context.Context, q gridReader, gridID int64) ([]int64, error) {
-	rows, err := q.QueryContext(ctx, `SELECT id FROM tiles WHERE grid_id = ? AND key = '' ORDER BY id`, gridID)
+// tileIDs is the ids of the tiles rows where holds, in id order.
+func tileIDs(ctx context.Context, q gridReader, where string, args ...any) ([]int64, error) {
+	rows, err := q.QueryContext(ctx, `SELECT id FROM tiles WHERE `+where+` ORDER BY id`, args...)
 	if err != nil {
 		return nil, err
 	}

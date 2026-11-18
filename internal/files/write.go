@@ -56,8 +56,8 @@ func (s *Source) MoveTile(_ context.Context, req *pb.MoveTileRequest) (*pb.TileR
 	return s.changedTile(path, changed, err, true)
 }
 
-// moveAcross renames path into to, and the overlay under path follows it
-// (store.FileRows.Rekey). The claim, and a gone directory's Gridwell tiles
+// moveAcross renames path into to, and the row and the overlay under path
+// follow it in one write (store.FileRows.Move). The claim, and a gone directory's Gridwell tiles
 // where it would land, are checked before the rename, since a rename is not
 // undone.
 func (s *Source) moveAcross(req *pb.MoveTileRequest, path, dir, to string) (*pb.TileResponse, error) {
@@ -91,9 +91,6 @@ func (s *Source) moveAcross(req *pb.MoveTileRequest, path, dir, to string) (*pb.
 			return "", false, err
 		}
 		changed, err := s.mem.Move(id, toGid, landed, req.X, req.Y, req.W, req.H, req.Claim)
-		if err == nil {
-			err = s.mem.Rekey(path, landed)
-		}
 		return landed, changed, err
 	}()
 	if err != nil {

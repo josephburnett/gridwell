@@ -433,10 +433,12 @@ func (n *FileRows) exec(verb, set string, tileID int64, args ...any) (changed bo
 }
 
 // Move is the placement writeback, claiming the footprint the writer saw.
-// gridID 0 keeps the row's grid and key; another is a move by the source
-// and the row leaves the old selection.
+// gridID 0 keeps the row's grid and key; another is a rename by the source,
+// and in the same write the overlay under the old key follows it (rekey) and
+// the row leaves the old selection.
 func (n *FileRows) Move(tileID, gridID int64, key string, x, y, w, h int64, claim *gridwellv1.Placement) (changed bool, err error) {
-	return n.rowWrite("MoveTile", "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
+	ctx := context.Background()
+	return n.s.withRowWrite(ctx, "MoveTile", "tiles", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		cur := &gridwellv1.Tile{Id: strconv.FormatInt(tileID, 10)}
 		from, was := int64(0), ""
 		if err := liveRow(ctx, tx, files, tileID, "x, y, w, h, grid_id, key", &cur.X, &cur.Y, &cur.W, &cur.H, &from, &was); err != nil {
@@ -451,6 +453,11 @@ func (n *FileRows) Move(tileID, gridID int64, key string, x, y, w, h int64, clai
 		if err := ClaimPlacement(cur, claim, false); err != nil {
 			return err
 		}
+		if key != was {
+			if err := n.rekey(ctx, tx, events, was, key); err != nil {
+				return err
+			}
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE tiles SET grid_id = ?, key = ?, `+placementSet+`, updated_at = ? WHERE id = ?`,
 			gridID, key, x, y, w, h, n.s.now().Unix(), tileID); err != nil {
 			return err
@@ -459,7 +466,7 @@ func (n *FileRows) Move(tileID, gridID int64, key string, x, y, w, h int64, clai
 			_, _, err = leaveSelection(ctx, tx, from, tileID)
 		}
 		return err
-	})
+	}, "~:"+tileRow(tileID))
 }
 
 // Rename is the user's name for an entry, kept on its row and never told to
@@ -540,23 +547,25 @@ func (n *FileRows) SetContentZoom(tileID int64, zoom rpc.ContentZoom) (changed b
 // stale link stays interpretable, its screenshot is released, and it
 // leaves its grid's selection.
 func (n *FileRows) Retire(tileID int64) error {
-	return n.write("Retire", tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
-		var preview sql.NullInt64
-		var gridID int64
-		if err := liveRow(ctx, tx, files, tileID, "preview_blob_id, grid_id", &preview, &gridID); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE tiles SET tombstoned = 1, preview_blob_id = NULL WHERE id = ?`, tileID); err != nil {
-			return err
-		}
-		if _, _, err := leaveSelection(ctx, tx, gridID, tileID); err != nil {
-			return err
-		}
-		if preview.Valid {
-			return n.s.decBlobRefcount(ctx, tx, preview.Int64)
-		}
-		return nil
-	})
+	return n.write("Retire", tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error { return n.retireTx(ctx, tx, tileID) })
+}
+
+func (n *FileRows) retireTx(ctx context.Context, tx *sql.Tx, tileID int64) error {
+	var preview sql.NullInt64
+	var gridID int64
+	if err := liveRow(ctx, tx, files, tileID, "preview_blob_id, grid_id", &preview, &gridID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE tiles SET tombstoned = 1, preview_blob_id = NULL WHERE id = ?`, tileID); err != nil {
+		return err
+	}
+	if _, _, err := leaveSelection(ctx, tx, gridID, tileID); err != nil {
+		return err
+	}
+	if preview.Valid {
+		return n.s.decBlobRefcount(ctx, tx, preview.Int64)
+	}
+	return nil
 }
 
 // RootFraming reads a root grid's framing, the row that owns it when there is

@@ -26,7 +26,7 @@ its id and placement.
 
 The Gridwell tiles over a directory are home rows on grids keyed at or
 under its path (`overlay.go`): a move of the directory re-keys them with
-the files' rows under it (`Rekey`), and its delete sends them to home's
+the files' rows under it (`Move`), and its delete sends them to home's
 trash (`TrashOver`). A directory gone from disk with Gridwell tiles still
 over it is listed from these rows (`HeldUnder`).
 
