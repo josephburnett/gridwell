@@ -5,7 +5,7 @@ import type { BaseWindow, WebContents, WebContentsView } from 'electron';
 import { WebviewRegistry } from './webviews';
 import { viewCreated } from './viewtrace';
 import { FOCUS_SETTLE_MS } from './focusguard';
-import type { ErrorEvent, NavEvent, OpenBelowEvent, ViewGoneEvent, ViewPress } from './ipc';
+import type { ErrorEvent, FrameEvent, NavEvent, OpenBelowEvent, ViewGoneEvent, ViewPress } from './ipc';
 import type { TraceEvent } from './trace';
 
 // The registry against a fake view, for the paths the capture harness cannot
@@ -105,6 +105,7 @@ interface Rig {
   records: TraceEvent[];
   below: OpenBelowEvent[];
   presses: ViewPress[];
+  frames: FrameEvent[];
 }
 
 function rig(): Rig {
@@ -121,6 +122,7 @@ function rig(): Rig {
   const records: TraceEvent[] = [];
   const below: OpenBelowEvent[] = [];
   const presses: ViewPress[] = [];
+  const frames: FrameEvent[] = [];
   const win = {
     contentView: {
       addChildView: (v: FakeView) => children.add(v),
@@ -144,6 +146,7 @@ function rig(): Rig {
       onEscapeKey: (ev) => escapes.push(ev.paneId),
       onOpenBelow: (ev) => below.push(ev),
       onPress: (ev) => presses.push(ev),
+      onFrame: (ev) => frames.push(ev),
     },
     () => {
       const v = new FakeView();
@@ -156,7 +159,7 @@ function rig(): Rig {
     winFocused.now = true;
     for (const fn of winFocus) fn();
   };
-  return { reg, views, errors, gone, navs, root, winFocused, focusWindow, escapes, children, records, below, presses };
+  return { reg, views, errors, gone, navs, root, winFocused, focusWindow, escapes, children, records, below, presses, frames };
 }
 
 const BOUNDS = { x: 10, y: 20, width: 400, height: 300 };
@@ -552,6 +555,39 @@ test('a mirror that stops capturing is reported once, and its recovery once', as
       'info: pane p1: mirror capture recovered after 3 failed captures',
     ],
   );
+});
+
+// A capture is of one entry, so a move or a place while it is taken cannot
+// file its frame, or its notice, under another tile or pane.
+test('a frame taken while its view moves is filed under the tile it shows, never the next one on the old pane', async () => {
+  const r = rig();
+  await r.reg.place('A', 'T1', SLACK, BOUNDS);
+  const wc = r.views[0].webContents!;
+  let settle: (v: unknown) => void = () => {};
+  wc.capturePage = () => new Promise((resolve) => (settle = resolve));
+  const mirrored = r.reg.mirror('A');
+  r.reg.move('A', 'B', BOUNDS, false);
+  await r.reg.place('A', 'T2', 'https://example.com/', BOUNDS);
+  settle({ isEmpty: () => false, toJPEG: () => Buffer.from('jpeg') });
+  await mirrored;
+  assert.deepEqual(r.frames.map((f) => [f.paneId, f.tileId]), [['B', 'T1']], 'T1 frame filed under the wrong pane or tile');
+});
+
+test('a capture failing across a move names the pane its view is on', async () => {
+  const r = rig();
+  await r.reg.place('A', 'T1', SLACK, BOUNDS);
+  const wc = r.views[0].webContents!;
+  wc.capturePage = () => Promise.resolve({ isEmpty: () => false, toJPEG: () => Buffer.from('jpeg') });
+  await r.reg.capture('A');
+  wc.capturePage = () => Promise.reject(new Error('GPU process gone'));
+  await r.reg.capture('A');
+  let fail: (e: Error) => void = () => {};
+  wc.capturePage = () => new Promise((_resolve, reject) => (fail = reject));
+  const third = r.reg.capture('A');
+  r.reg.move('A', 'B', BOUNDS, false);
+  fail(new Error('GPU process gone'));
+  await third;
+  assert.deepEqual(r.errors.map((e) => e.message), ['pane B: mirror capture failing: capturePage failed: Error: GPU process gone']);
 });
 
 // The registry is one owner, so its notices and its trace records name it with

@@ -495,7 +495,12 @@ export class WebviewRegistry {
   // failed. capturable owns which panes are an attempt at all.
   async capture(paneId: string): Promise<string> {
     const e = this.entries.get(paneId);
-    if (!e || !capturable(e)) return '';
+    return e ? this.frameOf(e) : '';
+  }
+
+  // After the await it reads e, never the map, which a move or place re-keys.
+  private async frameOf(e: Entry): Promise<string> {
+    if (!capturable(e)) return '';
     const attempt = await captureAttempt(e.view);
     // A view that ended while the frame was taken has already said so.
     if (this.entries.get(e.paneId) !== e) return '';
@@ -504,7 +509,7 @@ export class WebviewRegistry {
     const report = decision.report;
     if (report) {
       // A recovery is reported too, or the failing report reads as permanent.
-      const notice = streakNotice(paneId, report, describeAttempt(attempt));
+      const notice = streakNotice(e.paneId, report, describeAttempt(attempt));
       this.reportErr(notice.message, notice.severity);
     }
     return attempt.kind === 'ok' ? attempt.jpegBase64 : '';
@@ -514,9 +519,10 @@ export class WebviewRegistry {
   // showing the tile reads it. It settles with no frame rather than rejecting.
   async mirror(paneId: string): Promise<void> {
     this.mirrorCalls++;
-    const jpegBase64 = await this.capture(paneId);
-    const tileId = this.entries.get(paneId)?.tileId;
-    if (jpegBase64 && tileId !== undefined) this.cb.onFrame?.({ paneId, tileId, jpegBase64 });
+    const e = this.entries.get(paneId);
+    if (!e) return;
+    const jpegBase64 = await this.frameOf(e);
+    if (jpegBase64) this.cb.onFrame?.({ paneId: e.paneId, tileId: e.tileId, jpegBase64 });
   }
 
   // The one back action: the bar's button and the menu's Back.

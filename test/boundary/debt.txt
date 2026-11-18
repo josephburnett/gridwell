@@ -102,3 +102,4 @@ low-water | packages | 78
 2026-11-17 | Joe's keyboard decision, 2026-11-17: Esc reads the keyboard's owner (gesture.Keyboard), not the element the key reached | 1
 2026-11-17 | Joe's keyboard decision, 2026-11-17: a bar press during a transition takes the focus beside the bar and drops its gesture, as a pane's press does | 8
 2026-11-17 | Joe's sweep goal, 2026-11-17 (find bugs, non-dry code and distributed responsibility, fix the class, guard it): a row's origin (read, stream, local patch) decides the holds it ends, so cache.PatchTile ends none | 10
+2026-11-17 | Joe's sweep goal, 2026-11-17 (find bugs, non-dry code and distributed responsibility, fix the class, guard it): the url view registry's capture takes the entry it started on, so a mirror frame and a streak notice name the tile and pane the view is on after a move | 6
