@@ -161,3 +161,34 @@ func TestARefusedSelectFallsBackToTheNode(t *testing.T) {
 		t.Errorf("a refused hold stayed: %+v", c.sel["n/1"])
 	}
 }
+
+// A read after a select landed is the node's word, as it is for a placement:
+// the re-read after a stream gap that swallowed the echo and another
+// writer's deselect draws the node's set, whether the select's answer came
+// before its echo or after it.
+func TestAReadAfterASelectLandedIsTheNodesWord(t *testing.T) {
+	for _, echoFirst := range []bool{false, true} {
+		c := New()
+		grid14(c)
+		c.put("n/1", sel{add: []string{"n/4"}})
+		s := c.SelectionUp("n/1")
+		if echoFirst {
+			c.Apply(rpc.SelectionEvent("n/1", []string{"n/4"}))
+		}
+		c.SelectionLanded("n/1", s)
+		grid14(c)
+		wantShown(t, c, "after the gap's re-read")
+		if len(c.sel) != 0 {
+			t.Errorf("echo first %v: a landed hold outlived a read: %+v", echoFirst, c.sel["n/1"])
+		}
+	}
+}
+
+// A read while a select is unanswered is not the node's word on it.
+func TestAReadWhileASelectIsUpKeepsIt(t *testing.T) {
+	c := New()
+	grid14(c)
+	c.put("n/1", sel{add: []string{"n/4"}})
+	grid14(c, "n/5")
+	wantShown(t, c, "a read under a select still up", "n/4", "n/5")
+}

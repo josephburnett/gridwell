@@ -20,7 +20,7 @@ type selHold struct {
 	// latest select's word on it.
 	up map[string]tap
 	// landed is each tile's word from the selects the node accepted, until
-	// the stream tells a set.
+	// the node tells a set.
 	landed map[string]bool
 	seq    uint64
 }
@@ -146,9 +146,8 @@ func each(add, remove []string, fn func(id string, in bool)) {
 }
 
 // selectLocked replaces a cached grid's selection with the set the node told,
-// whole. The stream orders the sets and every one is whole, so it is newer
-// than any write's landing; a select still in flight stays over it. Callers
-// hold c.mu.
+// whole: the stream's, newer than any landing, or a read's, the node's word
+// after one (see hold). A select in flight stays over it. Callers hold c.mu.
 func (c *Cache) selectLocked(gridID string, ids []string) bool {
 	changed := false
 	if h := c.sel[gridID]; h != nil {

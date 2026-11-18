@@ -285,6 +285,7 @@ func (c *Cache) PutGrid(g *gridwellv1.Grid, tiles []*gridwellv1.Tile) {
 		}
 	}
 	c.grids[g.Id] = gr
+	c.selectLocked(g.Id, g.GetSelection())
 	for _, n := range away {
 		c.storeLocked(n, false)
 	}
