@@ -13,6 +13,7 @@ import (
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
+	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/scratch"
 	"github.com/josephburnett/gridwell/client/traceevent"
@@ -539,11 +540,11 @@ func (a *App) openWorkspaceRenameInput(level int) {
 	if !rectOK {
 		return
 	}
-	a.openNameInputAt(f.Name, seg.W-28, func(st js.Value) {
+	a.openRenameAt(f.TileID, f.Basis, f.Name, seg.W-28, func(st js.Value) {
 		st.Set("left", pxf(bx+seg.X+2))
 		st.Set("top", pxf(top+4))
-	}, func(val string) {
-		a.commitWorkspaceRename(level, val)
+	}, func(cl *outbox.Claim, val string) {
+		a.commitWorkspaceRename(level, cl, val)
 	})
 }
 
@@ -577,10 +578,10 @@ func (a *App) openRenameInput() {
 		w = grown
 	}
 	tileID := target.Id
-	a.openNameInputAt(target.AltText, w-24, func(st js.Value) {
+	a.openRenameAt(tileID, target.Version, target.AltText, w-24, func(st js.Value) {
 		st.Set("left", pxf(x))
 		st.Set("top", pxf(top+4))
-	}, func(val string) {
-		a.commitRename(tileID, val)
+	}, func(cl *outbox.Claim, val string) {
+		a.commitRename(cl, tileID, val, nil)
 	})
 }

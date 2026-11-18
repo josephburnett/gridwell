@@ -20,6 +20,7 @@ import (
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
+	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
@@ -154,15 +155,18 @@ func (a *App) restoreWorkspaceLeaves(tree *pane.Tree) {
 }
 
 // commitWorkspaceRename posts the user-owned name for the workspace tile at
-// `level`. A rename bumps the tile version, so it rides the layout's save
-// chain and its landing advances the level's basis like a layout write's.
-func (a *App) commitWorkspaceRename(level int, alt string) {
+// `level`, claiming cl, opened on the level's basis. A rename bumps the tile
+// version, so it rides the layout's save chain, a layout landing moves cl
+// (postPaneLayout), and its own landing advances the level's basis like a
+// layout write's.
+func (a *App) commitWorkspaceRename(level int, cl *outbox.Claim, alt string) {
 	f := a.ws.At(level)
 	if f == nil {
+		a.persist.out.Claims.Close(cl)
 		return
 	}
 	tileID := f.TileID
-	a.commitRenameRetained(tileID, alt, tileID, func(tile *gridwellv1.Tile, claimed int64) {
+	a.commitRename(cl, tileID, alt, func(tile *gridwellv1.Tile, claimed int64) {
 		a.ws.Landed(tileID, claimed, tile.Version)
 		// The level may be gone by the time a parked retry lands. The rename
 		// still landed on the tile row; only the crumb update is
@@ -170,7 +174,6 @@ func (a *App) commitWorkspaceRename(level int, alt string) {
 		if fr := a.ws.At(level); fr != nil && fr.TileID == tileID {
 			fr.Name = tile.AltText
 		}
-		a.c.PutWriteResponse(tile.GridId, tile, cache.WroteName)
 	})
 }
 
@@ -246,6 +249,7 @@ func (a *App) postPaneLayout(tileID string, data []byte, held func(ok bool)) {
 		},
 		then: func() {
 			a.ws.Landed(tileID, claimed, tile.Version)
+			a.persist.out.Claims.Landed(tileID, claimed, tile.Version)
 			a.c.PutSavedContent(tile, data)
 			a.c.PutWriteResponse(tile.GridId, tile, cache.WroteBody)
 			a.resolveErr("rpc:PaneLayout")

@@ -13,6 +13,7 @@ import (
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/door"
+	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
@@ -135,8 +136,8 @@ type renameInput struct {
 // keys for every rename surface. onCommit receives the trimmed value on Enter
 // or on blur, because a phone keyboard's done key blurs and a typed name must
 // not be silently discarded. An unchanged value never writes, because reading
-// never mutates.
-func (a *App) openNameInputAt(value string, width float64, position func(st js.Value), onCommit func(string)) {
+// never mutates; onCancel, when set, hears every close that writes nothing.
+func (a *App) openNameInputAt(value string, width float64, position func(st js.Value), onCommit func(string), onCancel func()) {
 	doc := js.Global().Get("document")
 	in := doc.Call("createElement", "input")
 	in.Set("id", "gw-rename-input")
@@ -169,6 +170,8 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 		a.overlays.rename = nil
 		if commit && val != orig {
 			onCommit(val)
+		} else if onCancel != nil {
+			onCancel()
 		}
 		a.draw()
 	}
@@ -190,48 +193,54 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 	in.Call("select")
 }
 
-// commitRename posts the user-owned name and patches the cache so the title
-// reflects it immediately. The TileChanged event confirms.
-func (a *App) commitRename(tileID, alt string) {
-	a.commitRenameRetained(tileID, alt, "", func(t *gridwellv1.Tile, _ int64) {
-		a.c.PutWriteResponse(t.GridId, t, cache.WroteName)
-	})
+// openRenameAt is openNameInputAt for a rename of tileID: the claim opens
+// with the input, on the version the user sees, and closes with it unless a
+// rename takes it.
+func (a *App) openRenameAt(tileID string, saw int64, value string, width float64, position func(st js.Value),
+	commit func(cl *outbox.Claim, alt string)) {
+	claims := a.persist.out.Claims
+	cl := claims.Open(tileID, saw)
+	a.openNameInputAt(value, width, position, func(val string) { commit(cl, val) }, func() { claims.Close(cl) })
 }
 
-// commitRenameRetained is the one rename commit, running `apply` on success.
-// The input element is gone by the time an RPC fails, so the closure parked
-// in the outbox is the only copy of what the user typed. apply hears the
-// version the rename claimed; chain is post's.
-func (a *App) commitRenameRetained(tileID, alt, chain string, apply func(t *gridwellv1.Tile, claimed int64)) {
+// commitRename is the one rename commit: it posts the user-owned name and
+// runs apply on success, which hears the version the rename claimed. The
+// input element is gone by the time an RPC fails, so the closure parked in
+// the outbox is the only copy of what the user typed. A name is content, so
+// it claims and bumps a version: cl, read at each send, moves only by this
+// client's own landings (outbox.Claims), so a name another writer set since
+// the input opened is refused. It rides the row's chain behind this client's
+// other writes to it, and closes cl once nothing is owed. apply may be nil.
+func (a *App) commitRename(cl *outbox.Claim, tileID, alt string, apply func(t *gridwellv1.Tile, claimed int64)) {
 	var tile *gridwellv1.Tile
 	var claimed int64
+	claims := a.persist.out.Claims
+	key := outbox.Key{Op: "Rename", ID: tileID}
 	a.post(write{
-		label: "Rename", gid: a.gridIDOfTile(tileID), id: tileID,
-		source: "rename", failText: "rename", chain: chain,
+		label: key.Op, gid: a.gridIDOfTile(tileID), id: tileID,
+		source: "rename", failText: "rename", chain: tileID,
 		call: func(ctx context.Context) error {
 			var err error
-			claimed = a.renameClaim(tileID)
+			claimed = claims.Version(cl)
 			tile, err = a.cl.RenameTile(ctx, tileID, claimed, alt)
 			return err
 		},
 		then: func() {
 			if tile != nil {
-				apply(tile, claimed)
+				claims.Landed(tileID, claimed, tile.Version)
+				if apply != nil {
+					apply(tile, claimed)
+				}
+				a.c.PutWriteResponse(tile.GridId, tile, cache.WroteName)
 			}
 			a.draw()
 		},
+		done: func() {
+			if !a.persist.out.Has(key) {
+				claims.Close(cl)
+			}
+		},
 	})
-}
-
-// renameClaim is the version a rename claims: a name the user types is a
-// content edit, so it claims a version and bumps one. A conflict surfaces
-// rather than re-claiming: captures do not bump the row, so a conflict here is
-// a genuine concurrent edit.
-func (a *App) renameClaim(tileID string) int64 {
-	if t := a.cachedTileByID(tileID); t != nil {
-		return t.Version
-	}
-	return 0
 }
 
 // gridIDOfTile is which grid's cache reconciles if a write is refused, for a

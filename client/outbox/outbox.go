@@ -23,7 +23,8 @@ type Key struct {
 // unsaved bytes have one entry however many paths tried to save them.
 const OpContent = "Content"
 
-// Outbox drains in first-parked order.
+// Outbox drains in first-parked order. Claims keeps what its writes claim,
+// so a retry claims what the first send did.
 type Outbox struct {
 	mu    sync.Mutex
 	m     map[Key]func()
@@ -31,10 +32,11 @@ type Outbox struct {
 	// newest is the sequence of each key's newest call still out.
 	newest map[Key]uint64
 	seq    uint64
+	Claims *Claims
 }
 
 func New() *Outbox {
-	return &Outbox{m: map[Key]func(){}, newest: map[Key]uint64{}}
+	return &Outbox{m: map[Key]func(){}, newest: map[Key]uint64{}, Claims: NewClaims()}
 }
 
 // Send parks the retry thunk, runs the call, then records what the server

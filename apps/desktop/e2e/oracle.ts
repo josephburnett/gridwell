@@ -227,6 +227,20 @@ export async function setFrozen(origin: string, tileId: string, frozen: boolean)
   }
 }
 
+// A foreign writer's rename: an agent's `rename` or another screen's,
+// claiming the version it read.
+export async function renameTile(origin: string, tileId: string, name: string): Promise<void> {
+  const row = await getTile(origin, tileId);
+  const res = await fetch(`${origin}/${SERVICE}/SetTile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: JSON.stringify({ tileId, version: Number(row.version ?? 0), rename: name }),
+  });
+  if (!res.ok) {
+    throw new Error(`SetTile(${tileId}) rename failed: ${res.status} ${await res.text()}`);
+  }
+}
+
 // A foreign writer deleting a row out from under the app: another device, or
 // this one in a pane the spec is not driving. It claims the row it read.
 export async function deleteTile(origin: string, tileId: string): Promise<void> {
