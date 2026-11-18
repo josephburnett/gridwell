@@ -139,6 +139,12 @@ export function windowResponsive(responsive: boolean): TraceEvent {
   return { src: WINDOW, kind: responsive ? 'responsive' : 'unresponsive', msg: 'root renderer' };
 }
 
+// A navigation of the root window off the client, which main refused: a link
+// or a file dropped on the canvas, or a script's own.
+export function windowNavRefused(url: string): TraceEvent {
+  return { src: WINDOW, kind: 'nav-refused', msg: shownAddress(url) };
+}
+
 // The canvas's own page failed to load, which leaves Chromium's error page.
 export function windowLoadFailed(code: number, url: string, description: string): TraceEvent {
   return { src: WINDOW, kind: 'fail', msg: description, kv: { code: String(code), url } };

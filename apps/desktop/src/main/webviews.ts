@@ -232,6 +232,11 @@ export class WebviewRegistry {
     return [...this.entries.keys()];
   }
 
+  holdsView(wc: WebContents): boolean {
+    for (const e of this.entries.values()) if (e.view.webContents === wc) return true;
+    return false;
+  }
+
   tileIdFor(paneId: string): string | undefined {
     return this.entries.get(paneId)?.tileId;
   }

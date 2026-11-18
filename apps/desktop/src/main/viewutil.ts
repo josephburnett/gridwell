@@ -22,6 +22,44 @@ export function webUrl(target: string): string | null {
   return /^https?:\/\//i.test(target) ? target : null;
 }
 
+// Whether target is a page of the client served at origin. The root window
+// shows nothing else, because main trusts its page with window.gridwell. An
+// opaque origin (data:, file:) is no one's.
+function clientPage(target: string, origin: string): boolean {
+  try {
+    const o = new URL(target).origin;
+    return o !== 'null' && o === origin;
+  } catch {
+    return false;
+  }
+}
+
+// Whether the root window may go where a navigation leads: a subframe's leaves
+// the page in place.
+export function rootNavAllowed(url: string, isMainFrame: boolean, origin: string): boolean {
+  return !isMainFrame || clientPage(url, origin);
+}
+
+// Who may send on a channel: the root window's page for the canvas's verbs
+// (ipc.ts CH), a live url view for its preload's (VIEW).
+export type IpcSender = 'root' | 'view';
+
+interface SenderFacts {
+  // The root window's webContents, from its main frame.
+  rootMainFrame: boolean;
+  // The sending frame's address.
+  url: string;
+  // A webContents the registry holds as a live url view.
+  liveView: boolean;
+}
+
+// Why a sender may not send on a channel of who, or null when it may.
+export function ipcRefusal(who: IpcSender, s: SenderFacts, origin: string): string | null {
+  if (who === 'view') return s.liveView ? null : 'the sender is no live url view';
+  if (!s.rootMainFrame) return "the sender is not the root window's main frame";
+  return clientPage(s.url, origin) ? null : "the root window is not on the client's page";
+}
+
 // Strips `Electron/<ver>` and `<AppName>/<ver>`, so a site that gates on an
 // unknown browser sees plain Chrome.
 export function sanitizeUserAgent(ua: string, appName: string): string {

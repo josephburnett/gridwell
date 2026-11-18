@@ -11,6 +11,8 @@ import {
   composeZoom,
   allowPermission,
   webUrl,
+  rootNavAllowed,
+  ipcRefusal,
   serializeHistory,
   parseHistory,
   reviveNavigation,
@@ -372,4 +374,44 @@ test('forwardedDragStep follows a forwarded right-drag to its right release', ()
   assert.deepEqual(forwardedDragStep('mouseUp', 'left'), { over: false }, 'another button coming up is not the release');
   assert.deepEqual(forwardedDragStep('mouseDown', 'right'), { over: true }, 'a new press means the release was lost');
   assert.deepEqual(forwardedDragStep('mouseWheel'), { over: false });
+});
+
+const CLIENT = 'http://127.0.0.1:43215';
+
+test('rootNavAllowed: the main frame goes only to the client origin', () => {
+  assert.equal(rootNavAllowed(CLIENT + '/', true, CLIENT), true);
+  assert.equal(rootNavAllowed(CLIENT + '/?e2e=1#x', true, CLIENT), true);
+  assert.equal(rootNavAllowed('http://[::1]:8080/', true, 'http://[::1]:8080'), true);
+  assert.equal(rootNavAllowed('http://127.0.0.1:43216/', true, CLIENT), false, 'another port');
+  assert.equal(rootNavAllowed('https://127.0.0.1:43215/', true, CLIENT), false, 'another scheme');
+  assert.equal(rootNavAllowed('http://localhost:43215/', true, CLIENT), false, 'another host');
+  assert.equal(rootNavAllowed('https://example.com/', true, CLIENT), false);
+  assert.equal(rootNavAllowed('file:///home/joe/.gridwell/web-password', true, CLIENT), false);
+  assert.equal(rootNavAllowed('data:text/html,x', true, CLIENT), false);
+  assert.equal(rootNavAllowed('about:blank', true, CLIENT), false);
+  assert.equal(rootNavAllowed('not a url', true, CLIENT), false);
+  assert.equal(rootNavAllowed('data:text/html,x', true, 'null'), false, "an opaque origin is no client's");
+});
+
+test('rootNavAllowed: the main frame stays on the client, a subframe goes where it likes', () => {
+  const cells: [string, boolean, boolean][] = [
+    [CLIENT + '/', true, true],
+    ['https://example.com/', true, false],
+    ['file:///tmp/dropped.txt', true, false],
+    ['https://example.com/', false, true],
+  ];
+  for (const [url, main, want] of cells) assert.equal(rootNavAllowed(url, main, CLIENT), want, `${url} main=${main}`);
+});
+
+test('ipcRefusal: the canvas verbs answer the root at the client, the view verbs a live view', () => {
+  const root = { rootMainFrame: true, url: CLIENT + '/?e2e=1', liveView: false };
+  const cells: [string, 'root' | 'view', typeof root, string | null][] = [
+    ['the client', 'root', root, null],
+    ['the root off the client', 'root', { ...root, url: 'https://example.com/' }, "the root window is not on the client's page"],
+    ['a subframe of the client', 'root', { ...root, rootMainFrame: false }, "the sender is not the root window's main frame"],
+    ['a live view on a canvas verb', 'root', { rootMainFrame: false, url: CLIENT + '/', liveView: true }, "the sender is not the root window's main frame"],
+    ['a live view', 'view', { rootMainFrame: false, url: 'https://example.com/', liveView: true }, null],
+    ['the root on a view verb', 'view', root, 'the sender is no live url view'],
+  ];
+  for (const [name, who, facts, want] of cells) assert.equal(ipcRefusal(who, facts, CLIENT), want, name);
 });

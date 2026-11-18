@@ -115,7 +115,7 @@ async function boot(): Promise<void> {
   });
   // Through the module slot, so a set arriving after the quit stopped the pump
   // cannot restart it.
-  registerWebviewIpc(reg, rootWC, win, (paneIds) => pump?.setPanes(paneIds));
+  registerWebviewIpc(reg, rootWC, sidecar.origin, win, (paneIds) => pump?.setPanes(paneIds));
 
   // startSidecar's own exit listener stops at boot, so without this one a later
   // crash leaves the app a zombie: window open, backend gone. An external

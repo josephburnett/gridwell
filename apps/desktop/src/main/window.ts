@@ -1,9 +1,9 @@
 import { BrowserWindow, Menu, screen } from 'electron';
 import * as path from 'node:path';
-import { rendererLogLine } from './viewutil';
+import { rendererLogLine, rootNavAllowed } from './viewutil';
 import { logLine, trace } from './trace';
 import { rendererCrashed, rendererTail, reportCrash } from './crashlog';
-import { windowFocused, windowGone, windowLoadFailed, windowResponsive, windowState, windowStateRecorder } from './viewtrace';
+import { windowFocused, windowGone, windowLoadFailed, windowNavRefused, windowResponsive, windowState, windowStateRecorder } from './viewtrace';
 
 // A read of a destroyed window throws uncaught, which hangs main behind an
 // error dialog.
@@ -73,6 +73,15 @@ export function createRootWindow(origin: string): RootWindow {
   // A rejection needs no notice of ours: no renderer exists yet to draw one,
   // and Chromium paints its own error page in the window.
   void win.loadURL(origin + '/' + query);
+
+  // See viewutil.rootNavAllowed.
+  const stay = (e: { url: string; isMainFrame: boolean; preventDefault: () => void }) => {
+    if (rootNavAllowed(e.url, e.isMainFrame, origin)) return;
+    e.preventDefault();
+    trace(windowNavRefused(e.url));
+  };
+  win.webContents.on('will-navigate', stay);
+  win.webContents.on('will-redirect', stay);
 
   // Forwarded to main's console, trace and crash tail, which outlive a
   // renderer that panicked; see trace.lineEvent.

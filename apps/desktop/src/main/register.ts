@@ -1,4 +1,4 @@
-import { ipcMain, BaseWindow, InputEvent, Menu, MenuItemConstructorOptions, MouseInputEvent, WebContents } from 'electron';
+import { ipcMain, BaseWindow, InputEvent, IpcMainEvent, IpcMainInvokeEvent, Menu, MenuItemConstructorOptions, MouseInputEvent, WebContents } from 'electron';
 import {
   CH,
   EV,
@@ -19,7 +19,7 @@ import {
   MoveArgs,
   KeyboardArgs,
 } from './ipc';
-import { forwardedDragStep, toContentPoint } from './viewutil';
+import { forwardedDragStep, ipcRefusal, IpcSender, toContentPoint } from './viewutil';
 import { choiceMenuTemplate } from './contextmenu';
 import { WebviewRegistry } from './webviews';
 import { handOverTrace, logLine, trace } from './trace';
@@ -36,18 +36,42 @@ function safeSend(wc: WebContents, channel: string, payload: unknown): void {
 }
 
 // registerWebviewIpc connects the renderer-facing IPC channels to the registry,
-// once, after the root window is created. win is the window toContentPoint
-// re-aims a drag's moves against; onMirrored takes the mirror pump's pane set.
+// once, after the root window is created. origin is the client's, the one page
+// the root may hold; win is the window toContentPoint re-aims a drag's moves
+// against; onMirrored takes the mirror pump's pane set.
 export function registerWebviewIpc(
   registry: WebviewRegistry,
   rootWC: WebContents,
+  origin: string,
   win: BaseWindow,
   onMirrored: (paneIds: string[]) => void,
 ): void {
+  // Every handler is registered through on or handle, so none runs for a
+  // sender viewutil.ipcRefusal refuses.
+  const refused = (channel: string, who: IpcSender, e: IpcMainEvent | IpcMainInvokeEvent): string | null => {
+    const frame = e.senderFrame;
+    const facts = { rootMainFrame: e.sender === rootWC && !!frame && !frame.parent, url: frame?.url ?? '', liveView: registry.holdsView(e.sender) };
+    const why = ipcRefusal(who, facts, origin);
+    if (why) logLine('error', `[gridwell] ${channel} refused: ${why}`);
+    return why;
+  };
+  const on = <A>(channel: string, fn: (e: IpcMainEvent, a: A) => void): void => {
+    ipcMain.on(channel, (e, a: A) => {
+      if (!refused(channel, 'view', e)) fn(e, a);
+    });
+  };
+  const handle = <A, R>(channel: string, fn: (a: A) => R): void => {
+    ipcMain.handle(channel, (e, a: A) => {
+      const why = refused(channel, 'root', e);
+      if (why) throw new Error(`${channel} refused: ${why}`);
+      return fn(a);
+    });
+  };
+
   // A right press main sent as EV.press became a drag, which the view that
   // took the press keeps, parked or not, and its page sees none of outside its
   // bounds; see forwardedDragStep.
-  ipcMain.on(VIEW.rightdown, ({ sender: view }): void => {
+  on(VIEW.rightdown, ({ sender: view }): void => {
     safeSend(rootWC, EV.rightForward, {});
     const onInput = (_e: unknown, ie: InputEvent): void => {
       const m = ie as Partial<MouseInputEvent>;
@@ -60,51 +84,51 @@ export function registerWebviewIpc(
 
   // The registry injects an equivalent mouseWheel back into the view, because
   // Chromium will not gesture-scroll raw touches there.
-  ipcMain.on(VIEW.touchscroll, (event, p: ViewTouchScroll): void => {
+  on(VIEW.touchscroll, (event, p: ViewTouchScroll): void => {
     registry.touchScroll(event.sender, p);
   });
 
-  ipcMain.handle(CH.place, (_e, a: PlaceArgs): Promise<void> => {
+  handle(CH.place, (a: PlaceArgs): Promise<void> => {
     return registry.place(a.paneId, a.tileId, a.url, a.bounds, a.contentZoom ?? 0, a.history ?? '', a.hidden ?? false, a.gen ?? 0);
   });
 
-  ipcMain.handle(CH.setZoom, (_e, a: SetZoomArgs): void => {
+  handle(CH.setZoom, (a: SetZoomArgs): void => {
     registry.setZoom(a.paneId, a.zoom);
   });
 
-  ipcMain.handle(CH.setBounds, (_e, a: SetBoundsArgs): void => {
+  handle(CH.setBounds, (a: SetBoundsArgs): void => {
     registry.setBounds(a.paneId, a.bounds);
   });
 
-  ipcMain.handle(CH.setHidden, (_e, a: SetHiddenArgs): void => {
+  handle(CH.setHidden, (a: SetHiddenArgs): void => {
     registry.setHidden(a.paneId, a.hidden);
   });
 
-  ipcMain.handle(CH.move, (_e, a: MoveArgs): void => {
+  handle(CH.move, (a: MoveArgs): void => {
     registry.move(a.fromPaneId, a.toPaneId, a.bounds, a.hidden);
   });
 
-  ipcMain.handle(CH.setKeyboard, (_e, a: KeyboardArgs): void => {
+  handle(CH.setKeyboard, (a: KeyboardArgs): void => {
     registry.setKeyboard(a.paneId);
   });
 
-  ipcMain.handle(CH.remove, async (_e, a: RemoveArgs): Promise<FreezeResult> => {
+  handle(CH.remove, async (a: RemoveArgs): Promise<FreezeResult> => {
     return registry.remove(a.paneId);
   });
 
-  ipcMain.handle(CH.goBack, (_e, a: PaneRef): void => {
+  handle(CH.goBack, (a: PaneRef): void => {
     registry.goBack(a.paneId);
   });
 
-  ipcMain.handle(CH.reload, (_e, a: ReloadArgs): void => {
+  handle(CH.reload, (a: ReloadArgs): void => {
     registry.reload(a.paneId, a.url);
   });
 
-  ipcMain.handle(CH.showMenu, (_e, a: PaneRef): void => {
+  handle(CH.showMenu, (a: PaneRef): void => {
     registry.showMenu(a.paneId);
   });
 
-  ipcMain.handle(CH.setMirrored, (_e, a: MirroredArgs): void => {
+  handle(CH.setMirrored, (a: MirroredArgs): void => {
     onMirrored(a.paneIds);
   });
 
@@ -112,7 +136,7 @@ export function registerWebviewIpc(
   // null when the menu closes untouched, so the renderer changes nothing on a
   // dismissal. Both paths settle the same promise once, because a click and
   // the close callback can both fire.
-  ipcMain.handle(CH.choiceMenu, (_e, a: ChoiceMenuArgs): Promise<string | null> => {
+  handle(CH.choiceMenu, (a: ChoiceMenuArgs): Promise<string | null> => {
     return new Promise((resolve) => {
       trace(menuOpened(CHOICE_MENU));
       let settled = false;
@@ -130,7 +154,7 @@ export function registerWebviewIpc(
     });
   });
 
-  ipcMain.handle(CH.handOverTrace, (): Promise<string> => handOverTrace());
+  handle(CH.handOverTrace, (): Promise<string> => handOverTrace());
 }
 
 // forwarder pushes a registry callback's event onto its EV channel unchanged;

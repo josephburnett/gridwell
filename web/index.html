@@ -133,6 +133,22 @@
   <script src="/vendor/xterm/addon-unicode11.min.js"></script>
   <script src="/wasm_exec.js"></script>
   <script>
+    // A drop the page does not cancel navigates it, so a file or a link
+    // dropped on the canvas would replace the client. Gridwell's own drags are
+    // pointer gestures and take no drop; a text field keeps its own, which
+    // inserts text, except of a file, which it would open.
+    const textDrop = (e) =>
+      !e.dataTransfer.types.includes("Files") && e.target.closest && e.target.closest("textarea, input");
+    document.addEventListener("dragover", (e) => {
+      if (textDrop(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "none";
+    });
+    document.addEventListener("drop", (e) => {
+      if (!textDrop(e)) e.preventDefault();
+    });
+  </script>
+  <script>
     // Boot with a visible pulse: the wasm is tens of MB, and on a slow link a
     // silent instantiateStreaming looks like a dead black page. The counter
     // reads the decoded stream and shows a real percentage, using the raw size

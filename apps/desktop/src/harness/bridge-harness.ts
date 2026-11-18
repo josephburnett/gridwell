@@ -4,6 +4,8 @@
 //
 //   npm run build && xvfb-run -a electron dist/harness/bridge-harness.js
 import { app, WebContentsView, Menu } from 'electron';
+import * as http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import * as path from 'node:path';
 import { WebviewRegistry } from '../main/webviews';
 import { registerWebviewIpc } from '../main/register';
@@ -15,9 +17,21 @@ function fail(msg: string): never {
   throw new Error(msg);
 }
 
-const PAGE =
-  'data:text/html,' +
-  encodeURIComponent(`<title>host</title><script>
+// Main trusts window.gridwell only to the root's page at the client's origin,
+// so the page is served over http, as the node serves the client.
+async function serve(html: string): Promise<string> {
+  const server = http.createServer((_req, res) => res.end(html));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
+// The same bridge on another origin: every verb refused.
+const FOREIGN_HTML = `<title>foreign</title><script>
+  window.gridwell.setMirrored({ paneIds: ['foreign'] })
+    .then(() => console.log('FOREIGN_ACCEPTED'), (e) => console.log('FOREIGN_REFUSED ' + e));
+</script>`;
+
+const PAGE_HTML = `<title>host</title><script>
     (async () => {
       try {
         if (!window.gridwell) { console.log('BRIDGE_RESULT ' + JSON.stringify({err:'no window.gridwell'})); return; }
@@ -62,7 +76,7 @@ const PAGE =
         console.log('BRIDGE_RESULT ' + JSON.stringify({ err: String(e) }));
       }
     })();
-  </script>`);
+  </script>`;
 
 app.whenReady().then(async () => {
   const win = await hostWindow().catch((e: unknown) => fail(String(e)));
@@ -86,7 +100,8 @@ app.whenReady().then(async () => {
   };
   const registry = new WebviewRegistry(win, root.webContents, {});
   const mirrored: string[][] = [];
-  registerWebviewIpc(registry, root.webContents, win, (paneIds) => mirrored.push(paneIds));
+  const origin = await serve(PAGE_HTML);
+  registerWebviewIpc(registry, root.webContents, origin, win, (paneIds) => mirrored.push(paneIds));
 
   let placedWC = -1;
   root.webContents.on('console-message', (_e, _level, message) => {
@@ -123,10 +138,18 @@ app.whenReady().then(async () => {
     if (!payload.hasJpeg) fail('freeze returned no JPEG over the IPC bridge');
     if (payload.title !== 'Inner') fail(`freeze title wrong over bridge: ${JSON.stringify(payload.title)}`);
     console.log(`bridge ok: freeze carried JPEG + title=${JSON.stringify(payload.title)} via preload→ipcMain→registry`);
+    void serve(FOREIGN_HTML).then((foreign) => root.webContents.loadURL(foreign + '/'));
+  });
+  root.webContents.on('console-message', (_e, _level, message) => {
+    if (message === 'FOREIGN_ACCEPTED') fail('a page off the client origin was answered by main');
+    if (!message.startsWith('FOREIGN_REFUSED ')) return;
+    if (!message.includes("the root window is not on the client's page")) fail(`the foreign page was refused for another reason: ${message}`);
+    if (mirrored.length !== 2) fail(`a refused verb still reached main: ${JSON.stringify(mirrored)}`);
+    console.log('bridge ok: the bridge on another origin is refused');
     console.log('HARNESS PASS');
     app.exit(0);
   });
 
-  void root.webContents.loadURL(PAGE);
-  setTimeout(() => fail('no BRIDGE_RESULT within 8s'), 8000);
+  void root.webContents.loadURL(origin + '/');
+  setTimeout(() => fail('no HARNESS PASS within 8s'), 8000);
 });
