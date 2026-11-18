@@ -46,9 +46,9 @@ var bootDialWait = 5 * time.Second
 // a test can wait it out.
 var learnRootWait = 15 * time.Second
 
-// rowsHandshakeWait bounds the far Handshake a row's framing comes from: a
-// silent far node costs its row a viewport, never the + menu its answer.
-var rowsHandshakeWait = time.Second
+// rowsInfoWait bounds the far Info a row's framing comes from: a silent
+// far node costs its row a viewport, never the + menu its answer.
+var rowsInfoWait = time.Second
 
 // Server is the transport: a namespace.Namespace whose ids are chains through
 // its connections, each itself a Namespace read off the far node's connection
@@ -298,11 +298,9 @@ func (s *Server) Rows(ctx context.Context) []*gridwellv1.SourceInfo {
 		case root != "":
 			rootGridID, status = rpc.QualifyID(name, root), ""
 			if lc != nil {
-				vctx, cancel := context.WithTimeout(ctx, rowsHandshakeWait)
-				if lp, err := lc.client.Handshake(vctx, &gridwellv1.HandshakeRequest{}); err == nil {
-					if h := rpc.HomeRow(lp); h != nil {
-						view = rpc.ViewOf(h.RootViewCx, h.RootViewCy, h.RootViewZoom)
-					}
+				vctx, cancel := context.WithTimeout(ctx, rowsInfoWait)
+				if h, err := lc.client.Info(vctx, &gridwellv1.InfoRequest{}); err == nil {
+					view = rpc.ViewOf(h.RootViewCx, h.RootViewCy, h.RootViewZoom)
 				}
 				cancel()
 			}

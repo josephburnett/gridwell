@@ -856,14 +856,20 @@ func reportHealth(ctx context.Context, events chan<- *pb.Event, uuid string, hea
 	}
 }
 
-// Info describes this node to a connecting node, on the connection API only.
+// Info describes this node to a connecting node, on the connection API only:
+// its home's root and framing, where a direct client lands, read from home
+// alone, since the roster would ask this node's own connections.
 func (rt *router) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse, error) {
-	// A connection lands where a direct client lands (rpc.HomeGrid).
-	lp, err := rt.Handshake(ctx, &pb.HandshakeRequest{})
+	if rt.srv.src.Home == nil {
+		return &pb.InfoResponse{}, nil
+	}
+	info, err := rt.srv.sourceInfo(ctx, rt.srv.cfg.ID)
 	if err != nil {
 		return nil, err
 	}
-	return &pb.InfoResponse{RootGridId: rpc.HomeGrid(lp)}, nil
+	home := buildSourceInfo(rt.srv.cfg.ID, "", info, nil)
+	return &pb.InfoResponse{RootGridId: home.RootGridId,
+		RootViewCx: home.RootViewCx, RootViewCy: home.RootViewCy, RootViewZoom: home.RootViewZoom}, nil
 }
 
 // Probe routes by tile id: presence is the owning namespace's verdict, never

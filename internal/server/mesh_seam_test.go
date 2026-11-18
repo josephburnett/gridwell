@@ -75,6 +75,17 @@ func (s *swapHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type askCounter struct {
 	namespace.Namespace
 	copies, creates, writes atomic.Int32
+	handshakes, infos       atomic.Int32
+}
+
+func (a *askCounter) Handshake(ctx context.Context, req *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
+	a.handshakes.Add(1)
+	return a.Namespace.Handshake(ctx, req)
+}
+
+func (a *askCounter) Info(ctx context.Context, req *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
+	a.infos.Add(1)
+	return a.Namespace.Info(ctx, req)
 }
 
 func (a *askCounter) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (*gridwellv1.TileResponse, error) {
