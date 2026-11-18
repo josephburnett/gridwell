@@ -192,9 +192,9 @@ re-read. A read begun before the event is asked again
 (`events.Owe`), so it cannot put the older set back.
 
 **7. The outbox and the retry** — `client/outbox/`, `client/inflight/`,
-`client/wasm/main.go`. `outbox.Send` is the one order and `outbox.Record` the
-one fork: a write parks a retry thunk under `Key{Op, ID}` when it is sent, and
-the answer resolves it — a transport failure leaves it parked, any verdict
+`client/wasm/main.go`. `outbox.Send` is the one order and the one fork: a
+write parks a retry thunk under `Key{Op, ID}` when it is sent, and the
+answer resolves it — a transport failure leaves it parked, any verdict
 acks. One live entry per key, last-writer-wins, order preserved. Parking on
 the answer instead was #298: an answer is exactly what a swallowed request
 never produces, so the one write the outbox could not hear about was the one
@@ -202,7 +202,10 @@ it exists for. While a write is in flight its key is parked, which is all
 that is known about it; a drain that races the flight re-sends it, and that is safe
 because every write that parks is a last-writer-wins overwrite of one key
 (the writes that would replay unsafely — a create, a copy, a placement —
-carry no id and park nothing; they reconcile visibly instead).
+carry no id and park nothing; they reconcile visibly instead). Only the
+newest send of a key records its answer: an older one that comes back after
+it, heard or not, neither acks nor re-parks, because answers arrive in any
+order and the key owes the newer value.
 
 `inflight.Deadline` is the bound on every client RPC, read and write, and
 `inflight.Bounded` is the one way to it for a call with no dedupe claim of
@@ -476,7 +479,7 @@ The version interlock, the outbox park, and the drain.
    an Info notice says "unsaved changes kept — server unreachable, will
    retry", and `recordContent` re-parks under the same key.
 8. Non-content writes take `App.do`, which calls
-   `out.Record(o, Key{w.label, w.id}, retry)` on exactly the same fork.
+   `out.Send(Key{w.label, w.id}, retry, call)` on exactly the same fork.
    Framing writes are `optimistic`, so `clientsync.ReactOptimistic` rolls the
    cache patch back on a verdict and keeps it on transport, where it is the
    value the retry will land.

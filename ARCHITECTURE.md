@@ -730,7 +730,7 @@ copy:
 | may this write claim a version | `claimContentVersion` vs `loadForWrite` |
 | does this write bump `version` | `finishContentEdit` vs `emitTileChanged` |
 | where is this pane | `pane.Stack` |
-| is this write still owed | `outbox.Record` |
+| is this write still owed | `outbox.Send` |
 | the bytes, their version, edited or not | one cache entry per tile id |
 | which dividers a press grabs | `pane.GrabDividers` (one per axis) |
 | what Esc lets go of, and what it puts back | `gesture.Escape` over the armed gestures, and with none armed the selection it clears; a parked live view relays the key |

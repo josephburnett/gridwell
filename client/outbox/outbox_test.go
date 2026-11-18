@@ -15,20 +15,20 @@ func k(op, id string) Key { return Key{Op: op, ID: id} }
 func TestParkAckDrain(t *testing.T) {
 	o := New()
 	var fired []string
-	o.Park(k("SetFraming", "1"), func() { fired = append(fired, "framing1") })
-	o.Park(k("SetTextScroll", "2"), func() { fired = append(fired, "text2") })
-	o.Park(k("SetURLState", "3"), func() { fired = append(fired, "url3") })
+	parked(o, k("SetFraming", "1"), func() { fired = append(fired, "framing1") })
+	parked(o, k("SetTextScroll", "2"), func() { fired = append(fired, "text2") })
+	parked(o, k("SetURLState", "3"), func() { fired = append(fired, "url3") })
 	if o.Len() != 3 {
 		t.Fatalf("Len = %d, want 3", o.Len())
 	}
 
 	// A completed attempt clears its key.
-	o.Ack(k("SetTextScroll", "2"))
+	acked(o, k("SetTextScroll", "2"))
 	if o.Len() != 2 {
 		t.Fatalf("Len after Ack = %d, want 2", o.Len())
 	}
 	// Ack of an unknown key is a no-op.
-	o.Ack(k("SetTextScroll", "999"))
+	acked(o, k("SetTextScroll", "999"))
 
 	for _, fn := range o.Drain() {
 		fn()
@@ -46,9 +46,9 @@ func TestParkAckDrain(t *testing.T) {
 func TestParkReplacesLastWriterWins(t *testing.T) {
 	o := New()
 	var fired []string
-	o.Park(k("SetFraming", "1"), func() { fired = append(fired, "old") })
-	o.Park(k("SetURLState", "2"), func() { fired = append(fired, "url") })
-	o.Park(k("SetFraming", "1"), func() { fired = append(fired, "new") })
+	parked(o, k("SetFraming", "1"), func() { fired = append(fired, "old") })
+	parked(o, k("SetURLState", "2"), func() { fired = append(fired, "url") })
+	parked(o, k("SetFraming", "1"), func() { fired = append(fired, "new") })
 	if o.Len() != 2 {
 		t.Fatalf("Len = %d, want 2 (replace, not append)", o.Len())
 	}
@@ -69,9 +69,9 @@ func TestReparkDuringDrain(t *testing.T) {
 	var retry func()
 	retry = func() {
 		attempts++
-		o.Record(clientsync.Of(dead), k("SetFraming", "1"), retry)
+		o.Send(k("SetFraming", "1"), retry, func() clientsync.Outcome { return clientsync.Of(dead) })
 	}
-	o.Park(k("SetFraming", "1"), retry)
+	parked(o, k("SetFraming", "1"), retry)
 
 	for _, fn := range o.Drain() {
 		fn()
@@ -79,20 +79,20 @@ func TestReparkDuringDrain(t *testing.T) {
 	if attempts != 1 || o.Len() != 1 {
 		t.Fatalf("after failed drain: attempts=%d len=%d, want 1 and 1", attempts, o.Len())
 	}
-	// Once the link heals, the next drain fires it once and Record acks.
+	// Once the link heals, the next drain fires it once and Send acks.
 	for _, fn := range o.Drain() {
 		_ = fn
-		o.Record(clientsync.OutcomeOK, k("SetFraming", "1"), retry)
+		o.Send(k("SetFraming", "1"), retry, func() clientsync.Outcome { return clientsync.OutcomeOK })
 	}
 	if o.Len() != 0 {
 		t.Errorf("a landed write left %d parked", o.Len())
 	}
 }
 
-// TestRecordIsTheOneRule pins the reconcile table: only an unheard call
+// TestSendIsTheOneRule pins the reconcile table: only an unheard call
 // parks. A parked retry after a verdict would replay a write the server has
 // already answered.
-func TestRecordIsTheOneRule(t *testing.T) {
+func TestSendIsTheOneRule(t *testing.T) {
 	cases := []struct {
 		out       clientsync.Outcome
 		wantParks bool
@@ -105,20 +105,20 @@ func TestRecordIsTheOneRule(t *testing.T) {
 	}
 	for _, c := range cases {
 		o := New()
-		o.Record(c.out, k("SetFraming", "1"), func() {})
+		o.Send(k("SetFraming", "1"), func() {}, func() clientsync.Outcome { return c.out })
 		if got := o.Len() == 1; got != c.wantParks {
 			t.Errorf("outcome %v: parked=%v, want %v", c.out, got, c.wantParks)
 		}
 	}
 }
 
-// TestRecordAcksAStaleParkOnSuccess pins that a write which lands clears an
+// TestSendAcksAStaleParkOnSuccess pins that a write which lands clears an
 // entry an earlier attempt parked, so no drain replays old state over the
 // value the server now holds.
-func TestRecordAcksAStaleParkOnSuccess(t *testing.T) {
+func TestSendAcksAStaleParkOnSuccess(t *testing.T) {
 	o := New()
-	o.Park(k("SetFraming", "1"), func() { t.Error("stale parked write was replayed") })
-	o.Record(clientsync.OutcomeOK, k("SetFraming", "1"), func() {})
+	parked(o, k("SetFraming", "1"), func() { t.Error("stale parked write was replayed") })
+	o.Send(k("SetFraming", "1"), func() {}, func() clientsync.Outcome { return clientsync.OutcomeOK })
 	for _, fn := range o.Drain() {
 		fn()
 	}
@@ -127,12 +127,12 @@ func TestRecordAcksAStaleParkOnSuccess(t *testing.T) {
 	}
 }
 
-// TestRecordWithNoRetryStillAcks pins that a write with nothing to park
+// TestSendWithNoRetryStillAcks pins that a write with nothing to park
 // leaves no stale entry behind when it completes.
-func TestRecordWithNoRetryStillAcks(t *testing.T) {
+func TestSendWithNoRetryStillAcks(t *testing.T) {
 	o := New()
-	o.Park(k("CreateText", "1"), func() { t.Error("replayed") })
-	o.Record(clientsync.OutcomeTransport, k("CreateText", "1"), nil)
+	parked(o, k("CreateText", "1"), func() { t.Error("replayed") })
+	o.Send(k("CreateText", "1"), nil, func() clientsync.Outcome { return clientsync.OutcomeTransport })
 	if o.Len() != 0 {
 		t.Errorf("Len = %d, want 0 (no retry to park)", o.Len())
 	}
@@ -142,10 +142,10 @@ func TestRecordWithNoRetryStillAcks(t *testing.T) {
 // order, and leaves the outbox alone.
 func TestKeysReportsDrainOrder(t *testing.T) {
 	o := New()
-	o.Park(k(OpContent, "9"), func() {})
-	o.Park(k("SetFraming", "1"), func() {})
-	o.Ack(k(OpContent, "9"))
-	o.Park(k(OpContent, "9"), func() {})
+	parked(o, k(OpContent, "9"), func() {})
+	parked(o, k("SetFraming", "1"), func() {})
+	acked(o, k(OpContent, "9"))
+	parked(o, k(OpContent, "9"), func() {})
 	got := o.Keys()
 	want := []Key{k("SetFraming", "1"), k(OpContent, "9")}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
@@ -174,7 +174,7 @@ func TestRecordContentIsTheDirtinessFork(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			o := New()
 			if tc.alreadyParked {
-				o.Park(k(OpContent, "t1"), func() {})
+				parked(o, k(OpContent, "t1"), func() {})
 			}
 			var fired int
 			o.RecordContent("t1", tc.dirty, func() { fired++ })
@@ -204,8 +204,8 @@ func TestRecordContentIsTheDirtinessFork(t *testing.T) {
 // a tile absent from the set keeps its place.
 func TestSyncContentParksTheDirtySetInOrder(t *testing.T) {
 	o := New()
-	o.Park(k("SetFraming", "w1"), func() {})
-	o.Park(k(OpContent, "gone"), func() {})
+	parked(o, k("SetFraming", "w1"), func() {})
+	parked(o, k(OpContent, "gone"), func() {})
 
 	var fired []string
 	o.SyncContent([]string{"t1", "t2"}, func(id string) func() {
@@ -318,7 +318,7 @@ func TestSendWithNoRetryParksNothing(t *testing.T) {
 }
 
 // Whether a write is still owed is this package's fact, and a caller that
-// says so out loud must read it here rather than re-deriving Record's rule.
+// says so out loud must read it here rather than re-deriving Send's rule.
 func TestHasIsWhatIsStillOwed(t *testing.T) {
 	o := New()
 	k := Key{Op: "SetFraming", ID: "t7abcde"}
@@ -350,4 +350,70 @@ func TestTheDisabledVerdictParksNothing(t *testing.T) {
 	if posts != 0 {
 		t.Fatalf("a drain re-posted a write the source refused as disabled %d times", posts)
 	}
+}
+
+// A write's answer speaks for its key only while no newer write of that key
+// has been sent: the newer one parked its own thunk, and the node holds, or
+// will hold, the newer value. Completions come back in any order, so the
+// older answer, heard or unheard, must neither ack nor re-park.
+func TestAnOlderAnswerNeverOverridesANewerSend(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		older, newer clientsync.Outcome
+		newerFirst   bool
+		wantDrain    []string
+	}{
+		{"newer lands, then older unheard", clientsync.OutcomeTransport, clientsync.OutcomeOK, true, nil},
+		{"both unheard, newer first", clientsync.OutcomeTransport, clientsync.OutcomeTransport, true, []string{"B"}},
+		{"both unheard, older first", clientsync.OutcomeTransport, clientsync.OutcomeTransport, false, []string{"B"}},
+		{"newer unheard, then older lands", clientsync.OutcomeOK, clientsync.OutcomeTransport, true, []string{"B"}},
+		{"older lands, then newer unheard", clientsync.OutcomeOK, clientsync.OutcomeTransport, false, []string{"B"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o := New()
+			key := k("SetFraming", "d1")
+			var drained []string
+			send := func(v string, out clientsync.Outcome) (release chan struct{}, done chan struct{}) {
+				release, done, sent := make(chan struct{}), make(chan struct{}), make(chan struct{})
+				go func() {
+					o.Send(key, func() { drained = append(drained, v) }, func() clientsync.Outcome {
+						close(sent)
+						<-release
+						return out
+					})
+					close(done)
+				}()
+				<-sent
+				return release, done
+			}
+			relA, doneA := send("A", tc.older)
+			relB, doneB := send("B", tc.newer)
+			first, second := [2]chan struct{}{relA, doneA}, [2]chan struct{}{relB, doneB}
+			if tc.newerFirst {
+				first, second = second, first
+			}
+			close(first[0])
+			<-first[1]
+			close(second[0])
+			<-second[1]
+			for _, fn := range o.Drain() {
+				fn()
+			}
+			if len(drained) != len(tc.wantDrain) || (len(drained) == 1 && drained[0] != tc.wantDrain[0]) {
+				t.Errorf("drain re-sent %v, want %v: the newer write's verdict is the key's", drained, tc.wantDrain)
+			}
+		})
+	}
+}
+
+func parked(o *Outbox, k Key, retry func()) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.park(k, retry)
+}
+
+func acked(o *Outbox, k Key) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.ack(k)
 }

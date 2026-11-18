@@ -28,44 +28,57 @@ type Outbox struct {
 	mu    sync.Mutex
 	m     map[Key]func()
 	order []Key
+	// newest is the sequence of each key's newest call still out.
+	newest map[Key]uint64
+	seq    uint64
 }
 
 func New() *Outbox {
-	return &Outbox{m: map[Key]func(){}}
+	return &Outbox{m: map[Key]func(){}, newest: map[Key]uint64{}}
 }
 
-// Send parks the retry thunk, runs the call, then Records what the server
+// Send parks the retry thunk, runs the call, then records what the server
 // said. The key stays parked while the call is out, so a drain racing the
 // flight re-sends it, which is safe because every parked write overwrites one
-// key. retry may be nil for a write with nothing to park.
+// key. Only the newest send of a key records: an unheard call parks its
+// retry and any other outcome acks the key, while an older call's answer,
+// which can come back after a newer one went out, says nothing about the
+// value the key now owes. retry may be nil for a write with nothing to park.
 func (o *Outbox) Send(k Key, retry func(), call func() clientsync.Outcome) clientsync.Outcome {
+	o.mu.Lock()
+	o.seq++
+	seq := o.seq
+	o.newest[k] = seq
 	if retry != nil {
-		o.Park(k, retry)
+		o.park(k, retry)
 	}
+	o.mu.Unlock()
 	out := call()
-	o.Record(out, k, retry)
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	switch {
+	case o.newest[k] != seq:
+	case clientsync.Unheard(out) && retry != nil:
+		delete(o.newest, k)
+		o.park(k, retry)
+	default:
+		delete(o.newest, k)
+		o.ack(k)
+	}
 	return out
 }
 
-// Record parks an unheard call for the retry kick; any other outcome acks
-// the key, the server having spoken and the caller's reaction resolving it.
-func (o *Outbox) Record(out clientsync.Outcome, k Key, retry func()) {
-	if clientsync.Unheard(out) && retry != nil {
-		o.Park(k, retry)
-		return
-	}
-	o.Ack(k)
-}
-
-// RecordContent is Record's fork for the one op whose completion is a state,
+// RecordContent is Send's fork for the one op whose completion is a state,
 // the dirtiness the cache's content entry owns, rather than an RPC outcome.
 func (o *Outbox) RecordContent(tileID string, dirty bool, retry func()) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
 	k := Key{Op: OpContent, ID: tileID}
 	if dirty {
-		o.Park(k, retry)
+		o.park(k, retry)
 		return
 	}
-	o.Ack(k)
+	o.ack(k)
 }
 
 // SyncContent re-derives the content entries from the cache's dirty set
@@ -78,20 +91,18 @@ func (o *Outbox) SyncContent(dirty []string, retry func(tileID string) func()) {
 	}
 }
 
-// Park replaces an earlier thunk for k, the newer closure reaching the newer
-// value, and keeps the key's drain position.
-func (o *Outbox) Park(k Key, retry func()) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
+// park replaces an earlier thunk for k, the newer closure reaching the newer
+// value, and keeps the key's drain position. It is unexported because that
+// holds only in send order, which Send and the content entry's dirtiness
+// keep. The caller holds mu, as for ack.
+func (o *Outbox) park(k Key, retry func()) {
 	if _, ok := o.m[k]; !ok {
 		o.order = append(o.order, k)
 	}
 	o.m[k] = retry
 }
 
-func (o *Outbox) Ack(k Key) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
+func (o *Outbox) ack(k Key) {
 	if _, ok := o.m[k]; !ok {
 		return
 	}
@@ -100,7 +111,7 @@ func (o *Outbox) Ack(k Key) {
 }
 
 // Drain returns the thunks in first-parked order. A thunk re-parks itself
-// through Record when its retry fails again, so a drain during a dead link
+// through Send when its retry fails again, so a drain during a dead link
 // loses no entries.
 func (o *Outbox) Drain() []func() {
 	o.mu.Lock()
@@ -117,7 +128,7 @@ func (o *Outbox) Drain() []func() {
 }
 
 // Has reports whether k is still owed, so a caller that wants to say a write
-// parked reads it from here rather than re-deriving Record's rule.
+// parked reads it from here rather than re-deriving Send's rule.
 func (o *Outbox) Has(k Key) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()

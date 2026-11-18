@@ -176,8 +176,10 @@ func TestTransportFailureParksAndTheKickLandsIt(t *testing.T) {
 	framing := mkFraming(12.5, -3.25, 1.75)
 	var post func()
 	post = func() {
-		_, err := flaky.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: door.Id, Cx: framing.Cx(), Cy: framing.Cy(), Zoom: framing.Zoom()})
-		out.Record(clientsync.Of(err), key, post)
+		out.Send(key, post, func() clientsync.Outcome {
+			_, err := flaky.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: door.Id, Cx: framing.Cx(), Cy: framing.Cy(), Zoom: framing.Zoom()})
+			return clientsync.Of(err)
+		})
 	}
 
 	link.down.Store(true)
@@ -409,8 +411,10 @@ func TestUnloadDrainsTheOutbox(t *testing.T) {
 	out := outbox.New()
 	key := outbox.Key{Op: "SetFraming", ID: door.Id}
 	link.down.Store(true)
-	_, err = flaky.SetFraming(ctx, req)
-	out.Record(clientsync.Of(err), key, func() { t.Fatal("unused") })
+	out.Send(key, func() { t.Fatal("unused") }, func() clientsync.Outcome {
+		_, err := flaky.SetFraming(ctx, req)
+		return clientsync.Of(err)
+	})
 	if out.Len() != 1 {
 		t.Fatalf("parked %d, want 1", out.Len())
 	}
