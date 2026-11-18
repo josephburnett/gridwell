@@ -287,9 +287,7 @@ func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindRespon
 			if err != nil {
 				return nil, err
 			}
-			q := rt.qualifyFind(ctx, false, rt.srv.cfg.ID, uuid, over)
-			out.Results = append(out.Results, q.Results...)
-			out.Results = out.Results[:min(len(out.Results), rpc.FindLimit(m))]
+			addFound(out, rt.qualifyFind(ctx, false, rt.srv.cfg.ID, uuid, over))
 		}
 		return out, nil
 	}
@@ -300,11 +298,15 @@ func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindRespon
 		hop := rpc.Hop{Seg: n.prefix(), Via: n.UUID, Transit: n.Transit}
 		resp, err := rt.find(pctx, n.NS, rpc.PeelRequest(hop, m))
 		cancel()
-		q := rt.qualifyFind(ctx, n.Transit, n.UUID, n.prefix(), rpc.FindHop(resp, err))
-		out.Results = append(out.Results, q.Results...)
-		out.Skipped = append(out.Skipped, q.Skipped...)
+		addFound(out, rt.qualifyFind(ctx, n.Transit, n.UUID, n.prefix(), rpc.FindHop(resp, err)))
 	}
 	return out, nil
+}
+
+// addFound adds one source's answer uncut: each caps itself (FindRequest.limit).
+func addFound(out, q *pb.FindResponse) {
+	out.Results = append(out.Results, q.Results...)
+	out.Skipped = append(out.Skipped, q.Skipped...)
 }
 
 // find asks ns, and a home result over a directory is placed on the
