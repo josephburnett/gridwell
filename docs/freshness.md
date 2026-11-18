@@ -424,10 +424,12 @@ The version interlock, the outbox park, and the drain.
    goes through `contentSaves` (`outbox.SaveQueue`), the per-key serial
    queue a pane layout shares. A layout claims the version its open tree
    derives from (`pane.Levels.Claim`), and a refused one replaces the tree
-   with the arrangement on disk (`nav.GestureReconcileLevel`). The basis is
-   claimed at send time, after
-   any earlier write for the same tile has
-   advanced it: `a.c.SaveBasis(tileID)`, never the grid row's.
+   with the arrangement on disk (`nav.GestureReconcileLevel`). The bytes
+   and the basis are read at send time (`textedit.SaveNow`), after any
+   earlier write for the same tile has landed or been refused: the entry's
+   unsaved bytes and `a.c.SaveBasis(tileID)`, never the grid row's, and
+   nothing when the entry is clean or gone, since a refused save ahead of it
+   took its bytes down for the row on disk.
    The row advances when a foreign writer's event or a refetch lands without
    this client seeing the new bytes; claiming it would carry the current
    version with stale bytes past the server's check. The basis is an

@@ -334,21 +334,22 @@ func (a *App) postWriteContent(gid, tileID string, claim rpc.ContentBasis, newCo
 }
 
 // enqueueTextSave posts a content write through the document's serial queue,
-// named by textedit.SaveQueueKey. The claim is read at send time, so
-// pipelined saves chain their bases instead of both claiming the same one.
-// row is the fallback for an entry gone by send time.
-func (a *App) enqueueTextSave(gid, tileID, cid string, row rpc.ContentBasis, data []byte) {
-	a.emit(traceevent.TextSave(tileID, cid, len(data)))
+// named by textedit.SaveQueueKey.
+func (a *App) enqueueTextSave(gid, tileID, cid string, size int) {
+	a.emit(traceevent.TextSave(tileID, cid, size))
 	a.persist.contentSaves.Enqueue(textedit.SaveQueueKey(tileID, cid), func() bool {
-		_, ok := a.saveClaimedContent(gid, cid, tileID == cid, row, data)
-		return ok
+		return a.saveQueuedContent(gid, cid)
 	})
 }
 
-// saveClaimedContent claims a basis and posts one text content write.
-// Every text write reaches it, so no path can spell the claim differently;
-// textedit.SaveClaim owns the rule.
-func (a *App) saveClaimedContent(gid, cid string, rowOwnsContent bool, row rpc.ContentBasis, data []byte) (*gridwellv1.Tile, bool) {
-	basis, haveBasis := a.c.SaveBasis(cid)
-	return a.postWriteContent(gid, cid, textedit.SaveClaim(rowOwnsContent, row, basis, haveBasis), data)
+// saveQueuedContent posts what a queued text save owes when its turn comes,
+// which is textedit.SaveNow's. Every text write on a chain reaches it, so no
+// path can spell the bytes or the claim differently.
+func (a *App) saveQueuedContent(gid, cid string) bool {
+	data, claim, send := textedit.SaveNow(a.c, cid)
+	if !send {
+		return true
+	}
+	_, ok := a.postWriteContent(gid, cid, claim, data)
+	return ok
 }

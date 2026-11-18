@@ -34,16 +34,3 @@ func TestSaveClaim(t *testing.T) {
 		}
 	}
 }
-
-// A refused save's reconcile drops the content entry and refetches a foreign
-// writer's row at version 6, while the flush behind it holds bytes read at 5.
-// Claiming 6 would vouch for bytes this client never saw.
-func TestSaveClaimFallbackIsWhatTheFlushSaw(t *testing.T) {
-	sawAtFlush, foreignWriterRow := v(5), v(6)
-	if got := SaveClaim(true, sawAtFlush, v(0), false); got != sawAtFlush {
-		t.Errorf("fallback claimed %+v, want the snapshot %+v", got, sawAtFlush)
-	}
-	if got := SaveClaim(true, foreignWriterRow, v(0), false); got == sawAtFlush {
-		t.Fatal("SaveClaim must return what it is given: the caller owes it the snapshot")
-	}
-}

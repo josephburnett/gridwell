@@ -2,7 +2,7 @@ package server_test
 
 // A text tile behaves the same wherever its content comes from: a file is
 // typed into and saved as a home document is, through the client's own
-// owners (cache, textedit.SaveClaim, clientsync, outbox) over the real node
+// owners (cache, textedit.SaveNow, clientsync, outbox) over the real node
 // and its files. postWriteContent is the shim's spelling of a save;
 // save below is that spelling.
 
@@ -26,17 +26,16 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// save is postWriteContent: claim, write, then on success advance from the
-// response row; on a verdict drop the refused bytes; either way the entry's
-// dirtiness is whether the write is still owed.
+// save is saveQueuedContent and postWriteContent: what the entry owes and
+// its claim, write, then on success advance from the response row; on a
+// verdict drop the refused bytes; either way the entry's dirtiness is whether
+// the write is still owed.
 func (k *contentClient) save(out *outbox.Outbox, id string) error {
-	data, dirty := k.c.DirtyContent(id)
-	if !dirty {
+	data, claim, send := textedit.SaveNow(k.c, id)
+	if !send {
 		out.RecordContent(id, false, nil)
 		return nil
 	}
-	basis, have := k.c.SaveBasis(id)
-	claim := textedit.SaveClaim(true, rpc.BasisOf(k.row(id)), basis, have)
 	tile, err := k.cl.WriteContent(k.ctx, id, claim, data)
 	if err != nil {
 		if clientsync.ReactSave(clientsync.Of(err)).DropLocal {
@@ -51,16 +50,6 @@ func (k *contentClient) save(out *outbox.Outbox, id string) error {
 	_, still := k.c.DirtyContent(id)
 	out.RecordContent(id, still, func() { _ = k.save(out, id) })
 	return nil
-}
-
-// row is the landing's cached row for id.
-func (k *contentClient) row(id string) *gridwellv1.Tile {
-	k.t.Helper()
-	g, ok := k.c.Grid(k.landing)
-	if !ok || g.Tiles[id] == nil {
-		k.t.Fatalf("no row %q in the landing", id)
-	}
-	return g.Tiles[id]
 }
 
 // stampNow is the stamp a fresh read names.

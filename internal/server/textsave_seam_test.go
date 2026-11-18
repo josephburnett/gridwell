@@ -9,6 +9,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/textedit"
 )
@@ -47,7 +48,7 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 	// bytes, dirty, based on the version it was fetched under.
 	c := cache.New()
 	c.PutFetchedContent(target.Id, []byte("v0"), rpc.BasisOf(target), c.AskContent(target.Id))
-	c.PutEditedContent(target.Id, []byte("typed"))
+	c.PutEditedContent(target.Id, []byte("typed and more"))
 
 	// Both flushes reach for the head of the same chain at the same moment.
 	// Serialized, the second waits out this window and then reads the basis
@@ -73,14 +74,17 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-	// One flush, spelled as the client spells it: claim at send time through
-	// textedit.SaveClaim, write, then advance the basis from the response.
-	save := func(rowID string, row rpc.ContentBasis, data []byte) func() bool {
+	// One flush, spelled as the client spells it: what the entry owes and its
+	// claim at send time through textedit.SaveNow, write, then advance the
+	// basis from the response.
+	save := func() func() bool {
 		return func() bool {
 			defer wg.Done()
 			rendezvous()
-			basis, haveBasis := c.SaveBasis(target.Id)
-			claim := textedit.SaveClaim(rowID == target.Id, row, basis, haveBasis)
+			data, claim, send := textedit.SaveNow(c, target.Id)
+			if !send {
+				return true
+			}
 			tile, err := cl.WriteContent(ctx, target.Id, claim, data)
 			mu.Lock()
 			defer mu.Unlock()
@@ -95,11 +99,9 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 
 	q := outbox.NewSaveQueue()
 	// The ascent flush: it holds the link row it was descended through.
-	q.Enqueue(textedit.SaveQueueKey(link.Id, rpc.ContentID(link)),
-		save(link.Id, rpc.BasisOf(link), []byte("typed")))
+	q.Enqueue(textedit.SaveQueueKey(link.Id, rpc.ContentID(link)), save())
 	// The debounce sweep: it holds the content id.
-	q.Enqueue(textedit.SaveQueueKey(target.Id, target.Id),
-		save(target.Id, rpc.BasisOf(target), []byte("typed and more")))
+	q.Enqueue(textedit.SaveQueueKey(target.Id, target.Id), save())
 	wg.Wait()
 
 	if len(errs) > 0 {
@@ -111,10 +113,68 @@ func TestLinkedDocumentFlushesShareOneChain(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(data) != "typed and more" {
-		t.Errorf("stored content = %q, want the last write in queue order", data)
+		t.Errorf("stored content = %q, want the bytes typed", data)
 	}
-	if basis, ok := c.SaveBasis(target.Id); !ok || basis.Version != target.Version+2 {
-		t.Errorf("save basis = %d (present %v), want %d: both writes chained",
-			basis.Version, ok, target.Version+2)
+	if basis, ok := c.SaveBasis(target.Id); !ok || basis.Version != target.Version+1 {
+		t.Errorf("save basis = %d (present %v), want %d: the second flush, behind the first on its chain, found nothing owed",
+			basis.Version, ok, target.Version+1)
+	}
+}
+
+// TestASaveBehindARefusedOneSendsNothing: an agent writes the document while
+// the user's edit is unsaved, so the cached row moves on but the entry keeps
+// the base it was read at. The first save is refused, and its reconcile takes
+// the entry down for the row on disk; the save queued behind it, holding the
+// typing that followed, must not then claim the row's new version and land
+// over the agent's words.
+func TestASaveBehindARefusedOneSendsNothing(t *testing.T) {
+	_, cl, root := newTestServer(t)
+	ctx := context.Background()
+	doc, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}}, []byte("v0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := cache.New()
+	c.PutFetchedContent(doc.Id, []byte("v0"), rpc.BasisOf(doc), c.AskContent(doc.Id))
+	c.PutEditedContent(doc.Id, []byte("typed"))
+	if _, err := cl.WriteContent(ctx, doc.Id, rpc.BasisOf(doc), []byte("agent")); err != nil {
+		t.Fatal(err)
+	}
+
+	sent := 0
+	save := func(inFlight func()) func() bool {
+		return func() bool {
+			data, claim, send := textedit.SaveNow(c, doc.Id)
+			if !send {
+				return true
+			}
+			sent++
+			inFlight()
+			tile, err := cl.WriteContent(ctx, doc.Id, claim, data)
+			if err != nil {
+				if clientsync.ReactSave(clientsync.Of(err)).DropLocal {
+					c.DropTileContent(doc.Id)
+				}
+				return false
+			}
+			c.PutSavedContent(tile, data)
+			return true
+		}
+	}
+	done := make(chan struct{})
+	q := outbox.NewSaveQueue()
+	key := textedit.SaveQueueKey(doc.Id, doc.Id)
+	// Typed while the first save is out, and swept onto the chain behind it.
+	q.Enqueue(key, save(func() { c.PutEditedContent(doc.Id, []byte("typed and more")) }))
+	q.Enqueue(key, save(func() {}))
+	q.After(key, func(bool) { close(done) })
+	<-done
+
+	data, _, _, err := cl.ReadContent(ctx, doc.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "agent" || sent != 1 {
+		t.Errorf("the node holds %q after %d sends, want the agent's words after the one refused", data, sent)
 	}
 }

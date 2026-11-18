@@ -74,7 +74,7 @@ func (a *App) postTileContent(cid string, t *gridwellv1.Tile, data []byte) {
 		a.reportErr(errsurface.Error, "textedit",
 			"unsaved edit is not being saved — its tile no longer accepts edits")
 	case textedit.FlushPost:
-		a.enqueueTextSave(t.GridId, t.Id, cid, rpc.BasisOf(t), data)
+		a.enqueueTextSave(t.GridId, t.Id, cid, len(data))
 	}
 }
 
@@ -144,7 +144,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 	// row takes the bytes is textedit.DecideFlush's, as for the sweep; a row
 	// that will not still posts framing, which is a node fact for every text
 	// tile, and the sweep reports the bytes it keeps.
-	buf, hasBuf := a.c.DirtyContent(rpc.ContentID(file))
+	_, hasBuf := a.c.DirtyContent(rpc.ContentID(file))
 	editable := rpc.TextDocument(file) && !a.tileReadOnly(file)
 	hasBuf = hasBuf && textedit.DecideFlush(true, editable, false) == textedit.FlushPost
 
@@ -170,14 +170,8 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 	// textedit.SaveQueueKey's, so a leaf link's ascent flush cannot race the
 	// sweep for the one basis they share.
 	a.persist.contentSaves.Enqueue(textedit.SaveQueueKey(file.Id, rpc.ContentID(file)), func() bool {
-		// The fallback row is this snapshot, read above with the bytes.
-		// Re-reading it here would claim a version a foreign writer may have
-		// advanced since.
-		if hasBuf {
-			cid := rpc.ContentID(file)
-			if _, ok := a.saveClaimedContent(gid, cid, file.Id == cid, rpc.BasisOf(file), buf); !ok {
-				return false
-			}
+		if hasBuf && !a.saveQueuedContent(gid, rpc.ContentID(file)) {
+			return false
 		}
 		if !reframed {
 			return true
