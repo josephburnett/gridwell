@@ -9,6 +9,7 @@ import (
 	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/urlview"
 )
 
@@ -300,7 +301,7 @@ func (a *App) installWebviewListeners() {
 			a.onRightMove(ev.Get("x").Float(), ev.Get("y").Float())
 		}},
 		{"onRightUpForward", func(ev js.Value) {
-			a.finishRightDrag(ev.Get("x").Float(), ev.Get("y").Float())
+			a.finishRelease(gesture.FinishRightDrag, ev.Get("x").Float(), ev.Get("y").Float())
 		}},
 		// The page tried to open a new window. Main denies the popup and
 		// forwards the url, and the link opens as an ephemeral visit below.

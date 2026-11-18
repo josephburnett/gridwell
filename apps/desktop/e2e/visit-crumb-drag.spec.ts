@@ -15,7 +15,7 @@ type Button = 'left' | 'right';
 // sits under the REAL cursor, and Playwright drives a virtual mouse, so the
 // real cursor is still at the screen center. Chromium reports that layer
 // change as a mousemove with no button held, which is a lost release
-// (recoverLostRelease) and would end the drag wherever the real cursor sits.
+// (gesture.RecoverRelease) and would end the drag wherever the real cursor sits.
 // Press, move and release together leave no window for it.
 async function dragCrumb(
   window: Page,

@@ -131,26 +131,28 @@ func (a *App) cancelGesture(relayed, onCanvas bool) bool {
 	return true
 }
 
-// recoverLostRelease runs the commit path gesture.RecoverRelease names.
-func (a *App) recoverLostRelease(buttons int, sx, sy float64) bool {
-	switch gesture.RecoverRelease(buttons, a.armed()) {
+// finishRelease runs the commit path r names for a release learned at
+// (sx, sy), a mouseup or a move reporting the button already up
+// (gesture.RecoverRelease): every gesture moves there first, so each lands
+// where its release was learned. False when r finishes nothing.
+func (a *App) finishRelease(r gesture.Recovery, sx, sy float64) bool {
+	if r == gesture.FinishNothing {
+		return false
+	}
+	a.moveTo(sx, sy)
+	switch r {
 	case gesture.FinishLeftResize:
-		// From the last applied cursor, never this stray re-entry point.
 		a.finishLeftResize()
-		return true
 	case gesture.FinishRightDrag:
 		a.finishRightDrag(sx, sy)
-		return true
 	case gesture.FinishLeftDrag:
-		return a.finishLeftDrag(sx, sy)
+		a.finishLeftDrag(sx, sy)
 	case gesture.FinishBand:
 		a.finishBand(sx, sy)
-		return true
 	case gesture.FinishStripScroll:
 		a.stripScroll = nil
-		return true
 	}
-	return false
+	return true
 }
 
 // paneIDAt is the pane a press or release record names: the one under the
@@ -569,24 +571,28 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 
 func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
-	// One owner for all three armed states.
-	if a.recoverLostRelease(args[0].Get("buttons").Int(), sx, sy) {
-		return nil
+	if !a.finishRelease(gesture.RecoverRelease(args[0].Get("buttons").Int(), a.armed()), sx, sy) {
+		a.moveTo(sx, sy)
 	}
+	return nil
+}
+
+// moveTo moves every armed gesture, and the menu's hover, to (sx, sy).
+func (a *App) moveTo(sx, sy float64) {
 	if a.leftResize != nil {
 		a.onLeftResizeMove(sx, sy)
-		return nil
+		return
 	}
 	if a.band != nil {
 		a.moveBand(sx, sy)
-		return nil
+		return
 	}
 	if a.stripScroll != nil {
 		if mp, _, ok := a.menuPaneForPointer(); ok && a.menu.ScrollStrip(*a.stripScroll-sy, a.menuLayoutFor(mp)) {
 			a.scheduleDraw(traceevent.WhyPointer)
 		}
 		*a.stripScroll = sy
-		return nil
+		return
 	}
 	// A move over a live URL view's content box belongs to the page. An in-flight
 	// drag parks every live view, so liveViewOwnsPoint answers false then.
@@ -603,7 +609,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	// Right-button gestures take precedence over the left paths below.
 	if a.rightDrag != nil {
 		a.onRightMove(sx, sy)
-		return nil
+		return
 	}
 	// Menu hover routes through the same resolver the press uses, because
 	// the swatches are laid out for the menu's own pane.
@@ -617,12 +623,12 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		}
 	}
 	if a.dragging == nil {
-		return nil
+		return
 	}
 	d := a.dragging
 	// The one threshold, shared with the right-button copy drag.
 	if !a.advanceDragGhost(d, sx, sy) {
-		return nil
+		return
 	}
 	if d.pans() {
 		// A pan drag only arms in grid mode, since a content descent swallows
@@ -642,7 +648,6 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	d.curScreenX = sx
 	d.curScreenY = sy
 	a.scheduleDraw(traceevent.WhyPointer)
-	return nil
 }
 
 // advanceDragGhost starts an armed drag past the threshold and materializes
@@ -693,19 +698,7 @@ func (a *App) advanceDragGhost(d *dragState, sx, sy float64) bool {
 func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
 	a.emit(traceevent.Release(a.paneIDAt(sx, sy), args[0].Get("button").Int()))
-	switch gesture.Release(args[0].Get("button").Int(), a.armed()) {
-	case gesture.FinishRightDrag:
-		a.finishRightDrag(sx, sy)
-	case gesture.FinishLeftResize:
-		// The move applied the ratio live; the release decides the collapse.
-		a.finishLeftResize()
-	case gesture.FinishLeftDrag:
-		a.finishLeftDrag(sx, sy)
-	case gesture.FinishBand:
-		a.finishBand(sx, sy)
-	case gesture.FinishStripScroll:
-		a.stripScroll = nil
-	}
+	a.finishRelease(gesture.Release(args[0].Get("button").Int(), a.armed()), sx, sy)
 	return nil
 }
 

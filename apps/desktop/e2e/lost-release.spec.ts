@@ -1,13 +1,12 @@
 import { test, expect } from './fixtures';
-import { tileAt } from './oracle';
+import { tileAt, type Tile } from './oracle';
 
 // A gesture's release can go missing: the button comes up outside the window,
 // or over a surface that swallows the event. A move reporting the gesture's own
-// button already up is that release, arriving late, and recoverLostRelease is
-// the one owner of the inference for all three gestures that have it: the left
-// tile drag, the left divider resize and the right-button drag. Each state
-// finishes through its own commit path, so this spec asserts the drop landed on
-// the server rather than that the state went quiet.
+// button already up is that release, arriving late: gesture.RecoverRelease
+// infers it for every gesture, and App.finishRelease finishes it as it does a
+// mouseup. Each state finishes through its own commit path, so these specs
+// assert what landed on the server rather than that the state went quiet.
 test('a left drag whose release is never seen still commits and unhides its tile', async ({
   window,
   gw,
@@ -116,4 +115,83 @@ test('a left drag whose release is never seen still commits and unhides its tile
     .toBe(tileID);
 
   await gw.waitIdle();
+});
+
+// Every gesture lands where its release is learned, the move that reports the
+// button up included, a resize as a drag does (App.finishRelease). Each runs
+// in one turn, as above, and the late release comes well past the last move
+// that held the button.
+test('a divider resize whose release is never seen lands where the release is learned', async ({ window, gw }) => {
+  await gw.enterSource('home');
+  await gw.splitFocusedPaneVertical();
+  const [left] = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
+  const x = left.x + left.w;
+  const y = left.y + left.h / 2;
+  const armed = await window.evaluate(
+    ([x, y]: [number, number]) => {
+      const t = (window as any).__gridwellTest;
+      const canvas = document.querySelector('canvas')!;
+      const fire = (type: string, cx: number, buttons: number) =>
+        canvas.dispatchEvent(new MouseEvent(type, { clientX: cx, clientY: y, buttons, button: 0, bubbles: true }));
+      fire('mousedown', x - 2, 1);
+      fire('mousemove', x + 40, 1);
+      const resizing = t.leftResizeArmed();
+      fire('mousemove', x + 120, 0);
+      return resizing;
+    },
+    [x, y] as [number, number],
+  );
+  expect(armed, 'the press grabbed the divider').toBe(true);
+  await gw.waitIdle();
+  const after = (await gw.panes()).find((p) => p.id === left.id)!;
+  expect(Math.abs(after.w - (left.w + 122)), `the left pane is ${after.w}, from ${left.w}`).toBeLessThan(4);
+});
+
+test('a tile resize whose release is never seen lands where the release is learned', async ({ window, gw }) => {
+  await gw.enterSource('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  await gw.openMenu();
+  await gw.dragCreate('markdown', cx, cy);
+  const before = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
+  expect(before, 'the tile landed').toBeTruthy();
+  await gw.waitClientTileAt(f.id, cx, cy, before.id);
+
+  const armed = await window.evaluate(
+    ([paneID, x, y]: [string, number, number]) => {
+      const t = (window as any).__gridwellTest;
+      const canvas = document.querySelector('canvas')!;
+      // A quarter cell past a cell's center, so a point MouseEvent truncates
+      // to whole pixels still rounds to the cell after it.
+      const at = (dx: number) => {
+        const c = t.cellCenter(paneID, x + dx, y + dx);
+        const n = t.cellCenter(paneID, x + dx + 1, y + dx + 1);
+        return { x: c.x + 0.35 * (n.x - c.x), y: c.y + 0.35 * (n.y - c.y) };
+      };
+      const fire = (type: string, p: { x: number; y: number }, buttons: number) =>
+        canvas.dispatchEvent(new MouseEvent(type, { clientX: p.x, clientY: p.y, buttons, button: 2, bubbles: true }));
+      // Outside the center third, so the right press resizes.
+      fire('mousedown', at(0), 2);
+      fire('mousemove', at(1), 2);
+      const kind = t.rightDrag();
+      fire('mousemove', at(3), 0);
+      return kind;
+    },
+    // The tile's bottom-right cell, so the press grabs that corner.
+    [f.id, Number(before.x ?? 0) + Number(before.w ?? 1) - 1, Number(before.y ?? 0) + Number(before.h ?? 1) - 1] as [
+      string,
+      number,
+      number,
+    ],
+  );
+  expect(armed, 'the right press armed a gesture').toBeTruthy();
+  await gw.waitIdle();
+  await expect
+    .poll(async () => {
+      const t = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy);
+      const edge = (r: Tile) => [Number(r.x ?? 0) + Number(r.w ?? 0), Number(r.y ?? 0) + Number(r.h ?? 0)];
+      return t ? [edge(t)[0] - edge(before)[0], edge(t)[1] - edge(before)[1]] : null;
+    }, { message: 'the moving corner followed the late release three cells' })
+    .toEqual([3, 3]);
 });

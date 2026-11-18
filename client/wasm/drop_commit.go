@@ -20,7 +20,7 @@ import (
 
 // Commits a left-button drag and animates the ghost. finishLeftDrag is the
 // one commit path, so the mouseup the handler saw and the release
-// recoverLostRelease infers cannot land two ways. The verdict is
+// gesture.RecoverRelease infers cannot land two ways. The verdict is
 // dragdrop.DecideDrop's; commitRightCopy is the right button's twin and
 // shares commitShared, the landing and the snap-back below.
 

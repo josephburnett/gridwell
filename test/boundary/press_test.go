@@ -16,6 +16,57 @@ var gestureArms = map[string]bool{
 	"dragging": true, "rightDrag": true, "leftResize": true, "band": true, "stripScroll": true,
 }
 
+// A release, a mouseup, a move reporting the button already up or a view's
+// forwarded right-up, is finished in one place, App.finishRelease, which moves
+// the gesture to the point the release was learned at before its commit path
+// runs: no other function in client/wasm calls a commit path, so no release
+// can land at another point.
+func TestOneReleaseFinisher(t *testing.T) {
+	root := repoRoot(t)
+	dir := filepath.Join(root, "client", "wasm")
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commits := map[string]bool{"finishLeftResize": true, "finishRightDrag": true, "finishLeftDrag": true, "finishBand": true}
+	fset := token.NewFileSet()
+	seen := 0
+	for _, e := range ents {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range f.Decls {
+			fd, ok := d.(*ast.FuncDecl)
+			if !ok || fd.Body == nil {
+				continue
+			}
+			ast.Inspect(fd.Body, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok || !commits[sel.Sel.Name] {
+					return true
+				}
+				seen++
+				if fd.Name.Name != "finishRelease" {
+					t.Errorf("%s: %s calls %s: finish a release through App.finishRelease", fset.Position(call.Pos()), fd.Name.Name, sel.Sel.Name)
+				}
+				return true
+			})
+		}
+	}
+	if seen != len(commits) {
+		t.Errorf("found %d calls of the %d commit paths: the walker no longer sees them", seen, len(commits))
+	}
+}
+
 // pressFree are the functions whose path to an arm no press can take, each
 // with the reason.
 var pressFree = map[string]string{

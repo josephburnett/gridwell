@@ -289,8 +289,6 @@ func (a *App) finishRightDrag(sx, sy float64) {
 		return
 	}
 	a.rightDrag = nil
-	rd.curX = sx
-	rd.curY = sy
 
 	tile := rd.kind == rightDragTileCenter || rd.kind == rightDragTileResize
 	switch {

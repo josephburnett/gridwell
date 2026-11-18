@@ -96,6 +96,34 @@ func TestRecoverRelease(t *testing.T) {
 	}
 }
 
+// A release that was lost, the pointer coming back with no button held, finishes
+// every gesture through the same commit path its own button's mouseup does, so
+// the two land alike (App.finishRelease).
+func TestLostReleaseFinishesAsTheRelease(t *testing.T) {
+	kinds := []struct {
+		name   string
+		button int
+		armed  Armed
+	}{
+		{"left drag", 0, Armed{Drag: true}},
+		{"pan", 0, Armed{Drag: true, Pan: true}},
+		{"right copy", 2, Armed{RightDrag: true, Drag: true, DragCreates: true}},
+		{"right pane or tile drag", 2, Armed{RightDrag: true}},
+		{"left resize", 0, Armed{LeftResize: true}},
+		{"band", 0, Armed{Band: true}},
+		{"strip scroll", 0, Armed{StripScroll: true}},
+	}
+	for _, k := range kinds {
+		want := Release(k.button, k.armed)
+		if want == FinishNothing {
+			t.Errorf("%s: its own button's release finishes nothing", k.name)
+		}
+		if got := RecoverRelease(0, k.armed); got != want {
+			t.Errorf("%s: a lost release = %v, its mouseup = %v", k.name, got, want)
+		}
+	}
+}
+
 // A gesture owns the pointer from its press: a press of any button during it
 // does nothing, from a mouse or a finger, and only a press at rest starts one.
 func TestPress(t *testing.T) {
