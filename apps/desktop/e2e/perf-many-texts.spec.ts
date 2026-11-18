@@ -18,6 +18,7 @@ import { dumpNow, type TraceLine } from './trace';
 const P95_BUDGET_MS = 40;
 const BURSTS = 40;
 const PER_BURST = 4;
+const PAN_STEPS = 60;
 
 // body is a note of many short lines, 8 to 30 KB, different per tile.
 function body(i: number): string {
@@ -98,7 +99,7 @@ async function measure(window: Page, gw: GridwellDriver, home: any, f: PaneInfo,
   const py = f.y + f.h / 2;
   await m.move(px, py);
   await m.down();
-  await m.move(px + 300, py + 40, { steps: 60 });
+  await m.move(px + 300, py + 40, { steps: PAN_STEPS });
   await m.up();
   await gw.waitIdle();
   const panEnd = Date.now();
@@ -122,6 +123,7 @@ async function measure(window: Page, gw: GridwellDriver, home: any, f: PaneInfo,
   };
   console.log(`perf-many-texts ${testInfo.title.slice(0, 12)} ${JSON.stringify(report)}`);
   await testInfo.attach('perf', { body: JSON.stringify(report, null, 2), contentType: 'application/json' });
+  expect(report.panPaints, 'a release where the pointer already is paints nothing').toBeLessThanOrEqual(PAN_STEPS);
   expect(report.p95, `p95 paint ms over budget: ${JSON.stringify(report)}`).toBeLessThanOrEqual(P95_BUDGET_MS);
   return before.lines;
 }

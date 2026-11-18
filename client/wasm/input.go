@@ -626,6 +626,10 @@ func (a *App) moveTo(sx, sy float64) {
 		return
 	}
 	d := a.dragging
+	// A release moves here first (finishRelease); where the drag already is, it paints nothing.
+	if d.started && sx == d.curScreenX && sy == d.curScreenY {
+		return
+	}
 	// The one threshold, shared with the right-button copy drag.
 	if !a.advanceDragGhost(d, sx, sy) {
 		return
