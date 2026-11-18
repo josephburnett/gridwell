@@ -15,14 +15,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/api/tracewire"
 )
 
@@ -96,6 +99,7 @@ func (r *Ring) put(rec tracewire.Record) bool {
 	if rec.Origin == "" {
 		rec.Origin = tracewire.OriginNode
 	}
+	rec = scrub(rec)
 	rec.Msg = capMsg(rec.Msg)
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -251,6 +255,28 @@ func ConfigRecords(path string) []tracewire.Record {
 		out = append(out, rec)
 	}
 	return out
+}
+
+// contentToken reads any file on the host and a dump is handed to others, so
+// put cuts it from every page url (rpc.PageURL), whoever spelled the record.
+var contentToken = regexp.MustCompile(regexp.QuoteMeta(rpc.ContentPath) + `[0-9a-f]{64}/`)
+
+func scrub(rec tracewire.Record) tracewire.Record {
+	rec.Msg = contentToken.ReplaceAllLiteralString(rec.Msg, rpc.ContentPath)
+	// The emitter's map is its own, so a change goes on a copy.
+	var kv map[string]string
+	for k, v := range rec.KV {
+		if cut := contentToken.ReplaceAllLiteralString(v, rpc.ContentPath); cut != v {
+			if kv == nil {
+				kv = maps.Clone(rec.KV)
+			}
+			kv[k] = cut
+		}
+	}
+	if kv != nil {
+		rec.KV = kv
+	}
+	return rec
 }
 
 // capMsg truncates to tracewire.MaxMsg, dropping a rune the cut split so the

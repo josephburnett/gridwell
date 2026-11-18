@@ -270,3 +270,19 @@ func TestIngestKeepsEachSerialOnce(t *testing.T) {
 		t.Errorf("the ring holds %v, want %v", held, want)
 	}
 }
+
+// The ring keeps the record without the token and leaves the emitter's map as
+// it was; the seam test in internal/server holds it with the node's own token.
+func TestARecordKeepsNoContentTokenAndTheEmittersMapIsItsOwn(t *testing.T) {
+	r := New(4)
+	page := "http://h/content/" + strings.Repeat("0a", 32) + "/abcdefg/12"
+	kv := map[string]string{"url": page, "pane": "p1"}
+	r.Emit(tracewire.Record{Src: "t", Kind: "k", Msg: "open " + page, KV: kv})
+	got := r.Snapshot()[0]
+	if got.Msg != "open http://h/content/abcdefg/12" || got.KV["url"] != "http://h/content/abcdefg/12" || got.KV["pane"] != "p1" {
+		t.Errorf("ring holds %+v", got)
+	}
+	if kv["url"] != page {
+		t.Errorf("the emitter's map was rewritten: %v", kv)
+	}
+}

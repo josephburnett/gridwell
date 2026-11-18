@@ -15,11 +15,13 @@ const CRASH_TAIL_LINES = 200;
 
 // The node prints its web password three ways on start (internal/cli/serve.go:
 // the banner's auth=, the "web password:" line, the MCP line's bearer), and
-// any of them would hand a reader of the file the node.
+// any of them would hand a reader of the file the node. A page's url carries
+// the content token, cut as contentToken in internal/trace cuts it from a dump.
 const SECRETS: [RegExp, string][] = [
   [/\bauth=\S+/g, 'auth=<redacted>'],
   [/(web password:\s*)\S+/gi, '$1<redacted>'],
   [/(Bearer\s+)[^\s"']+/gi, '$1<redacted>'],
+  [/(\/content\/)[0-9a-f]{64}\//g, '$1'],
 ];
 
 export function redact(line: string): string {

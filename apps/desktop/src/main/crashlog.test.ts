@@ -38,6 +38,15 @@ test('the redacted shapes are the ones serve.go prints', () => {
   assert.ok(serve.includes('Authorization: Bearer %s'), 'the MCP line changed');
 });
 
+// A dump and the crash file cut the token alike, so a page's url in either
+// names the tile alone.
+test('a page url in a console line keeps its tile and loses the content token', () => {
+  const line = `[renderer:info] live view opens http://127.0.0.1:8080/content/${TOKEN}/abcdefg/~L2V0Yw`;
+  assert.equal(redact(line), '[renderer:info] live view opens http://127.0.0.1:8080/content/abcdefg/~L2V0Yw');
+  assert.ok(goSource('api/rpc/types.go').includes('ContentPath = "/content/"'), 'rpc.ContentPath moved');
+  assert.ok(goSource('internal/trace/trace.go').includes('rpc.ContentPath) + `[0-9a-f]{64}/`'), 'the dump cuts another shape');
+});
+
 test('a tail keeps the last lines, redacted on the way in', () => {
   const t = new LineTail(3);
   for (const l of ['a', 'b', SECRET_LINES[0], 'd']) t.push(l);

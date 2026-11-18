@@ -1,4 +1,5 @@
-import { test, expect } from './fixtures';
+import { test, expect, homePassword, loginToken } from './fixtures';
+import { dumpViaAPI } from './trace';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { makeRunDir } from './homes';
@@ -74,4 +75,45 @@ test('descending an image file opens it live through the /content/ API', async (
   expect(Number(after.version ?? 0), 'a freeze claims no content bytes').toBe(versionBefore);
   expect(after.urlString ?? '', 'and it still carries no address').toBe('');
   expect(after.id, 'the tile keeps its name').toBe(cat.id);
+});
+
+// The live view's address holds the content token, and both the client's and
+// main's records of the view name it, so the dump is read as it is handed on.
+test('a dump of a live served page names the tile and holds no content token', async ({
+  electronApp,
+  window,
+  home,
+  gw,
+}) => {
+  const origin = new URL(window.url()).origin;
+  const token = await loginToken(origin, homePassword(home));
+  await gw.enterSource('pics (files)');
+  const f = await gw.focused();
+  const cat = ((await gw.getGrid(f.gridID)).tiles ?? []).find((t) => t.altText === 'cat.png')!;
+  await gw.descendCell(Number(cat.x ?? 0), Number(cat.y ?? 0));
+  await expect
+    .poll(
+      () =>
+        electronApp.evaluate(({ webContents }) =>
+          webContents.getAllWebContents().some((w) => w.getURL().includes('/content/')),
+        ),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+
+  const page = `/content/${cat.id}`;
+  let text = '';
+  await expect
+    .poll(
+      async () => {
+        const lines = await dumpViaAPI(origin, token);
+        text = lines.map((l) => JSON.stringify(l)).join('\n');
+        const named = (o: string) => lines.some((l) => l.origin === o && JSON.stringify(l).includes(page));
+        return named('electron') && named('client');
+      },
+      { message: 'both the client and main record the live view', timeout: 20_000 },
+    )
+    .toBe(true);
+  expect(text.match(/\/content\/[0-9a-f]{64}\/.*/g) ?? [], 'records holding the content token').toEqual([]);
+  await gw.ascendViaCrumb();
 });
