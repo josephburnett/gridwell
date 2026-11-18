@@ -16,24 +16,20 @@ import (
 const MaxBlobBytes = rpc.MaxContentBytes
 
 // claimContentVersion runs write as one mutation named verb on row tileID,
-// handed the row once the caller's content claim has been checked against it,
-// and answers the tile write returns. It is the store's only
-// optimistic-concurrency check, and "version is the claim for content and
-// nothing else" is enforced by who can reach it: WriteContent's text, url and
-// workspace arms, and RenameTile.
+// handed the row its content claim holds for (ClaimVersion), and answers the
+// tile write returns. Its callers are home's content writes: WriteContent's
+// text, url and workspace arms, and RenameTile.
 func (s *Store) claimContentVersion(ctx context.Context, verb string, tileID, claimed int64,
 	write func(tx *sql.Tx, t *gridwellv1.Tile, events *[]*gridwellv1.Event) (*gridwellv1.Tile, error)) (*gridwellv1.Tile, error) {
 	var out *gridwellv1.Tile
 	err := s.withMutation(ctx, verb, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		t, err := s.loadTile(ctx, tx, tileID)
-		if err != nil {
-			return err
+		if err == nil {
+			err = ClaimVersion(t, claimed)
 		}
-		if t.Version != claimed {
-			return fmt.Errorf("%w: tile %d at version %d, claimed %d",
-				ErrVersionConflict, tileID, t.Version, claimed)
+		if err == nil {
+			out, err = write(tx, t, events)
 		}
-		out, err = write(tx, t, events)
 		return err
 	})
 	if err != nil {
@@ -42,17 +38,15 @@ func (s *Store) claimContentVersion(ctx context.Context, verb string, tileID, cl
 	return out, nil
 }
 
-// DeleteClaim verifies a delete's claim against row t: the content version and
-// the placement the writer saw, so a delete takes only what the user was
-// looking at. A request with no placement claim is the node's own (a reap)
-// and is not checked. withGrid is ClaimPlacement's.
+// DeleteClaim verifies a delete's claims against row t, its version and its
+// placement (withGrid is ClaimPlacement's), so a delete takes only what the
+// user was looking at; one with no placement claim is the node's own, a reap.
 func DeleteClaim(t *gridwellv1.Tile, req *gridwellv1.DeleteTileRequest, withGrid bool) error {
 	if req.GetClaim() == nil {
 		return nil
 	}
-	if t.Version != req.ClaimVersion {
-		return fmt.Errorf("%w: tile %s at version %d, the delete saw %d",
-			ErrVersionConflict, t.Id, t.Version, req.ClaimVersion)
+	if err := ClaimVersion(t, req.ClaimVersion); err != nil {
+		return err
 	}
 	return ClaimPlacement(t, req.Claim, withGrid)
 }

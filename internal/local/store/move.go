@@ -91,6 +91,14 @@ func (s *Store) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (
 	return out, err
 }
 
+// ClaimVersion verifies a content claim: the version the writer saw is t's.
+func ClaimVersion(t *gridwellv1.Tile, claimed int64) error {
+	if t.Version != claimed {
+		return fmt.Errorf("%w: tile %s at version %d, claimed %d", ErrVersionConflict, t.Id, t.Version, claimed)
+	}
+	return nil
+}
+
 // ClaimPlacement verifies a placement claim against row n: the placement the
 // writer saw must be the one the row holds. It is the state, not its history,
 // so a tile moved away and back is where the writer saw it and the write

@@ -494,8 +494,8 @@ func (n *FileRows) userContent(verb string, tileID, version int64, decide func(*
 		if err := liveRow(ctx, tx, files, tileID, tileColumns, scanDests(tilesColumns, &t)...); err != nil {
 			return err
 		}
-		if t.Version != version {
-			return fmt.Errorf("%w: tile %d at version %d, claimed %d", ErrVersionConflict, tileID, t.Version, version)
+		if err := ClaimVersion(&t, version); err != nil {
+			return err
 		}
 		set, v, err := decide(&t)
 		if err != nil || set == "" {

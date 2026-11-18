@@ -148,7 +148,10 @@ every open. Never relax them.
 - Ids are `AUTOINCREMENT` and never reused.
 - `version` means the user's content bytes changed. `claimContentVersion`
   (callers: `WriteContent`'s text, url and workspace arms, `RenameTile`) claims and
-  `finishContentEdit` bumps. The bump (`bumpTileVersion`) is the one writer
+  `finishContentEdit` bumps. Every version claim, home's, a file row's and a
+  delete's, is compared by `ClaimVersion`, beside `ClaimPlacement`; each
+  claimed fact has one comparator, and `test/boundary/claims_test.go` holds
+  the store's version conflicts to them. The bump (`bumpTileVersion`) is the one writer
   of `content_at`, so a row's content time moves exactly when its version
   does; `created_at` and `updated_at` (every write) are the other two times. Everything else — captures, framing, layout —
   goes through `loadForWrite` + `emitTileChanged` and bumps nothing; a
