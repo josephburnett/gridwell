@@ -68,36 +68,22 @@ type Server struct {
 	// closed refuses a dial that would add to it afterwards.
 	bg     sync.WaitGroup
 	closed bool
-	// health holds every connection the transport cannot reach, by name;
-	// absent is reachable. Every kind of failure is this one fact, written
-	// only by note. Never persisted.
-	health map[string]connState
-	// liveOff is why a far node refused this node's share, by connection,
-	// while the refusal stands: its sources watch nothing shown here. Written
-	// only by noteLiveOff. Never persisted.
-	liveOff map[string]string
+	// facts is what the transport knows of each connection, by name, from
+	// which derive decides its health (health.go); count orders the
+	// readings in it. Written only through setHealth.
+	facts map[string]connFacts
+	count uint64
 	// farHealth is each far namespace's standing health by its id here, for a
-	// late Subscribe; note forgets a connection's on the down every re-establish
-	// follows, and the far node's replay of its sources' standing health refills it.
+	// late Subscribe; setHealth forgets a connection's on the down every
+	// re-establish follows, and the far node's replay of its sources' standing
+	// health refills it.
 	farHealth map[string]*gridwellv1.Event
-	// off is every connection the user disabled, by name, for the process's
-	// life (Disable), guarded by mu. Never persisted.
-	off map[string]bool
 
 	hub *eventhub.Hub[*gridwellv1.Event]
 
 	// far is each connection's share of the subscription (subscription.go, farOf),
 	// its grids guarded by mu.
 	far map[string]*farSubscription
-}
-
-// connState is a connection's reachability as of the last answer.
-type connState struct {
-	up     bool
-	detail string // why it is down; "" when up
-	// mismatch is the landing refusal: the far end answered a home other than
-	// the one this connection's stored links were written against.
-	mismatch bool
 }
 
 // Conn is one declared connection with what the store keeps about it.
@@ -136,8 +122,8 @@ var _ namespace.Namespace = (*Server)(nil)
 func New(st *store.Store, dialer Dialer, home string, conns []config.ConnectionConfig, retired []string) (*Server, error) {
 	ctx := context.Background()
 	s := &Server{st: st, dial: dialer, home: home, conns: map[string]*Conn{},
-		live: map[string]*liveConn{}, health: map[string]connState{}, liveOff: map[string]string{},
-		farHealth: map[string]*gridwellv1.Event{}, far: map[string]*farSubscription{}, off: map[string]bool{}, hub: eventhub.New(rpc.EventKey)}
+		live: map[string]*liveConn{}, facts: map[string]connFacts{},
+		farHealth: map[string]*gridwellv1.Event{}, far: map[string]*farSubscription{}, hub: eventhub.New(rpc.EventKey)}
 	retiredSet := map[string]bool{}
 	for _, r := range retired {
 		retiredSet[r] = true
@@ -201,7 +187,7 @@ func (s *Server) Close() error {
 }
 
 // switchedOff is whether the user disabled name; the caller holds mu.
-func (s *Server) switchedOff(name string) bool { return s.off[name] }
+func (s *Server) switchedOff(name string) bool { return s.facts[name].off }
 
 // Disable switches the connection name off until the process exits, the
 // user's verdict from its health notice: its transport closes, cancelling
@@ -213,20 +199,15 @@ func (s *Server) Disable(name string) error {
 	if _, ok := s.conns[name]; !ok {
 		return fmt.Errorf("%q is not a connection this node declares", name)
 	}
-	s.mu.Lock()
-	if s.off[name] {
-		s.mu.Unlock()
-		return nil
-	}
-	s.off[name] = true
-	lc := s.live[name]
-	delete(s.live, name)
-	s.mu.Unlock()
+	var lc *liveConn
+	s.setHealth(name, func(f *connFacts, _ uint64) {
+		f.off, lc = true, s.live[name]
+		delete(s.live, name)
+	})
 	if lc != nil {
 		lc.cancel()
 		lc.closer()
 	}
-	s.note(name, connState{detail: rpc.DisabledDetail})
 	return nil
 }
 
@@ -235,7 +216,7 @@ func (s *Server) Disable(name string) error {
 func (s *Server) DisabledReason(name string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.off[name] {
+	if !s.facts[name].off {
 		return ""
 	}
 	c := s.conns[name].Cfg
@@ -246,7 +227,13 @@ func (s *Server) DisabledReason(name string) string {
 func (s *Server) DisabledNow() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return slices.Sorted(maps.Keys(s.off))
+	var out []string
+	for _, name := range slices.Sorted(maps.Keys(s.facts)) {
+		if s.facts[name].off {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // ConnectAll dials every declared connection and learns its landing, bounded
@@ -417,7 +404,7 @@ func firstExisting(paths ...string) string {
 func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	name := c.Cfg.Name
 	// The dial runs under the lock so two readers cannot build two
-	// transports; note takes the lock too, so every failure unlocks first.
+	// transports; setHealth takes the lock too, so every failure unlocks first.
 	s.mu.Lock()
 	if lc, ok := s.live[name]; ok {
 		s.mu.Unlock()
@@ -445,7 +432,7 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	if err != nil {
 		s.mu.Unlock()
 		trace.Emit("connection", "dial", "dial failed: "+err.Error(), kv)
-		s.note(name, connState{detail: err.Error()})
+		s.setHealth(name, func(f *connFacts, _ uint64) { f.dialErr = err.Error() })
 		if dialed {
 			return nil, gwerr.Unheard("connection: connection %q: %v", name, err)
 		}
@@ -459,6 +446,7 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	// a goroutine, and one that found lc has cancelled it.
 	s.bg.Add(2)
 	s.mu.Unlock()
+	s.setHealth(name, func(f *connFacts, _ uint64) { f.dialErr = "" })
 	// Remote change events flow, prefixed, from the moment the connection is live.
 	go func() { defer s.bg.Done(); s.fanInRemote(ctx, name, client) }()
 	go func() { defer s.bg.Done(); s.tellFar(ctx, name, client) }()
@@ -491,9 +479,14 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 		err = s.st.SetConnectionRoot(ctx, name, info.RootGridId)
 	}
 	if err != nil {
+		if gwerr.IsAbandoned(lc.ctx, err) {
+			return "", err
+		}
 		// kickRootFetch drops this error, so the row is the only place that
 		// can say why.
-		s.note(name, connState{detail: status.Convert(err).Message()})
+		s.setHealth(name, func(f *connFacts, at uint64) {
+			f.landing = reading{detail: status.Convert(err).Message(), at: at}
+		})
 		return "", err
 	}
 	if root != "" && info.RootGridId != root {
@@ -503,10 +496,11 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 	lc.verified = true
 	c.RemoteRoot = info.RootGridId
 	s.mu.Unlock()
-	// A restored landing is a transition and note publishes it. A first one is
-	// not, and it still changes what the menu can show, so open clients re-list.
-	if !s.note(name, connState{up: true}) && root == "" {
-		s.hub.Publish(rpc.HealthEvent(name, true, ""))
+	// A restored landing is a transition and setHealth publishes it. A first
+	// one is not, and it still changes what the menu can show, so open
+	// clients re-list.
+	if !s.setHealth(name, func(f *connFacts, at uint64) { f.landing, f.mismatch = reading{ok: true, at: at}, false }) && root == "" {
+		s.hub.Publish(healthEvent(name, s.stateOf(name)))
 	}
 	return info.RootGridId, nil
 }
@@ -516,7 +510,7 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 // the connection keeps asking and restoring the target needs no restart.
 func (s *Server) noteLandingMismatch(name, stored, answered string) error {
 	msg := fmt.Sprintf("connection %q now lands on a different node; stored links name the old one — retire the name or restore the target", name)
-	if s.note(name, connState{detail: msg, mismatch: true}) {
+	if s.setHealth(name, func(f *connFacts, at uint64) { f.landing, f.mismatch = reading{detail: msg, at: at}, true }) {
 		log.Printf("gridwell: %s (stored landing %s, the far node answered %s)", msg, stored, answered)
 	}
 	return status.Error(codes.FailedPrecondition, "connection: "+msg)
@@ -551,103 +545,6 @@ func (s *Server) kickRootFetch(c *Conn) {
 	}()
 }
 
-// note is the one writer of s.health: it records what the transport knows and
-// publishes only a transition, answering whether it did, so a connection
-// retrying every five seconds publishes once.
-func (s *Server) note(name string, st connState) bool {
-	s.mu.Lock()
-	if s.switchedOff(name) {
-		// A learn or fan-in that outlived Disable does not speak for it.
-		st = connState{detail: rpc.DisabledDetail}
-	}
-	prev, known := s.health[name]
-	if !known {
-		prev = connState{up: true}
-	}
-	if st.up {
-		delete(s.health, name)
-	} else {
-		s.health[name] = st
-		maps.DeleteFunc(s.farHealth, func(id string, _ *gridwellv1.Event) bool { return id == name || strings.HasPrefix(id, name+"/") })
-	}
-	ev := s.healthEvent(name, st)
-	s.mu.Unlock()
-	if prev.up == st.up && prev.mismatch == st.mismatch {
-		return false
-	}
-	msg := "up"
-	if !st.up {
-		msg = "down: " + st.detail
-	}
-	trace.Emit("connection", "health", msg, map[string]string{"conn": name})
-	s.hub.Publish(ev)
-	return true
-}
-
-// noteLiveOff records why the far node refused name's share, "" once one
-// lands, and tells the change on name's health as it stands.
-func (s *Server) noteLiveOff(name, reason string) {
-	s.mu.Lock()
-	prev := s.liveOff[name]
-	if reason == "" {
-		delete(s.liveOff, name)
-	} else {
-		s.liveOff[name] = reason
-	}
-	ev := s.healthEvent(name, s.stateLocked(name))
-	s.mu.Unlock()
-	if prev == reason {
-		return
-	}
-	msg := "live updates on"
-	if reason != "" {
-		msg = "live updates off: " + reason
-	}
-	trace.Emit("connection", "health", msg, map[string]string{"conn": name})
-	s.hub.Publish(ev)
-}
-
-// healthEvent is name's health as a client hears it: st, and whether the far
-// node refused this node's share, when its changes are not told. Under mu.
-func (s *Server) healthEvent(name string, st connState) *gridwellv1.Event {
-	ev := rpc.HealthEvent(name, st.up, st.detail)
-	ev.GetSourceHealth().LiveUpdatesOff = s.liveOff[name]
-	ev.GetSourceHealth().Told = proto.Bool(s.liveOff[name] == "")
-	return ev
-}
-
-// stateOf is what the transport last knew about one connection; nothing
-// recorded is reachable.
-func (s *Server) stateOf(name string) connState {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.stateLocked(name)
-}
-
-func (s *Server) stateLocked(name string) connState {
-	if st, ok := s.health[name]; ok {
-		return st
-	}
-	return connState{up: true}
-}
-
-// healthNow is every connection the transport cannot reach or whose share the
-// far node refused, in name order, then every far namespace's standing health.
-func (s *Server) healthNow() []*gridwellv1.Event {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	names := append(slices.Collect(maps.Keys(s.health)), slices.Collect(maps.Keys(s.liveOff))...)
-	slices.Sort(names)
-	var out []*gridwellv1.Event
-	for _, name := range slices.Compact(names) {
-		out = append(out, s.healthEvent(name, s.stateLocked(name)))
-	}
-	for _, id := range slices.Sorted(maps.Keys(s.farHealth)) {
-		out = append(out, s.farHealth[id])
-	}
-	return out
-}
-
 // relay publishes one far event, keeping it while it is standing health: a
 // dark source, a failure to tell, or changes not told.
 func (s *Server) relay(ev *gridwellv1.Event) {
@@ -664,12 +561,14 @@ func (s *Server) relay(ev *gridwellv1.Event) {
 }
 
 // fanInRemote forwards a connection's remote change events, prefixed, and
-// re-dials the stream through namespace.Refollow; each transition rides note.
+// re-dials the stream through namespace.Refollow, writing the stream's
+// reading on every establish and on the failure that starts an outage.
 func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Namespace) {
 	namespace.Refollow{
 		Label: "connection " + ns,
-		Down:  func(detail string) { s.note(ns, connState{detail: detail}) },
-		Up:    func() { s.note(ns, connState{up: true}) },
+		Down: func(detail string) {
+			s.setHealth(ns, func(f *connFacts, at uint64) { f.stream = reading{detail: detail, at: at} })
+		},
 		Attempt: func(ctx context.Context, established func()) error {
 			// The far node forgot this session's subscription when the last
 			// stream closed; see tellFar.
@@ -678,7 +577,10 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Na
 				func(ev *gridwellv1.Event) error {
 					s.relay(rpc.TransitQualifyEvent(ns, ev))
 					return nil
-				}, established)
+				}, func() {
+					established()
+					s.setHealth(ns, func(f *connFacts, at uint64) { f.stream = reading{ok: true, at: at} })
+				})
 		},
 	}.Run(ctx)
 }

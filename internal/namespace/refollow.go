@@ -38,7 +38,8 @@ type Refollow struct {
 	// state is touched on.
 	Attempt func(ctx context.Context, established func()) error
 	// Down is called with the reason on the first failure of an outage, and
-	// Up on the establish that ends it: once each, never once per retry.
+	// Up on the establish that ends it: once each, never once per retry. Up
+	// is nil for a caller whose Attempt hears every establish itself.
 	Down func(detail string)
 	Up   func()
 	// Backoff is DefaultBackoff when left zero.
@@ -61,7 +62,9 @@ func (r Refollow) Run(ctx context.Context) {
 			if !healthy {
 				healthy = true
 				trace.Emit("namespace", "stream", "up", map[string]string{"label": r.Label})
-				r.Up()
+				if r.Up != nil {
+					r.Up()
+				}
 			}
 		})
 		if ctx.Err() != nil {
