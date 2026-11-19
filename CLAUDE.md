@@ -797,7 +797,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   the client. The path is read by `pane.DecodeURL`, the client's own
   grammar, never a second parser. Like the content API it is outside the
   build gate: a tool's read names no build. The MCP instructions say how
-  to read one, and docs/mcp.md says the same words.
+  to read one, and docs/mcp.md says the same words. A read with no
+  password that is not a browser's navigation (`browserNavigation`) is
+  answered 401 with a plain message naming the bearer and the MCP API,
+  never the login page (Joe, 2026-11-18; `passwordRequired`).
 - A paste into a shell is one verb, `PasteShell{tile_id, tile_ids,
   origin}` (Joe, 2026-11-08), which the web and connection APIs decode
   onto the router and the MCP API does not expose. The node owning the

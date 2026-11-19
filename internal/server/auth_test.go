@@ -223,3 +223,70 @@ func TestTokenLogin(t *testing.T) {
 		t.Fatalf("wrong token = %d cookies=%d", res.StatusCode, len(res.Cookies()))
 	}
 }
+
+// A read with no password that is not a browser's navigation is told, in
+// words an agent can act on, how to get in; a navigation gets the login
+// page; the password, as a bearer or the cookie, answers the place.
+func TestAuthAnswersEachCallerShape(t *testing.T) {
+	const pw = "hunter2"
+	hs, _ := newAuthTestServer(t, pw)
+	c := noRedirect(hs)
+	creds := map[string]func(*http.Request){
+		"none":         func(*http.Request) {},
+		"wrong bearer": func(r *http.Request) { r.Header.Set("Authorization", "Bearer nope") },
+		"bearer":       func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+pw) },
+		"cookie":       func(r *http.Request) { r.AddCookie(&http.Cookie{Name: AuthCookieName, Value: AuthToken(pw)}) },
+	}
+	accepts := map[string]string{
+		"html":     "text/html,application/xhtml+xml,*/*;q=0.8",
+		"markdown": "text/markdown, text/html;q=0.9, */*;q=0.8",
+		"any":      "*/*",
+		"absent":   "",
+	}
+	for cred, set := range creds {
+		for acc, accept := range accepts {
+			for _, method := range []string{http.MethodGet, http.MethodHead} {
+				t.Run(cred+"/"+acc+"/"+method, func(t *testing.T) {
+					req, _ := http.NewRequest(method, hs.URL+"/", nil)
+					if accept != "" {
+						req.Header.Set("Accept", accept)
+					}
+					set(req)
+					res, err := c.Do(req)
+					if err != nil {
+						t.Fatal(err)
+					}
+					b, _ := io.ReadAll(res.Body)
+					res.Body.Close()
+					body, typ := string(b), res.Header.Get("Content-Type")
+					open, nav := cred == "bearer" || cred == "cookie", acc == "html"
+					get := method == http.MethodGet
+					switch {
+					case open && nav:
+						if res.StatusCode != 200 || (get && body != spaMarker) {
+							t.Errorf("= %d %q, want 200 and the client", res.StatusCode, body)
+						}
+					case open:
+						if res.StatusCode != 200 || typ != "application/json" {
+							t.Errorf("= %d %q, want 200 and the home grid's JSON", res.StatusCode, typ)
+						}
+					case nav:
+						if res.StatusCode != 401 || !strings.HasPrefix(typ, "text/html") || (get && !strings.Contains(body, authLoginPath)) {
+							t.Errorf("= %d %q %q, want 401 and the login page", res.StatusCode, typ, body)
+						}
+					default:
+						want := passwordRequired + "\n"
+						if !get {
+							want = ""
+						}
+						if res.StatusCode != 401 || typ != "text/plain; charset=utf-8" ||
+							res.Header.Get("WWW-Authenticate") != "Bearer" || body != want {
+							t.Errorf("= %d %q %q %q, want 401 text/plain, WWW-Authenticate Bearer, %q",
+								res.StatusCode, typ, res.Header.Get("WWW-Authenticate"), body, want)
+						}
+					}
+				})
+			}
+		}
+	}
+}

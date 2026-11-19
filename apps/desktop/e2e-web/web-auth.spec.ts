@@ -6,7 +6,7 @@ import { removeHome } from '../e2e/homes';
 import { spawnServe, stopServe, freePort } from './fixtures';
 
 // The web password gate, held in the minted ~/.gridwell/web-password file, from a
-// real browser against the real server: the login page fronts everything, the
+// real browser against the real server: the login page fronts every navigation, the
 // right password sets the cookie, and the cookie keeps working across a reload
 // until the password changes. Every suite's server is gated; the others start
 // from the banner token, and this one alone drives the login form.
@@ -39,10 +39,15 @@ test('the password gate: prompt, wrong password, login, cookie survives reload',
   serve,
   page,
 }) => {
-  // Every address serves the login form until authenticated.
+  // Every navigation serves the login form until authenticated.
   await page.goto(serve.origin + '/?e2e=1');
   const field = page.locator('input[name=password]');
   await expect(field, 'unauthenticated visit must show the login form').toBeVisible();
+  // A read that is not a navigation, an agent's, gets words, not the form.
+  const read = await page.request.get(serve.origin + '/', { headers: { Accept: 'text/markdown, */*' } });
+  expect(read.status()).toBe(401);
+  expect(read.headers()['content-type']).toBe('text/plain; charset=utf-8');
+  expect(await read.text()).toContain('Authorization: Bearer');
 
   await field.fill('not-it');
   await page.locator('button[type=submit]').click();

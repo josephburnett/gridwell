@@ -30,6 +30,8 @@ const (
 	// re-issued on every authenticated request, so the window slides and it
 	// never expires; revocation is deleting the web-password file.
 	authCookieMaxAge = 400 * 24 * 60 * 60
+	// passwordRequired answers every refusal but a browser's navigation.
+	passwordRequired = "This Gridwell reference is password protected. Send the web password as a bearer token (Authorization: Bearer <the web password>), or read it through the Gridwell MCP API, /mcp on this node, with read_grid or read_tiles."
 )
 
 // AuthToken is the one derivation of the cookie value from the password.
@@ -63,13 +65,12 @@ func (s *Server) authWrap(next http.Handler) http.Handler {
 			return
 		}
 		refusedWeb(r.URL.Path, http.StatusUnauthorized, "password required", map[string]string{"presented": presented(r)})
-		// A browser navigation gets the login page; anything else gets a bare
-		// 401 the client surfaces as an error.
-		if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		if browserNavigation(r) {
 			writeLoginPage(w, http.StatusUnauthorized, false)
 			return
 		}
-		http.Error(w, "gridwell: password required", http.StatusUnauthorized)
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		http.Error(w, passwordRequired, http.StatusUnauthorized)
 	})
 }
 

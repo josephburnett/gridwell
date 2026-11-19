@@ -37,14 +37,17 @@ func (s *Server) placeOrStatic(fsys fs.FS) http.Handler {
 	})
 }
 
-// contentGET is the place a GET or HEAD names, ok false for a browser's
-// navigation, whose Accept leads with text/html, or a path that is no place.
-func contentGET(r *http.Request) (pane.URLState, bool) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		return pane.URLState{}, false
-	}
+// browserNavigation is a GET or HEAD whose Accept leads with text/html.
+func browserNavigation(r *http.Request) bool {
 	first, _, _ := strings.Cut(r.Header.Get("Accept"), ",")
-	if media, _, _ := strings.Cut(first, ";"); strings.EqualFold(strings.TrimSpace(media), "text/html") {
+	media, _, _ := strings.Cut(first, ";")
+	return (r.Method == http.MethodGet || r.Method == http.MethodHead) && strings.EqualFold(strings.TrimSpace(media), "text/html")
+}
+
+// contentGET is the place a GET or HEAD names, ok false for a browser's
+// navigation or a path that is no place.
+func contentGET(r *http.Request) (pane.URLState, bool) {
+	if (r.Method != http.MethodGet && r.Method != http.MethodHead) || browserNavigation(r) {
 		return pane.URLState{}, false
 	}
 	raw := r.URL.Path

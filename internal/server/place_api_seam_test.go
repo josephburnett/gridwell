@@ -142,13 +142,17 @@ func TestAReferenceAnswersItsContent(t *testing.T) {
 			t.Errorf("GET with the cookie = %d %q", code, body)
 		}
 	})
-	t.Run("nothing else does", func(t *testing.T) {
-		if code, _, body := get(curl, ref(text)); code != http.StatusUnauthorized || strings.Contains(body, "Notes") {
-			t.Errorf("GET with no password = %d %q, want 401 and no body", code, body)
+	t.Run("nothing else does, and it is told the ways in", func(t *testing.T) {
+		told := func(code int, typ, body string) bool {
+			return code == http.StatusUnauthorized && typ == "text/plain; charset=utf-8" &&
+				strings.Contains(body, "Authorization: Bearer") && strings.Contains(body, "MCP") && !strings.Contains(body, "Notes")
+		}
+		if code, typ, body := get(curl, ref(text)); !told(code, typ, body) {
+			t.Errorf("GET with no password = %d %q %q, want 401 and the plain message", code, typ, body)
 		}
 		wrong := func(req *http.Request) { req.Header.Set("Authorization", "Bearer nope") }
-		if code, _, _ := get(curl, ref(text), wrong); code != http.StatusUnauthorized {
-			t.Errorf("GET with a wrong bearer = %d, want 401", code)
+		if code, typ, body := get(curl, ref(text), wrong); !told(code, typ, body) {
+			t.Errorf("GET with a wrong bearer = %d %q %q, want 401 and the plain message", code, typ, body)
 		}
 	})
 	t.Run("a browser's navigation gets the client", func(t *testing.T) {
