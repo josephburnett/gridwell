@@ -117,6 +117,7 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 		TileID:     d.tileID,
 		OverDelete: a.overDeleteButton(d, sx, sy),
 		Touch:      d.touch,
+		FromCrumb:  d.crumb != nil,
 	}
 	var scratchOf scratch.Grid
 	if p := a.tree.FindPane(d.originPaneID); p != nil && len(d.carried) > 0 {

@@ -300,6 +300,9 @@ type DropInput struct {
 	// no connection (EphemeralNoFarMove) and whose trashcan is the ascent
 	// (DropEndVisit).
 	CarriesEphemeral bool
+	// FromCrumb is a drag from a crumb (wsbar.Handles): a trashcan that is no
+	// visit's end is no gesture, since deleting a pane's own tile is undecided.
+	FromCrumb bool
 }
 
 // FingerNoFile is why a finger's drag of a file or a directory onto another
@@ -399,6 +402,8 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropRejected, FingerNoFile
 	case in.OverDelete && in.CarriesEphemeral:
 		return DropEndVisit, ""
+	case in.OverDelete && in.FromCrumb:
+		return DropRejected, "a crumb's tile"
 	case in.OverDelete:
 		return DropDelete, ""
 	case !in.HasTarget:

@@ -400,7 +400,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods, s
 		}
 		if p != nil {
 			in.SlotMenu = a.slotHasMenu(p)
-			in.Visits = a.visitCrumbs(p, in.Chain)
+			in.Handles = a.crumbHandles(p, in.Chain)
 		}
 	}
 	hit := wsbar.RouteClick(in)
@@ -424,9 +424,9 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods, s
 		a.togglePaneZoom()
 	case wsbar.ActionWorkspaceRename, wsbar.ActionLeaveLevels, wsbar.ActionAscend:
 		a.crumbAct(p, hit.Action, in.Chain[hit.Segment.Index])
-	case wsbar.ActionVisitDrag:
-		if t := a.cachedTileByID(in.Visits[hit.Segment.Index]); t != nil {
-			a.startVisitDrag(p, t, in.Chain[hit.Segment.Index], hit.Bare, hit.Segment, bx, top, sx, sy,
+	case wsbar.ActionCrumbDrag:
+		if t := a.cachedTileByID(in.Handles[hit.Segment.Index].ID); t != nil {
+			a.startCrumbDrag(p, t, in.Chain[hit.Segment.Index], hit.Bare, hit.Segment, bx, top, sx, sy,
 				button, mods.Ctrl)
 		}
 	case wsbar.ActionSelect:
@@ -437,7 +437,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods, s
 }
 
 // crumbAct runs a crumb's click: a press on it, or the bare release of a
-// visit drag armed from it.
+// drag armed from it.
 func (a *App) crumbAct(p *pane.Pane, act wsbar.Action, nc navCrumb) {
 	switch act {
 	case wsbar.ActionWorkspaceRename:
@@ -455,11 +455,11 @@ func (a *App) crumbAct(p *pane.Pane, act wsbar.Action, nc navCrumb) {
 	}
 }
 
-// visitCrumbs is wsbar.Visits over p's place: a frame's row is ephemeral by
+// crumbHandles is wsbar.Handles over p's place: a frame's row is ephemeral by
 // p's scratch rule, the open level's workspace tile by the rule of the pane
 // it was entered from.
-func (a *App) visitCrumbs(p *pane.Pane, chain []pane.NavCrumb) map[int]string {
-	return wsbar.Visits(chain, p.Frames(), a.ws.Depth(), func(id string, level bool) bool {
+func (a *App) crumbHandles(p *pane.Pane, chain []pane.NavCrumb) map[int]wsbar.Handle {
+	return wsbar.Handles(chain, a.ws.Depth(), func(id string, level bool) bool {
 		t := a.cachedTileByID(id)
 		if t == nil {
 			return false
@@ -472,14 +472,14 @@ func (a *App) visitCrumbs(p *pane.Pane, chain []pane.NavCrumb) map[int]string {
 	})
 }
 
-// startVisitDrag arms the drag of visit row t from its crumb nc, as any
-// tile's drag is armed (startTemplateDrag): it carries the row from the
-// scratch grid, so dragdrop.DecideDrop decides as for every tile. The right
+// startCrumbDrag arms the drag of row t from its crumb nc, as any tile's
+// drag is armed (startTemplateDrag): it carries the row from its grid, so
+// dragdrop.DecideDrop decides as for every tile. The right
 // button copies, or with ctrl links, through the right-button release; a
 // release with no drag is bare, the crumb's click. The ghost starts as the
 // row drawn where the crumb is: the square drawChainCrumb paints, or a
 // boundary's band, held at the press's place along it.
-func (a *App) startVisitDrag(p *pane.Pane, t *gridwellv1.Tile, nc navCrumb, bare wsbar.Action, seg wsbar.Segment, bx, top, sx, sy float64, button int, ctrl bool) {
+func (a *App) startCrumbDrag(p *pane.Pane, t *gridwellv1.Tile, nc navCrumb, bare wsbar.Action, seg wsbar.Segment, bx, top, sx, sy float64, button int, ctrl bool) {
 	square := min(seg.W, wsbar.RowH)
 	side := square - 2
 	x, y := bx+seg.X+(square-side)/2, top+(wsbar.RowH-side)/2
@@ -500,8 +500,8 @@ func (a *App) startVisitDrag(p *pane.Pane, t *gridwellv1.Tile, nc navCrumb, bare
 	}
 	a.dragging = &dragState{
 		originPaneID: p.ID,
-		visit:        &nc,
-		visitBare:    bare,
+		crumb:        &nc,
+		crumbBare:    bare,
 		intent:       intent,
 		startScreenX: sx,
 		startScreenY: sy,

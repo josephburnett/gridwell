@@ -862,3 +862,31 @@ func TestAVisitLinksNowhere(t *testing.T) {
 		t.Errorf("the trashcan's ghost for a visit = %+v, want it shattered in the origin pane", p)
 	}
 }
+
+// A crumb's tile drags as any tile does (Joe, 2026-11-18), with one arm of
+// its own: its trashcan is no gesture, since deleting the tile a pane is
+// inside is undecided, so it snaps back and says nothing. A visit's crumb
+// still ends the visit there.
+func TestACrumbIsNotDeleted(t *testing.T) {
+	trash := DropInput{Started: true, TileID: "7", Intent: IntentCopy, OverDelete: true, FromCrumb: true}
+	if got := DecideDrop(trash); got != DropRejected || NoEntry(trash) || Told(trash) != "" {
+		t.Errorf("a crumb's tile on the trashcan = %v (no entry %v, told %q), want a silent snap back", got, NoEntry(trash), Told(trash))
+	}
+	trash.CarriesEphemeral = true
+	if got := DecideDrop(trash); got != DropEndVisit {
+		t.Errorf("a visit's crumb on the trashcan = %v, want DropEndVisit", got)
+	}
+	for _, c := range []struct {
+		in   DropInput
+		want DropAction
+	}{
+		{DropInput{Started: true, TileID: "7", Intent: IntentCopy, HasTarget: true, FromCrumb: true}, DropCopy},
+		{DropInput{Started: true, TileID: "7", Intent: IntentCopy, CopiesAsLink: true, HasTarget: true, FromCrumb: true}, DropLink},
+		{DropInput{Started: true, TileID: "7", Intent: IntentLink, HasTarget: true, FromCrumb: true}, DropLink},
+		{DropInput{Started: true, TileID: "7", Intent: IntentCopy, HasTarget: true, PasteTarget: true, FromCrumb: true}, DropPaste},
+	} {
+		if got := DecideDrop(c.in); got != c.want {
+			t.Errorf("a crumb's tile %+v = %v, want %v as for any tile", c.in, got, c.want)
+		}
+	}
+}

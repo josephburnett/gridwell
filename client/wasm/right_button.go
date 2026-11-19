@@ -362,8 +362,8 @@ func (a *App) commitTileCenter(sx, sy float64) {
 	a.dragging = nil
 	if d == nil || !d.started {
 		a.ghost = nil
-		if d != nil && d.visit != nil {
-			a.visitBare(d)
+		if d != nil && d.crumb != nil {
+			a.crumbBare(d)
 			return
 		}
 		a.draw()

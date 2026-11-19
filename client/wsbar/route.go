@@ -32,9 +32,9 @@ const (
 	// ActionLeaveLevels pops out to Segment's level, for a workspace tile crumb or
 	// the leading close-only root.
 	ActionLeaveLevels
-	// ActionVisitDrag arms the drag of Segment's ephemeral visit row, as of
-	// the tile it is; a release with no drag is Hit.Bare, the crumb's click.
-	ActionVisitDrag
+	// ActionCrumbDrag arms the drag of Segment's tile (Handles), as of any
+	// tile; a release with no drag is Hit.Bare, the crumb's click.
+	ActionCrumbDrag
 	// ActionAscend ascends to Segment's crumb.
 	ActionAscend
 	// ActionFocusColumn focuses the pane BandFocus names, which takes the bar.
@@ -64,45 +64,44 @@ type Click struct {
 	// SlotMenu is whether the slot's mode has a right-click menu at all; see
 	// circlemenu.For.
 	SlotMenu bool
-	// Visits is Visits' answer: the chain index of each crumb standing for
-	// an ephemeral visit's row, a drag handle for either button, to its id.
-	Visits map[int]string
+	// Handles is Handles' answer, by chain index.
+	Handles map[int]Handle
 }
 
 // Hit's Segment is the crumb the action names, for the crumb actions; Bare
-// is what an ActionVisitDrag's release with no drag does to it.
+// is what an ActionCrumbDrag's release with no drag does to it.
 type Hit struct {
 	Action  Action
 	Segment Segment
 	Bare    Action
 }
 
-// Visits is each crumb of chain standing for an ephemeral visit's row: a
-// frame entered through a row ephemeral answers yes for, and the innermost
-// level's boundary when ephemeral answers yes for its workspace tile, level
-// true. An outer level's is no handle, since its tree is parked.
-func Visits(chain []pane.NavCrumb, frames []pane.Frame, depth int, ephemeral func(id string, level bool) bool) map[int]string {
-	out := map[int]string{}
+// Handle is a crumb's row and whether ephemeral says it is a visit's.
+type Handle struct {
+	ID    string
+	Visit bool
+}
+
+// Handles is each crumb standing for a tile (pane.NavCrumb.SelectTarget) but
+// an outer level's boundary, whose tree is parked: every one right-drags as
+// its tile and a visit's left-drags too (Joe, 2026-11-18).
+func Handles(chain []pane.NavCrumb, depth int, ephemeral func(id string, level bool) bool) map[int]Handle {
+	out := map[int]Handle{}
 	for i, nc := range chain {
-		id, level := "", nc.Workspace
-		switch {
-		case level && nc.WsLevel == depth:
-			id = nc.TileID
-		case !level && !nc.CloseOnly && nc.Crumb.Level < len(frames):
-			id = frames[nc.Crumb.Level].Door
+		id, _, _, ok := nc.SelectTarget()
+		if !ok || nc.Workspace && nc.WsLevel != depth {
+			continue
 		}
-		if id != "" && ephemeral(id, level) {
-			out[i] = id
-		}
+		out[i] = Handle{ID: id, Visit: ephemeral(id, nc.Workspace)}
 	}
 	return out
 }
 
-// visitDrag is the drag a press on visit crumb s arms, its bare release the
+// crumbDrag is the drag a press on handle s arms, its bare release the
 // click the crumb would take without one.
-func visitDrag(in Click, s Segment) Hit {
-	in.Visits = nil
-	return Hit{Action: ActionVisitDrag, Segment: s, Bare: RouteClick(in).Action}
+func crumbDrag(in Click, s Segment) Hit {
+	in.Handles = nil
+	return Hit{Action: ActionCrumbDrag, Segment: s, Bare: RouteClick(in).Action}
 }
 
 // RouteClick asks the zone, then the two fixed ends of the bar, then the
@@ -145,10 +144,10 @@ func RouteClick(in Click) Hit {
 			return Hit{Action: ActionRename}
 		}
 		s, ok := At(in.Segments, in.X)
-		_, visit := in.Visits[s.Index]
+		_, handle := in.Handles[s.Index]
 		switch {
-		case ok && visit:
-			return visitDrag(in, s)
+		case ok && handle:
+			return crumbDrag(in, s)
 		case ok && in.Chain[s.Index].Workspace:
 			return Hit{Action: ActionWorkspaceRename, Segment: s}
 		}
@@ -167,10 +166,9 @@ func RouteClick(in Click) Hit {
 	if !ok || in.Button != 0 {
 		return Hit{Action: ActionNone}
 	}
-	_, visit := in.Visits[s.Index]
 	switch nc := in.Chain[s.Index]; {
-	case visit:
-		return visitDrag(in, s)
+	case in.Handles[s.Index].Visit:
+		return crumbDrag(in, s)
 	case nc.Workspace || nc.CloseOnly:
 		return Hit{Action: ActionLeaveLevels, Segment: s}
 	}

@@ -585,10 +585,10 @@ type dragState struct {
 	// copySwatch is a drag of the copy swatch, whose drop copies the tile
 	// under it into the templates grid.
 	copySwatch bool
-	// visit is the bar's crumb an ephemeral visit's drag was armed from, and
-	// visitBare the crumb's click a release with no drag is (startVisitDrag).
-	visit     *pane.NavCrumb
-	visitBare wsbar.Action
+	// crumb is the bar's crumb the drag was armed from, and crumbBare the
+	// crumb's click a release with no drag is (startCrumbDrag).
+	crumb     *pane.NavCrumb
+	crumbBare wsbar.Action
 
 	// The source grid, set at mousedown, for when source and dest differ in a pane.
 	srcGridID   string

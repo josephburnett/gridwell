@@ -55,8 +55,8 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 		a.clickMenuItem(d)
 		return true
 	}
-	if d.visit != nil && !d.started {
-		a.visitBare(d)
+	if d.crumb != nil && !d.started {
+		a.crumbBare(d)
 		return true
 	}
 
@@ -120,10 +120,10 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 	return true
 }
 
-// visitBare is a visit crumb released without a drag: the crumb's click.
-func (a *App) visitBare(d *dragState) {
+// crumbBare is a crumb released without a drag: the crumb's click.
+func (a *App) crumbBare(d *dragState) {
 	if p := a.tree.FindPane(d.originPaneID); p != nil {
-		a.crumbAct(p, d.visitBare, *d.visit)
+		a.crumbAct(p, d.crumbBare, *d.crumb)
 	}
 	a.draw()
 }
@@ -142,8 +142,8 @@ func (a *App) commitShared(verdict dragdrop.DropAction, d *dragState, t *dropTar
 	case dragdrop.DropEndVisit:
 		// Leaving the visit is the one way it ends (nav.retireVisit).
 		a.ghost = nil
-		if p := a.tree.FindPane(d.originPaneID); p != nil && d.visit != nil {
-			if leave, ascend := a.ws.EndVisit(&p.Stack, *d.visit); leave > 0 {
+		if p := a.tree.FindPane(d.originPaneID); p != nil && d.crumb != nil {
+			if leave, ascend := a.ws.EndVisit(&p.Stack, *d.crumb); leave > 0 {
 				a.runGesture(nav.Gesture{Kind: nav.GestureLeaveLevels, Count: leave})
 			} else {
 				a.ascend(p, ascend, true)
@@ -260,8 +260,8 @@ func (a *App) commitMove(d *dragState, t *dropTarget, dropX, dropY int64) {
 			Claim:  rpc.PlacementOf(row),
 		}, snapBack))
 	}
-	if d.visit != nil {
-		// The visiting pane follows the row once it has landed.
+	if d.crumb != nil {
+		// Only a visit's crumb moves; its pane follows the row once it lands.
 		landed := ws[0].then
 		ws[0].then = func() {
 			landed()

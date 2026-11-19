@@ -401,8 +401,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   grid's set; on touch a long-press lifted in place toggles. Shift is the
   only select key, since ctrl and cmd are the split's
   (`gesture.ClassifySelect`). Shift + left-click on a crumb in the bar
-  toggles the tile the crumb stands for, a door, a content tile or a
-  workspace tile, on the grid it sits on, through the same toggle, and
+  toggles the tile the crumb stands for, a door, a link's included, a
+  content tile or a workspace tile, on the grid it sits on, through the same toggle, and
   does not ascend; a crumb that stands for a grid toggles nothing; on
   touch a long-press lifted on the crumb is the same toggle
   (`wsbar.RouteClick`, `pane.NavCrumb.SelectTarget`, 2026-11-06). A
@@ -872,14 +872,23 @@ These were decided deliberately. Do not reverse one without a new decision.
   A new workspace tile's capture keeps a pane on a visit as it is, so the
   workspace shows exactly what the window showed (Joe, 2026-11-18: "They
   should be captured too. Everything should look exactly the same.").
-- An ephemeral visit's crumb is its tile (Joe, 2026-11-10: "That behavior
-  should be consistent"; Joe, 2026-11-11: "for every kind: text, shell,
-  grid and workspace alike"). The bar's crumb standing for a url, text,
-  shell or door visit, wherever it sits in the place, and the innermost
-  level's boundary band when its workspace tile is a visit, drags as the
-  tile it is, from the scratch grid, through the one drag and its verdicts
-  (`dragdrop.DecideDrop`, `wsbar.Visits`). An outer level's band does not
-  drag, since its tree is parked. A left-drag moves the row onto the grid
+- A crumb is its tile (Joe, 2026-11-10: "That behavior should be
+  consistent"; Joe, 2026-11-11: "for every kind: text, shell, grid and
+  workspace alike"; Joe, 2026-11-18: "It should right-click out to make a
+  copy (or paste into a shell or text file). Exactly the same as ephemeral
+  tiles. Exactly the same as tiles in the menu."). Every crumb in the bar
+  standing for a tile (`pane.NavCrumb.SelectTarget`), a door's, a link's,
+  a content tile's, the current one included, wherever it sits in the
+  place, and the innermost level's boundary band, right-drags as the tile
+  it is, from the grid it sits on, through the one drag and its verdicts
+  (`dragdrop.DecideDrop`, `wsbar.Handles`): onto a grid it copies, with
+  ctrl it links, onto a shell or a raw text it pastes its reference, and
+  the pane keeps showing it. An outer level's band does not drag, since
+  its tree is parked. A crumb standing for an ephemeral visit also
+  left-drags and takes the trashcan; any other crumb's left press is its
+  click, and over the trashcan it snaps back and does nothing
+  (`dragdrop.DropInput.FromCrumb`), since moving or deleting the tile a
+  pane is inside is not decided. A visit's left-drag moves the row onto the grid
   it lands on, claiming the placement as every move does, so it keeps its
   id, its content, preview, framing and tmux, a door its grid with
   everything on it and a workspace tile its layout. Once the move lands the
@@ -901,8 +910,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   it, a ctrl + right-drag or a copy that lands as a link, is refused with
   "a link to an ephemeral visit would die with it", since no link holds a
   visit (`dragdrop.EphemeralNoLink`); either refusal wears the no-entry
-  badge. A right-drop on a shell or a raw text pastes its reference. The trashcan ends the
-  visit as leaving it does, the ascent out of a frame's and the leave out
+  badge. The trashcan ends the visit as leaving it does, the ascent out of a frame's and the leave out
   of a level's, never a delete from under the pane
   (`dragdrop.DropEndVisit`, `pane.Levels.EndVisit`). A press that never
   becomes a drag is the crumb's click (`wsbar.Hit.Bare`): on the current
@@ -937,7 +945,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   because there is no move across one; between home and a directory a
   Gridwell tile moves, since the Gridwell layer is one space (2026-11-08).
   Over a shell or a raw text the right button pastes and the left is
-  refused (2026-11-16). A right-drag of a directory's door links, because a directory never
+  refused (2026-11-16). A crumb in the bar standing for a tile right-drags
+  as that tile (Joe, 2026-11-18). A right-drag of a directory's door links, because a directory never
   copies (2026-10-20), and so does any file's onto a Gridwell grid, because
   nothing is converted between the disk and Gridwell (2026-11-08). Dashed means link; deleting a link
   unlinks. Ctrl or cmd + left-click descends in a new pane split below —
@@ -1001,7 +1010,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   row's top edge; a left click on the background beside the bar focuses
   the most recently focused pane of the column above it, that recency being
   part of the session's pane focus (2026-10-09, `wsbar.BandFocus`). A crumb
-  click ascends; middle-click is the in-pane shortcut.
+  click ascends, and a right-drag of one is its tile's (Joe, 2026-11-18);
+  middle-click is the in-pane shortcut.
 - A click lands on what it hits, in any pane, and pane focus follows in
   the same press (2026-10-02, reversing 'moves focus, nothing else'). No
   press is focus-only. Typing goes to exactly one surface, the keyboard's

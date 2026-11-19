@@ -108,82 +108,90 @@ func TestRouteClickSlotMenu(t *testing.T) {
 	}
 }
 
-// The crumb standing for an ephemeral visit's row is its drag handle for
-// either button, wherever it sits in the chain, a level's boundary band
-// included (Joe, 2026-11-11); a release with no drag is the crumb's own
-// click; every other crumb keeps its action, and without a visit the crumb
-// is an ascent.
-func TestRouteClickVisitDrag(t *testing.T) {
+// Which crumbs drag, and with which buttons (Joe, 2026-11-11, 2026-11-18):
+// every crumb standing for a tile right-drags as it, a visit's left-drags
+// too, and a release with no drag is the crumb's own click. A grid crumb
+// drags for neither button. A finger is the left button, so it drags a
+// visit's crumb alone and its press on any other crumb is that crumb's click.
+func TestRouteClickCrumbDrag(t *testing.T) {
+	grid := barClick(0, BoundaryW+2)
+	grid.Chain = slices.Clone(grid.Chain)
+	grid.Chain[1] = pane.NavCrumb{Crumb: pane.Crumb{Anchor: "g/1", ParentAnchor: "g/1"}}
 	cases := []struct {
+		name                string
 		at                  int
 		x                   float64
+		chain               []pane.NavCrumb
 		bareLeft, bareRight Action
 	}{
-		{0, 10, ActionLeaveLevels, ActionWorkspaceRename},
-		{1, BoundaryW + 2, ActionAscend, ActionNone},
-		{2, BoundaryW + RowH + 2, ActionAscend, ActionNone},
+		{"the workspace tile's boundary", 0, 10, nil, ActionLeaveLevels, ActionWorkspaceRename},
+		{"a door crumb", 1, BoundaryW + 2, nil, ActionAscend, ActionNone},
+		{"the current crumb", 2, BoundaryW + RowH + 2, nil, ActionAscend, ActionNone},
+		{"a grid crumb", 1, BoundaryW + 2, grid.Chain, ActionAscend, ActionNone},
 	}
 	for _, c := range cases {
-		for _, button := range []int{0, 2} {
-			in := barClick(button, c.x)
-			in.Visits = map[int]string{c.at: "v"}
-			bare := c.bareLeft
-			if button == 2 {
-				bare = c.bareRight
-			}
-			if got := RouteClick(in); got.Action != ActionVisitDrag || got.Segment.Index != c.at || got.Bare != bare {
-				t.Fatalf("RouteClick(button %d on the visit's crumb at %d) = %+v, want its drag, bare %v", button, c.at, got, bare)
+		for _, visit := range []bool{false, true} {
+			for _, button := range []int{0, 2} {
+				in := barClick(button, c.x)
+				if c.chain != nil {
+					in.Chain = c.chain
+				}
+				in.Handles = Handles(in.Chain, 1, func(string, bool) bool { return visit })
+				bare := c.bareLeft
+				if button == 2 {
+					bare = c.bareRight
+				}
+				_, _, _, tile := in.Chain[c.at].SelectTarget()
+				want := Hit{Action: bare, Segment: in.Segments[c.at]}
+				if tile && (button == 2 || visit) {
+					want = Hit{Action: ActionCrumbDrag, Segment: in.Segments[c.at], Bare: bare}
+				}
+				if bare == ActionNone && want.Action == ActionNone {
+					want.Segment = Segment{}
+				}
+				if got := RouteClick(in); got != want {
+					t.Errorf("%s, visit %v, button %d: RouteClick = %+v, want %+v", c.name, visit, button, got, want)
+				}
 			}
 		}
 	}
-	in := barClick(0, BoundaryW+2)
-	in.Visits = map[int]string{2: "v"}
-	if got := RouteClick(in); got.Action != ActionAscend || got.Segment.Index != 1 {
-		t.Fatalf("RouteClick(crumb above a visit) = %+v, want ascend on 1", got)
-	}
-	if got := RouteClick(barClick(0, BoundaryW+RowH+2)); got.Action != ActionAscend {
-		t.Fatalf("RouteClick(current crumb, no visit) = %v, want %v", got.Action, ActionAscend)
-	}
-	if got := RouteClick(barClick(2, BoundaryW+RowH+2)); got.Action != ActionNone {
-		t.Fatalf("RouteClick(right on a crumb, no visit) = %v, want %v", got.Action, ActionNone)
-	}
 }
 
-// The visits in a chain: a frame entered through an ephemeral row, wherever
-// it sits, and the innermost level's boundary when its workspace tile is
-// ephemeral; an outer level's boundary is never a handle (Joe, 2026-11-11).
-func TestVisitsInChain(t *testing.T) {
+// The handles in a chain: every crumb standing for a tile, wherever it sits,
+// a link's door included, and the innermost level's boundary; an outer
+// level's boundary and a grid crumb are never one. Which are visits is ephemeral's answer.
+func TestHandlesInChain(t *testing.T) {
 	chain := []pane.NavCrumb{
 		{CloseOnly: true},
-		{Workspace: true, WsLevel: 1, TileID: "ws1"},
-		{Workspace: true, WsLevel: 2, TileID: "ws2"},
+		{Workspace: true, WsLevel: 1, TileID: "ws1", GridID: "g/0"},
+		{Workspace: true, WsLevel: 2, TileID: "ws2", GridID: "g/2"},
 		{Crumb: pane.Crumb{Level: 0, Anchor: "g/1"}},
 		{Crumb: pane.Crumb{Level: 1, TileID: "d1"}},
+		{Crumb: pane.Crumb{Level: 2, Anchor: "g/9", TileID: "lnk"}},
 	}
-	frames := []pane.Frame{{}, {Door: "d1"}}
 	eph := func(ids ...string) func(string, bool) bool {
 		return func(id string, _ bool) bool { return slices.Contains(ids, id) }
 	}
 	cases := []struct {
 		name string
 		eph  func(string, bool) bool
-		want map[int]string
+		want map[int]Handle
 	}{
-		{"nothing ephemeral", eph(), map[int]string{}},
-		{"the innermost level's tile", eph("ws2"), map[int]string{2: "ws2"}},
-		{"an outer level's tile only", eph("ws1"), map[int]string{}},
-		{"a door visit inside the level", eph("d1"), map[int]string{4: "d1"}},
-		{"both", eph("ws2", "d1"), map[int]string{2: "ws2", 4: "d1"}},
+		{"nothing ephemeral", eph(), map[int]Handle{2: {ID: "ws2"}, 4: {ID: "d1"}, 5: {ID: "lnk"}}},
+		{"the innermost level's tile", eph("ws2"), map[int]Handle{2: {ID: "ws2", Visit: true}, 4: {ID: "d1"}, 5: {ID: "lnk"}}},
+		{"an outer level's tile only", eph("ws1"), map[int]Handle{2: {ID: "ws2"}, 4: {ID: "d1"}, 5: {ID: "lnk"}}},
+		{"a door visit inside the level", eph("d1"), map[int]Handle{2: {ID: "ws2"}, 4: {ID: "d1", Visit: true}, 5: {ID: "lnk"}}},
+		{"both", eph("ws2", "d1"), map[int]Handle{2: {ID: "ws2", Visit: true}, 4: {ID: "d1", Visit: true}, 5: {ID: "lnk"}}},
 	}
 	for _, c := range cases {
-		if got := Visits(chain, frames, 2, c.eph); !maps.Equal(got, c.want) {
-			t.Errorf("%s: Visits = %v, want %v", c.name, got, c.want)
+		if got := Handles(chain, 2, c.eph); !maps.Equal(got, c.want) {
+			t.Errorf("%s: Handles = %v, want %v", c.name, got, c.want)
 		}
 	}
 	var level []bool
-	Visits(chain, frames, 2, func(id string, isLevel bool) bool { level = append(level, isLevel); return false })
-	if !slices.Equal(level, []bool{true, false}) {
-		t.Errorf("asked level %v, want the innermost boundary as a level, then the door as a frame", level)
+	Handles(chain, 2, func(id string, isLevel bool) bool { level = append(level, isLevel); return false })
+	if !slices.Equal(level, []bool{true, false, false}) {
+		t.Errorf("asked level %v, want the innermost boundary as a level, then the doors as frames", level)
 	}
 }
 
@@ -234,7 +242,7 @@ func TestRouteClickSelect(t *testing.T) {
 	closeOnly.Chain = slices.Clone(closeOnly.Chain)
 	closeOnly.Chain[0] = pane.NavCrumb{CloseOnly: true, Crumb: pane.Crumb{Anchor: "g/0", ParentAnchor: "g/0"}}
 	visit := barClick(0, BoundaryW+RowH+2)
-	visit.Visits = map[int]string{2: "w2"}
+	visit.Handles = map[int]Handle{2: {ID: "w2", Visit: true}}
 	cases := []struct {
 		name string
 		in   Click
