@@ -162,7 +162,6 @@ func readCases() []readCase {
 	ignore2 := func(_ any, _ error) {}
 	return []readCase{
 		{"RootGridID", func(ctx context.Context, s *Store, _ readSubject) { s.RootGridID(ctx) }},
-		{"NodeUUID", func(ctx context.Context, s *Store, _ readSubject) { s.NodeUUID(ctx) }},
 		{"ScratchGridID", func(ctx context.Context, s *Store, _ readSubject) { s.ScratchGridID(ctx) }},
 		{"TrashGridID", func(ctx context.Context, s *Store, _ readSubject) { s.TrashGridID(ctx) }},
 		{"TemplatesGridID", func(ctx context.Context, s *Store, _ readSubject) { s.TemplatesGridID(ctx) }},
@@ -215,9 +214,6 @@ func readCases() []readCase {
 			ignore2(s.Find(ctx, &gridwellv1.FindRequest{Query: "zzzznomatch", Limit: 20}))
 		}},
 		{"ShellTmuxNamers", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.ShellTmuxNamers(ctx, sub.shell)) }},
-		{"WorkspaceEphemeralRefs", func(ctx context.Context, s *Store, _ readSubject) {
-			s.WorkspaceEphemeralRefs(ctx)
-		}},
 		{"GetBlob", func(ctx context.Context, s *Store, sub readSubject) {
 			t, err := s.GetTile(ctx, sub.text)
 			if err == nil {

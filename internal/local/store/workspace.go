@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
+	"strconv"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/panelayout"
@@ -77,30 +79,26 @@ func (s *Store) SetWorkspaceLayout(ctx context.Context, tileID, version int64, d
 	})
 }
 
-// WorkspaceEphemeralRefs returns the local tile ids any workspace tile's layout
-// blob holds (panelayout.HeldIDs). The boot scratch sweep reads it to
-// spare pane-owned ephemerals. The blob is the one record of that ownership,
-// so a reference dies exactly when its workspace tile does. unreadable is true when
-// any pane blob failed to decode, and the caller must then reap nothing: a
-// wrongly-swept shell is a killed process, while a delayed sweep is not.
-func (s *Store) WorkspaceEphemeralRefs(ctx context.Context) (refs map[string]bool, unreadable bool, err error) {
-	uuid, err := s.NodeUUID(ctx)
-	if err != nil {
-		return nil, false, err
+// heldByLayout reports that tileID is an ephemeral visit on grid that a
+// workspace tile's layout may name (panelayout.HeldIDs): one names it, or one
+// will not read, or the store knows no node id to read it by, and so could. The blob is the one record of that ownership,
+// so a reference dies exactly when its workspace tile does.
+func (s *Store) heldByLayout(ctx context.Context, q gridReader, grid, tileID int64) (bool, error) {
+	if eph, err := ephemeralGrid(ctx, q, grid); err != nil || !eph {
+		return false, err
 	}
-	layouts, err := workspaceLayouts(ctx, s.db)
+	layouts, err := workspaceLayouts(ctx, q)
 	if err != nil {
-		return nil, false, err
+		return false, err
 	}
-	refs = map[string]bool{}
 	for _, data := range layouts {
-		ids, ok := layoutRefs(uuid, data)
-		unreadable = unreadable || !ok
-		for _, id := range ids {
-			refs[id] = true
+		ids, ok := layoutRefs(s.nodeID, data)
+		ok = ok && s.nodeID != ""
+		if !ok || slices.Contains(ids, strconv.FormatInt(tileID, 10)) {
+			return true, nil
 		}
 	}
-	return refs, unreadable, nil
+	return false, nil
 }
 
 // workspaceLayouts is every workspace tile's layout by its row, in one

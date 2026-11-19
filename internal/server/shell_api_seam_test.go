@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/idshape"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -53,14 +54,11 @@ func newShellAPIFixture(t *testing.T, cfg Config, tweak ...func(*Server)) *shell
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	if cfg.ID != "" {
-		st.SetNodeID(cfg.ID)
+	if cfg.ID == "" {
+		cfg.ID = idshape.NewShortID()
 	}
-	uuid, err := st.NodeUUID(context.Background())
-	if err != nil {
-		t.Fatalf("home uuid: %v", err)
-	}
-	cfg.ID = uuid
+	st.SetNodeID(cfg.ID)
+	uuid := cfg.ID
 	fake := shellsvctest.New()
 	client := local.New(st, shellsvc.NewManager(fake))
 	reg := &Sources{}

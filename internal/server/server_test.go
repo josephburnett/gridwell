@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/idshape"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,10 +25,8 @@ import (
 // the qualified root grid id the client should open at.
 func registerPrimaryLocaldb(t *testing.T, reg *Sources, st *store.Store) (uuid, qualifiedRoot string) {
 	t.Helper()
-	uuid, err := st.NodeUUID(context.Background())
-	if err != nil {
-		t.Fatalf("home uuid: %v", err)
-	}
+	uuid = idshape.NewShortID()
+	st.SetNodeID(uuid)
 	client := local.New(st, nil)
 	reg.Home = client
 	bareRoot, err := st.RootGridID(context.Background())

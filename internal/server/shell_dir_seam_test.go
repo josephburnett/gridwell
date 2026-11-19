@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"github.com/josephburnett/gridwell/api/idshape"
 	"os"
 	"path/filepath"
 	"testing"
@@ -33,10 +34,8 @@ func TestAShellOnADirectoryStartsThere(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	node, err := st.NodeUUID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	node := idshape.NewShortID()
+	st.SetNodeID(node)
 	fake := shellsvctest.New()
 	fs, err := files.New(st.Files(), []files.Root{{Path: dir}}, func(*os.File, string) error { return nil })
 	if err != nil {

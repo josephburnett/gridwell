@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"github.com/josephburnett/gridwell/api/idshape"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"sync/atomic"
 	"testing"
@@ -54,10 +55,8 @@ func TestWorkspaceDeleteBlipDoesNotReap(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	inner := local.New(st, nil)
-	uuid, err := st.NodeUUID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	uuid := idshape.NewShortID()
+	st.SetNodeID(uuid)
 	bare, err := st.RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)

@@ -750,7 +750,7 @@ copy:
 | a file's information and its hex view, laid out | `client/fileinfo`, over `ReadContent{info}` and the content API's ranges |
 | what the database holds, and what nothing reaches | `store.Analysis`; `store.Clean` removes it |
 | which grid holds the templates | `store.TemplatesGridID`, named by `HandshakeResponse.templates_grid_id` |
-| which ephemeral visits a workspace tile's layout holds | `store.layoutRefs`, read by the boot sweep and `store.Analysis` |
+| which ephemeral visits a workspace tile's layout holds | `store.layoutRefs`, read by `store.DeleteTile`, which keeps a held visit (so by the boot sweep and the reap), and by `store.Analysis` |
 | is this tile an ephemeral visit | `scratch.Ephemeral` over `Grid.scratch_grid_id` |
 | does a live surface still belong on screen | `pane.SurfaceOf` |
 | does going live keep, move or place the tile's surface | `pane.TakeOver`; leaving a level, `pane.Heir` |

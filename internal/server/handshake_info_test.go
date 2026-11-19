@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"github.com/josephburnett/gridwell/api/idshape"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -160,10 +161,8 @@ func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	uuid, err := st.NodeUUID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	uuid := idshape.NewShortID()
+	st.SetNodeID(uuid)
 	bareRoot, err := st.RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -226,10 +225,8 @@ func TestGetGridFailsWhenHomeInfoFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	homeUUID, err := st.NodeUUID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	homeUUID := idshape.NewShortID()
+	st.SetNodeID(homeUUID)
 	home := &infoFlake{Namespace: local.New(st, nil)}
 	reg := &Sources{}
 	reg.Home = home

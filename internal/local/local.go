@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
@@ -54,38 +53,29 @@ func (p *Home) CleanupOrphanedShells(ctx context.Context) (int, error) {
 	})
 }
 
-// CleanupScratch deletes every unowned tile in the scratch grid at startup,
-// sparing any a workspace tile's layout blob references. If any pane blob is
-// unreadable it reaps nothing: a wrongly-killed shell is unrecoverable and a
-// delayed sweep is not. Runs before CleanupOrphanedShells.
+// CleanupScratch deletes every tile in the scratch grid at startup that no
+// workspace tile's layout holds, through the delete that keeps those
+// (store.DeleteTile), answering how many went. Runs before
+// CleanupOrphanedShells.
 func (p *Home) CleanupScratch(ctx context.Context) (int, error) {
 	scratch, err := p.st.ScratchGridID(ctx)
 	if err != nil {
 		return 0, err
 	}
-	refs, unreadable, err := p.st.WorkspaceEphemeralRefs(ctx)
-	if err != nil {
-		return 0, err
-	}
-	if unreadable {
-		log.Printf("gridwell: home: scratch sweep skipped: a workspace layout blob is unreadable (never guess at workspace ownership)")
-		return 0, nil
-	}
 	g, err := p.st.GetGrid(ctx, scratch)
 	if err != nil {
 		return 0, err
 	}
-	n := 0
 	for _, t := range g.Tiles {
-		if refs[t.Id] {
-			continue // a workspace tile's ephemeral: owned, not leaked
-		}
 		if err := p.st.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: t.Id}); err != nil {
-			return n, err
+			return 0, err
 		}
-		n++
 	}
-	return n, nil
+	left, err := p.st.GetGrid(ctx, scratch)
+	if err != nil {
+		return 0, err
+	}
+	return len(g.Tiles) - len(left.Tiles), nil
 }
 
 // Close closes the underlying store.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/josephburnett/gridwell/api/idshape"
 	"math"
 	"strings"
 	"testing"
@@ -467,10 +468,8 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 	ctx := context.Background()
 	scratch := scratchGrid(t, p)
 
-	uuid, err := p.Store().NodeUUID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	uuid := idshape.NewShortID()
+	p.Store().SetNodeID(uuid)
 	root, err := p.Store().RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -591,10 +590,8 @@ func TestCleanupScratchSparesADoorOnAPanesPath(t *testing.T) {
 	p := openHome(t)
 	ctx := context.Background()
 	scratch := scratchGrid(t, p)
-	uuid, err := p.Store().NodeUUID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	uuid := idshape.NewShortID()
+	p.Store().SetNodeID(uuid)
 	root, err := p.Store().RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)

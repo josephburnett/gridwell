@@ -136,38 +136,61 @@ func TestWorkspaceCopySharesBlobThenDiverges(t *testing.T) {
 	}
 }
 
-// The node identity is the config id injected by SetNodeID, not the
-// bootstrap mint. Layout blobs qualify their references with the config id, so
-// the ephemeral-refs matcher must speak it too, or the boot sweep reaps
-// pane-owned shells and kills their tmuxes. A test that builds the blob
-// from NodeUUID cannot catch this: it matches whatever NodeUUID returns.
-func TestWorkspaceRefsMatchTheInjectedIdentity(t *testing.T) {
+// An ephemeral visit lives while a workspace tile's layout names it, whichever
+// pane ends it, so a delete of one a layout holds keeps the row and a delete
+// once none does deletes it; a layout that will not read could name any. The
+// node is a config id other than the minted one, which the layout speaks.
+func TestDeleteKeepsAVisitALayoutHolds(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
-	root := rootID(t, s)
-
-	// The production identity: a config id DIFFERENT from the minted uuid.
 	s.SetNodeID("k3x9m2q")
-
-	pt, err := s.CreateWorkspace(ctx, root, 0, 0, 1, 1, "ws", false, nil)
+	root := rootID(t, s)
+	scratch, err := s.ScratchGridID(ctx)
 	if err != nil {
-		t.Fatalf("create pane: %v", err)
+		t.Fatal(err)
 	}
-	// A layout blob referencing scratch tile 41, qualified by the CONFIG id
-	// — exactly what the client persister writes.
-	layout := `{"v":1,"root":{"pane":{"id":"p1","anchor":"k3x9m2q/` + root + `","cx":0.5,"cy":0.5,"zoom":1,"text_focus":"k3x9m2q/41"}},"focus":"p1"}`
-	if _, err := s.WriteContent(ctx, pt.Id, pt.Version, []byte(layout)); err != nil {
-		t.Fatalf("write layout: %v", err)
+	visit := func(x int64) *gridwellv1.Tile {
+		v, err := s.CreateURL(ctx, scratch, x, 0, 1, 1, "https://example.com", "", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	gone := func(v *gridwellv1.Tile) bool {
+		_, err := s.GetTile(ctx, v.Id)
+		return errors.Is(err, ErrNotFound)
+	}
+	held, loose := visit(0), visit(1)
+	ws, err := s.CreateWorkspace(ctx, root, 0, 0, 1, 1, "ws", false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	naming := func(id string) []byte {
+		return []byte(`{"v":1,"root":{"pane":{"id":"p1","anchor":"k3x9m2q/` + scratch + `","path":["k3x9m2q/` + id + `"]}},"focus":"p1"}`)
+	}
+	n, err := s.WriteContent(ctx, ws.Id, ws.Version, naming(held.Id))
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	refs, unreadable, err := s.WorkspaceEphemeralRefs(ctx)
-	if err != nil {
-		t.Fatalf("refs: %v", err)
+	if err := s.DeleteTile(ctx, rpc.DeleteOf(held)); err != nil || gone(held) {
+		t.Fatalf("delete of a visit a layout names = %v, gone %v; want kept", err, gone(held))
 	}
-	if unreadable {
-		t.Fatal("blob unexpectedly unreadable")
+	if err := s.DeleteTile(ctx, rpc.DeleteOf(loose)); err != nil || !gone(loose) {
+		t.Fatalf("delete of a visit no layout names = %v, gone %v; want deleted", err, gone(loose))
 	}
-	if !refs["41"] {
-		t.Fatalf("the config-id-qualified reference was not recognized (refs=%v) — the sweep would reap a workspace-owned shell (issue #196)", refs)
+
+	if n, err = s.WriteContent(ctx, ws.Id, n.Version, []byte("{not a layout")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteTile(ctx, rpc.DeleteOf(held)); err != nil || gone(held) {
+		t.Fatalf("delete beside a layout that will not read = %v, gone %v; want kept", err, gone(held))
+	}
+
+	if _, err = s.WriteContent(ctx, ws.Id, n.Version, naming("999")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteTile(ctx, rpc.DeleteOf(held)); err != nil || !gone(held) {
+		t.Fatalf("delete once no layout names it = %v, gone %v; want deleted", err, gone(held))
 	}
 }

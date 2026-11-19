@@ -52,8 +52,8 @@ type Store struct {
 	now   func() time.Time // overridden in tests
 	newID func() string    // overridden in tests
 	hub   *eventhub.Hub[*gridwellv1.Event]
-	// nodeID is injected by SetNodeID. "" is a bare test store, and
-	// NodeUUID then falls back to the bootstrap mint.
+	// nodeID is injected by SetNodeID. "" is a bare test store, which
+	// knows no id of its own and so holds every visit a layout could name.
 	nodeID string
 }
 
@@ -150,8 +150,8 @@ func singletonGrid(ctx context.Context, q gridReader, key string) (int64, error)
 
 // bootstrap mints, in one transaction, every singleton grid the file lacks,
 // keyed by the same system row a read finds it by, so an existing gridwell.db keeps
-// its ids. The node uuid mint rides with the root's, never alone: see
-// NodeUUID. Framing is not seeded: NULL already means never visited.
+// its ids. The node uuid mint rides with the root's, never alone; no read
+// takes it, since the config id is the node's (SetNodeID). Framing is not seeded: NULL already means never visited.
 func (s *Store) bootstrap(ctx context.Context) error {
 	var absent []string
 	for _, key := range singletonGridKeys {
@@ -212,7 +212,7 @@ func (s *Store) singletonID(ctx context.Context, key string) (string, error) {
 // ScratchGridID returns the id of this store's scratch grid. It holds the
 // ephemeral visits, tiles opened without placing one on a visible grid. It
 // never renders, and a row on it lives while a visit or a workspace tile's
-// layout holds it (see WorkspaceEphemeralRefs).
+// layout holds it (see heldByLayout).
 func (s *Store) ScratchGridID(ctx context.Context) (string, error) {
 	return s.singletonID(ctx, systemKeyScratchGridID)
 }
@@ -241,25 +241,8 @@ func ephemeralGrid(ctx context.Context, q gridReader, grid int64) (bool, error) 
 // SetNodeID injects the config id the binary verified against its DB at
 // boot. The stored node uuid is a second, independently minted identity
 // nothing outside this store sees: qualified links carry the config id,
-// so a comparison against the mint could never match. The mint survives only
-// as the fallback for bare test stores that never had a config.
+// so a comparison against the mint could never match.
 func (s *Store) SetNodeID(id string) { s.nodeID = id }
-
-// NodeUUID returns the identity this store's qualified ids carry: the
-// injected config id (see SetNodeID), or the bootstrap mint for a test store.
-func (s *Store) NodeUUID(ctx context.Context) (string, error) {
-	if s.nodeID != "" {
-		return s.nodeID, nil
-	}
-	v, ok, err := systemValue(ctx, s.db, systemKeyNodeUUID)
-	if err != nil {
-		return "", err
-	}
-	if !ok {
-		return "", sql.ErrNoRows
-	}
-	return v, nil
-}
 
 // RootFraming returns home's root framing, in the same three columns a
 // root of the files keeps.
