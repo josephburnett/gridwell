@@ -36,8 +36,6 @@ type dropTarget struct {
 	into paste.Into
 	// atX, atY is the release a paste into a text lands at.
 	atX, atY float64
-	// door is the open door the cursor went through to gridID, "" for none.
-	door string
 }
 
 // pans is a drag that carries nothing and is no menu item's: it pans.
@@ -233,7 +231,6 @@ func (a *App) dropTargetAt(sx, sy float64, carried dragdrop.Carry) (*dropTarget,
 			cellSize: cp.CellPx,
 			originX:  cp.OriginX,
 			originY:  cp.OriginY,
-			door:     n.Id,
 		}, true
 	}
 
