@@ -128,6 +128,25 @@ func TestRetireVisitAfterTheLayoutIsHeld(t *testing.T) {
 		}
 	})
 
+	t.Run("a parked level's pane still showing the visit plans no retire", func(t *testing.T) {
+		w := ephemeralWorld(contentPane("pane1", "r1"))
+		w.Parked = []pane.Stack{contentPane("outer1", "r1").Stack}
+		if plan := New().Do(ascendGesture("pane1", 1, false), w); indexOf(plan, EffAwait) >= 0 || indexOf(plan, EffDeleteEphemeral) >= 0 {
+			t.Fatalf("retired a visit a parked level shows: %v", kinds(plan))
+		}
+	})
+
+	t.Run("a parked level showing the visit by the verdict keeps it", func(t *testing.T) {
+		m := New()
+		a := flushAwait(t, m.Do(ascendGesture("pane1", 1, false),
+			ephemeralWorld(contentPane("pane1", "r1"))), EffInstallPlace)
+		parked := baseWorld(gridPane("pane1", "g1"))
+		parked.Parked = []pane.Stack{doorVisitPane("outer1").Stack, contentPane("outer2", "r1").Stack}
+		if plan := m.Resume(a.Token, Result{OK: true}, parked); indexOf(plan, EffDeleteEphemeral) >= 0 {
+			t.Fatalf("deleted a visit a parked level shows: %v", kinds(plan))
+		}
+	})
+
 	t.Run("a split sibling still showing the visit plans no retire", func(t *testing.T) {
 		plan := New().Do(ascendGesture("pane1", 1, false),
 			ephemeralWorld(contentPane("pane1", "r1"), contentPane("pane2", "r1")))

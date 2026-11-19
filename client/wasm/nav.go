@@ -166,6 +166,7 @@ func (a *App) navWorldCommon() nav.World {
 		ShellAlive:      map[string]bool{},
 		ShellAliveKnown: map[string]bool{},
 		Current:         a.c.Current(),
+		Parked:          a.ws.Parked(),
 	}
 	if top := a.ws.Top(); top != nil {
 		w.LevelRow = a.cachedTileByID(top.TileID)

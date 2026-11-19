@@ -865,9 +865,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   `barslot.Decide`, `bartitle.Decide`, none of which decides a write from
   whether a row is ephemeral). Ephemeral means retirement only, which the grey border and
   the title's "— ephemeral" say. The row is deleted when the visit ends and
-  nothing holds it, no other pane and no workspace tile's layout; the
+  nothing holds it, no other pane, on screen or parked, and no workspace
+  tile's layout, which the node checks (`store.DeleteTile`); the
   delete rides the row's save chain behind every write on the row and
   claims the row as they left it (`outbox.SaveQueue.EnqueueAfterHolds`).
+  A new workspace tile's capture keeps a pane on a visit as it is, so the
+  workspace shows exactly what the window showed (Joe, 2026-11-18: "They
+  should be captured too. Everything should look exactly the same.").
 - An ephemeral visit's crumb is its tile (Joe, 2026-11-10: "That behavior
   should be consistent"; Joe, 2026-11-11: "for every kind: text, shell,
   grid and workspace alike"). The bar's crumb standing for a url, text,

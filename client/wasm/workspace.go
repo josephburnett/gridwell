@@ -96,8 +96,9 @@ func (a *App) navPopLevel(e nav.Effect) {
 }
 
 // captureWorkspaceTree copies the window layout as a fresh workspace tile's
-// initial arrangement, through the persister's own encode and decode pair, so
-// the capture is byte-for-byte what the first flush stores. Any failure
+// initial arrangement, ephemeral visits included, through the persister's own
+// encode and decode pair, so the capture is byte-for-byte what the first flush
+// stores. Any failure
 // yields the single-pane default, because a capture must not block the
 // descent, and says so: the arrangement the user was looking at is not the
 // one they get.
@@ -111,13 +112,6 @@ func (a *App) captureWorkspaceTree(tileID, idPrefix, originPane string) *pane.Tr
 	if err == nil {
 		t, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id }, idPrefix)
 		if derr == nil {
-			pane.PopEphemeralContent(t, func(cp *pane.Pane, contentID string) bool {
-				// A tile this client has not cached cannot be asked about, so
-				// the frame stays; the fetch findTileByID kicks answers later
-				// visits.
-				tile := a.findTileByID(contentID)
-				return tile != nil && a.possiblyEphemeral(cp, tile)
-			})
 			return t
 		}
 		err = derr

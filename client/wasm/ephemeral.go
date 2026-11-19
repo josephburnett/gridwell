@@ -137,12 +137,6 @@ func (a *App) enteredVisit(p *pane.Pane) *gridwellv1.Tile {
 	return nil
 }
 
-// possiblyEphemeral: t is ephemeral, or it is not known yet.
-func (a *App) possiblyEphemeral(p *pane.Pane, t *gridwellv1.Tile) bool {
-	eph, known := scratch.Ephemeral(a.scratchGridOf(p), t.GridId)
-	return eph || !known
-}
-
 // deleteEphemeralTile removes an ended ephemeral visit, and for a
 // shell the source kills its tmux too. Unlike the trashcan delete it
 // parks, because an ephemeral row is off-grid and a lost cleanup is invisible

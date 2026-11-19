@@ -53,25 +53,6 @@ func TreeAtPlace(idPrefix, anchor string, path []string, view rpc.View) *Tree {
 	return t
 }
 
-// PopEphemeralContent pops every leaf whose content descent ephemeral reports
-// as ephemeral; it is asked only about a leaf in content. A captured
-// arrangement is durable while an ephemeral descent dies with the visit that
-// made it, so naming one would keep that visit's view alive past the boundary.
-func PopEphemeralContent(t *Tree, ephemeral func(p *Pane, contentID string) bool) {
-	if t == nil || ephemeral == nil {
-		return
-	}
-	t.Walk(func(p *Pane) {
-		id := p.ContentID()
-		if id == "" {
-			return
-		}
-		if ephemeral(p, id) {
-			p.Pop()
-		}
-	})
-}
-
 // Levels is the window's nesting, bottom (first entered) to top (current).
 type Levels struct {
 	levels []Level
@@ -162,6 +143,18 @@ func (s *Levels) PopCountTo(level int) int {
 		return 0
 	}
 	return len(s.levels) - level
+}
+
+// Parked is the place of every pane in the trees the levels park, outermost
+// first, each a copy.
+func (s *Levels) Parked() []Stack {
+	var out []Stack
+	for _, f := range s.levels {
+		if f.OuterTree != nil {
+			f.OuterTree.Walk(func(p *Pane) { out = append(out, p.Stack.Copy()) })
+		}
+	}
+	return out
 }
 
 // tileIDs is the workspace tile of each level, outermost first.

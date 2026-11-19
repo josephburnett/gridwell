@@ -26,9 +26,24 @@ test('workspace descent keeps the outer live url running, parked; ascent shows i
   const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', cx + 2, cy);
   expect(pt).toBeTruthy();
 
-  // A swatch click is the ephemeral visit. Ephemeral visits are stripped from
-  // the layout capture, so the fresh workspace will not copy this pane, no
+  // Entered once from the bare grid, so its layout is that one pane, and a
+  // later descent restores it rather than capturing the url pane below: no
   // one-surface takeover applies, and the outer view must keep running hidden.
+  await gw.descendCell(cx + 2, cy);
+  await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
+  await expect
+    .poll(async () => {
+      try {
+        return (await gw.getTileContent(pt!.id)).length > 0;
+      } catch {
+        return false;
+      }
+    }, { message: 'the first descent stored its capture', timeout: 10_000 })
+    .toBe(true);
+  await gw.leaveWorkspace();
+  await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
+
+  // A swatch click is the ephemeral visit.
   const wcBefore = await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length);
   await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });

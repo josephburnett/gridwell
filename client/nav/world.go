@@ -152,7 +152,10 @@ func (rw *RestoreWorld) rootView(gridID string) rpc.View {
 type World struct {
 	Focus string
 	Panes []PaneView
-	Home  string
+	// Parked is the place of every pane in the levels the window is inside
+	// (pane.Levels.Parked): they hold a visit as a pane on screen does.
+	Parked []pane.Stack
+	Home   string
 
 	// The renderer's constants, bound here rather than duplicated: cell size
 	// at zoom 1, the length of a descent, the log-zoom-to-pixel weighting of
@@ -207,16 +210,18 @@ func (w World) current(gridID string) bool {
 	return gridID != "" && w.Current[gridID]
 }
 
-// otherPaneHolds reports that a pane other than paneID has tileID in its
-// place, descended into it or inside it through a door, so leaving does not
-// delete it: splitting an ephemeral visit copies the place, and the copy's
-// ascent must not delete the row the source pane still shows.
+// otherPaneHolds reports that a pane other than paneID, on screen or parked,
+// has tileID in its place, descended into it or inside it through a door, so
+// leaving does not delete it: a split or a workspace tile's capture copies the
+// place, and the copy's ascent must not delete the row the source still shows.
 func (w World) otherPaneHolds(paneID, tileID string) bool {
 	for _, p := range w.Panes {
-		if p.ID == paneID {
-			continue
+		if _, ok := p.Stack.LevelOf(tileID); ok && p.ID != paneID {
+			return true
 		}
-		if _, ok := p.Stack.LevelOf(tileID); ok {
+	}
+	for _, st := range w.Parked {
+		if _, ok := st.LevelOf(tileID); ok {
 			return true
 		}
 	}
