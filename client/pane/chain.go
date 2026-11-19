@@ -1,9 +1,10 @@
 package pane
 
 // Crumb is one level of a pane's place, projected from the frame stack, so the
-// chain cannot drift from what it describes. Exactly one of Anchor and TileID
-// is set. Level is the frame's index and the whole ascent arithmetic;
-// ParentAnchor and ParentPath locate a tile crumb's row for rendering.
+// chain cannot drift from what it describes. Anchor is a frame's own grid, its
+// glyph; TileID the tile it was entered through, a link's door included. Level
+// is the frame's index and the whole ascent arithmetic; ParentAnchor and
+// ParentPath locate the place it was entered from.
 type Crumb struct {
 	Level  int
 	Anchor string
@@ -23,13 +24,12 @@ func (s *Stack) Crumbs() []Crumb {
 	frames := s.Frames()
 	out := make([]Crumb, 0, len(frames))
 	for i, f := range frames {
-		if f.GridID != "" {
-			out = append(out, Crumb{Level: i, Anchor: f.GridID, ParentAnchor: f.GridID})
-			continue
+		c := Crumb{Level: i, Anchor: f.GridID, ParentAnchor: f.GridID}
+		if f.GridID == "" || i > 0 && f.Door != "" {
+			c.TileID, c.Text = f.Door, f.Content
+			c.ParentAnchor, c.ParentPath = s.AnchorPathAt(i - 1)
 		}
-		anchor, path := s.AnchorPathAt(i - 1)
-		out = append(out, Crumb{Level: i, TileID: f.Door, Text: f.Content,
-			ParentAnchor: anchor, ParentPath: path})
+		out = append(out, c)
 	}
 	return out
 }

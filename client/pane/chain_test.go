@@ -20,15 +20,16 @@ func chainPane() *Pane {
 }
 
 // One crumb per frame, in order: a frame that opens a namespace level shows
-// its root grid, every other frame shows the tile it came through.
+// its root grid, every other frame shows the tile it came through, and one
+// entered through a link names both, the link and the place it sits on.
 func TestCrumbsAreOnePerFrame(t *testing.T) {
 	got := chainPane().Crumbs()
 	want := []Crumb{
 		{Level: 0, Anchor: "k3x9m2q/1", ParentAnchor: "k3x9m2q/1"},
 		{Level: 1, TileID: "12", ParentAnchor: "k3x9m2q/1"},
-		{Level: 2, Anchor: "n5aaaaa/1", ParentAnchor: "n5aaaaa/1"},
+		{Level: 2, Anchor: "n5aaaaa/1", TileID: "lnk1", ParentAnchor: "k3x9m2q/1", ParentPath: []string{"12"}},
 		{Level: 3, TileID: "33", Text: true, ParentAnchor: "n5aaaaa/1"},
-		{Level: 4, Anchor: "mnt7abc/9", ParentAnchor: "mnt7abc/9"},
+		{Level: 4, Anchor: "mnt7abc/9", TileID: "lnk2", ParentAnchor: "n5aaaaa/1"},
 		{Level: 5, TileID: "4", ParentAnchor: "mnt7abc/9"},
 		{Level: 6, TileID: "7", ParentAnchor: "mnt7abc/9", ParentPath: []string{"4"}},
 		{Level: 7, TileID: "21", Text: true, ParentAnchor: "mnt7abc/9", ParentPath: []string{"4", "7"}},
