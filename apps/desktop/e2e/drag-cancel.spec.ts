@@ -232,7 +232,7 @@ test('Esc on a swatch drag-create makes nothing', async ({ gw, window }) => {
 // The press, the move, Esc and the release in one synchronous turn, as in
 // visit-crumb-drag.spec.ts: arming the drag parks the live view, and the layer
 // change under the real cursor would otherwise read as a lost release.
-test('Esc on the ephemeral crumb drag moves nothing', async ({ electronApp, window, gw }) => {
+test('Esc on a visit crumb\'s right-drag copies nothing', async ({ electronApp, window, gw }) => {
   await gw.enterSource('home');
   const home = await gw.focused();
   await gw.splitFocusedPaneVertical();
@@ -260,13 +260,13 @@ test('Esc on the ephemeral crumb drag moves nothing', async ({ electronApp, wind
       const canvas = document.querySelector('canvas')!;
       const fire = (type: string, x: number, y: number, buttons: number) =>
         canvas.dispatchEvent(
-          new MouseEvent(type, { clientX: x, clientY: y, buttons, button: 0, bubbles: true }),
+          new MouseEvent(type, { clientX: x, clientY: y, buttons, button: 2, bubbles: true }),
         );
-      fire('mousedown', fx, fy, 1);
-      fire('mousemove', tx, ty, 1);
+      fire('mousedown', fx, fy, 2);
+      fire('mousemove', tx, ty, 2);
       const d = (window as any).__gridwellTest.idleDetail().dragging;
       (globalThis as any).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      fire('mousemove', tx + 3, ty + 3, 1);
+      fire('mousemove', tx + 3, ty + 3, 2);
       fire('mouseup', tx, ty, 0);
       return d;
     },
@@ -277,7 +277,7 @@ test('Esc on the ephemeral crumb drag moves nothing', async ({ electronApp, wind
   await gw.waitIdle();
 
   const urls = ((await gw.getGrid(home.gridID)).tiles ?? []).filter((t) => t.kind === 'url');
-  expect(urls, 'no url tile was moved onto the grid').toEqual([]);
+  expect(urls, 'no url tile was copied onto the grid').toEqual([]);
   expect((await gw.focused()).textFocus, 'the pane is still on its visit').toBe(visiting.textFocus);
   expect(writes(), 'no write left the client').toEqual([]);
 });
