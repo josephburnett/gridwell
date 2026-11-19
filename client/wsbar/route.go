@@ -32,8 +32,8 @@ const (
 	// ActionLeaveLevels pops out to Segment's level, for a workspace tile crumb or
 	// the leading close-only root.
 	ActionLeaveLevels
-	// ActionCrumbDrag arms the drag of Segment's tile (Handles), as of any
-	// tile; a release with no drag is Hit.Bare, the crumb's click.
+	// ActionCrumbDrag arms the right-drag of Segment's tile (Handles), as of
+	// any tile; a release with no drag is Hit.Bare, the crumb's click.
 	ActionCrumbDrag
 	// ActionAscend ascends to Segment's crumb.
 	ActionAscend
@@ -64,8 +64,8 @@ type Click struct {
 	// SlotMenu is whether the slot's mode has a right-click menu at all; see
 	// circlemenu.For.
 	SlotMenu bool
-	// Handles is Handles' answer, by chain index.
-	Handles map[int]Handle
+	// Handles is Handles' answer.
+	Handles map[int]string
 }
 
 // Hit's Segment is the crumb the action names, for the crumb actions; Bare
@@ -76,23 +76,17 @@ type Hit struct {
 	Bare    Action
 }
 
-// Handle is a crumb's row and whether ephemeral says it is a visit's.
-type Handle struct {
-	ID    string
-	Visit bool
-}
-
 // Handles is each crumb standing for a tile (pane.NavCrumb.SelectTarget) but
-// an outer level's boundary, whose tree is parked: every one right-drags as
-// its tile and a visit's left-drags too (Joe, 2026-11-18).
-func Handles(chain []pane.NavCrumb, depth int, ephemeral func(id string, level bool) bool) map[int]Handle {
-	out := map[int]Handle{}
+// an outer level's boundary, whose tree is parked, by chain index: every one
+// right-drags as its tile, and none left-drags (Joe, 2026-11-19).
+func Handles(chain []pane.NavCrumb, depth int) map[int]string {
+	out := map[int]string{}
 	for i, nc := range chain {
 		id, _, _, ok := nc.SelectTarget()
 		if !ok || nc.Workspace && nc.WsLevel != depth {
 			continue
 		}
-		out[i] = Handle{ID: id, Visit: ephemeral(id, nc.Workspace)}
+		out[i] = id
 	}
 	return out
 }
@@ -167,8 +161,6 @@ func RouteClick(in Click) Hit {
 		return Hit{Action: ActionNone}
 	}
 	switch nc := in.Chain[s.Index]; {
-	case in.Handles[s.Index].Visit:
-		return crumbDrag(in, s)
 	case nc.Workspace || nc.CloseOnly:
 		return Hit{Action: ActionLeaveLevels, Segment: s}
 	}

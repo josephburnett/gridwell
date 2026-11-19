@@ -108,11 +108,12 @@ func TestRouteClickSlotMenu(t *testing.T) {
 	}
 }
 
-// Which crumbs drag, and with which buttons (Joe, 2026-11-11, 2026-11-18):
-// every crumb standing for a tile right-drags as it, a visit's left-drags
-// too, and a release with no drag is the crumb's own click. A grid crumb
-// drags for neither button. A finger is the left button, so it drags a
-// visit's crumb alone and its press on any other crumb is that crumb's click.
+// Which crumbs drag, and with which buttons (Joe, 2026-11-19: "Only
+// right-click to copy (non destructive)"): every crumb standing for a tile
+// right-drags as it, a visit's as any other's, no crumb left-drags, and a
+// release with no drag is the crumb's own click. A grid crumb drags for
+// neither button. A finger is the left button, so its press on a crumb is
+// that crumb's click.
 func TestRouteClickCrumbDrag(t *testing.T) {
 	grid := barClick(0, BoundaryW+2)
 	grid.Chain = slices.Clone(grid.Chain)
@@ -130,28 +131,26 @@ func TestRouteClickCrumbDrag(t *testing.T) {
 		{"a grid crumb", 1, BoundaryW + 2, grid.Chain, ActionAscend, ActionNone},
 	}
 	for _, c := range cases {
-		for _, visit := range []bool{false, true} {
-			for _, button := range []int{0, 2} {
-				in := barClick(button, c.x)
-				if c.chain != nil {
-					in.Chain = c.chain
-				}
-				in.Handles = Handles(in.Chain, 1, func(string, bool) bool { return visit })
-				bare := c.bareLeft
-				if button == 2 {
-					bare = c.bareRight
-				}
-				_, _, _, tile := in.Chain[c.at].SelectTarget()
-				want := Hit{Action: bare, Segment: in.Segments[c.at]}
-				if tile && (button == 2 || visit) {
-					want = Hit{Action: ActionCrumbDrag, Segment: in.Segments[c.at], Bare: bare}
-				}
-				if bare == ActionNone && want.Action == ActionNone {
-					want.Segment = Segment{}
-				}
-				if got := RouteClick(in); got != want {
-					t.Errorf("%s, visit %v, button %d: RouteClick = %+v, want %+v", c.name, visit, button, got, want)
-				}
+		for _, button := range []int{0, 2} {
+			in := barClick(button, c.x)
+			if c.chain != nil {
+				in.Chain = c.chain
+			}
+			in.Handles = Handles(in.Chain, 1)
+			bare := c.bareLeft
+			if button == 2 {
+				bare = c.bareRight
+			}
+			_, _, _, tile := in.Chain[c.at].SelectTarget()
+			want := Hit{Action: bare, Segment: in.Segments[c.at]}
+			if tile && button == 2 {
+				want = Hit{Action: ActionCrumbDrag, Segment: in.Segments[c.at], Bare: bare}
+			}
+			if bare == ActionNone && want.Action == ActionNone {
+				want.Segment = Segment{}
+			}
+			if got := RouteClick(in); got != want {
+				t.Errorf("%s, button %d: RouteClick = %+v, want %+v", c.name, button, got, want)
 			}
 		}
 	}
@@ -159,7 +158,7 @@ func TestRouteClickCrumbDrag(t *testing.T) {
 
 // The handles in a chain: every crumb standing for a tile, wherever it sits,
 // a link's door included, and the innermost level's boundary; an outer
-// level's boundary and a grid crumb are never one. Which are visits is ephemeral's answer.
+// level's boundary and a grid crumb are never one.
 func TestHandlesInChain(t *testing.T) {
 	chain := []pane.NavCrumb{
 		{CloseOnly: true},
@@ -169,29 +168,8 @@ func TestHandlesInChain(t *testing.T) {
 		{Crumb: pane.Crumb{Level: 1, TileID: "d1"}},
 		{Crumb: pane.Crumb{Level: 2, Anchor: "g/9", TileID: "lnk"}},
 	}
-	eph := func(ids ...string) func(string, bool) bool {
-		return func(id string, _ bool) bool { return slices.Contains(ids, id) }
-	}
-	cases := []struct {
-		name string
-		eph  func(string, bool) bool
-		want map[int]Handle
-	}{
-		{"nothing ephemeral", eph(), map[int]Handle{2: {ID: "ws2"}, 4: {ID: "d1"}, 5: {ID: "lnk"}}},
-		{"the innermost level's tile", eph("ws2"), map[int]Handle{2: {ID: "ws2", Visit: true}, 4: {ID: "d1"}, 5: {ID: "lnk"}}},
-		{"an outer level's tile only", eph("ws1"), map[int]Handle{2: {ID: "ws2"}, 4: {ID: "d1"}, 5: {ID: "lnk"}}},
-		{"a door visit inside the level", eph("d1"), map[int]Handle{2: {ID: "ws2"}, 4: {ID: "d1", Visit: true}, 5: {ID: "lnk"}}},
-		{"both", eph("ws2", "d1"), map[int]Handle{2: {ID: "ws2", Visit: true}, 4: {ID: "d1", Visit: true}, 5: {ID: "lnk"}}},
-	}
-	for _, c := range cases {
-		if got := Handles(chain, 2, c.eph); !maps.Equal(got, c.want) {
-			t.Errorf("%s: Handles = %v, want %v", c.name, got, c.want)
-		}
-	}
-	var level []bool
-	Handles(chain, 2, func(id string, isLevel bool) bool { level = append(level, isLevel); return false })
-	if !slices.Equal(level, []bool{true, false, false}) {
-		t.Errorf("asked level %v, want the innermost boundary as a level, then the doors as frames", level)
+	if got, want := Handles(chain, 2), map[int]string{2: "ws2", 4: "d1", 5: "lnk"}; !maps.Equal(got, want) {
+		t.Errorf("Handles = %v, want %v", got, want)
 	}
 }
 
@@ -241,8 +219,8 @@ func TestRouteClickSelect(t *testing.T) {
 	closeOnly := barClick(0, 10)
 	closeOnly.Chain = slices.Clone(closeOnly.Chain)
 	closeOnly.Chain[0] = pane.NavCrumb{CloseOnly: true, Crumb: pane.Crumb{Anchor: "g/0", ParentAnchor: "g/0"}}
-	visit := barClick(0, BoundaryW+RowH+2)
-	visit.Handles = map[int]Handle{2: {ID: "w2", Visit: true}}
+	current := barClick(0, BoundaryW+RowH+2)
+	current.Handles = map[int]string{2: "w2"}
 	cases := []struct {
 		name string
 		in   Click
@@ -250,7 +228,7 @@ func TestRouteClickSelect(t *testing.T) {
 		tile string // the tile the crumb's SelectTarget names, for a toggle
 	}{
 		{"shift on a door crumb toggles its tile", shift(barClick(0, BoundaryW+2)), ActionSelect, "w1"},
-		{"shift on the current crumb toggles its tile, not the visit's drag", shift(visit), ActionSelect, "w2"},
+		{"shift on the current crumb toggles its tile, not its drag", shift(current), ActionSelect, "w2"},
 		{"shift on a workspace tile crumb toggles the workspace tile", shift(barClick(0, 10)), ActionSelect, "ws"},
 		{"shift on a grid crumb does nothing", shift(grid), ActionNone, ""},
 		{"shift on the close-only root does nothing", shift(closeOnly), ActionNone, ""},

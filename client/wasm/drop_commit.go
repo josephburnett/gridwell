@@ -12,7 +12,6 @@ import (
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/paste"
 	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/traceevent"
@@ -55,11 +54,6 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 		a.clickMenuItem(d)
 		return true
 	}
-	if d.crumb != nil && !d.started {
-		a.crumbBare(d)
-		return true
-	}
-
 	// Snapshot every world-read the decision needs, once. onMouseMove gathers
 	// the same DropInput for the ghost preview, so preview and commit cannot
 	// diverge.
@@ -138,17 +132,6 @@ func (a *App) commitShared(verdict dragdrop.DropAction, d *dragState, t *dropTar
 	case dragdrop.DropDelete:
 		a.runDeleteTile(d, nil)
 		a.ghost = nil
-		a.draw()
-	case dragdrop.DropEndVisit:
-		// Leaving the visit is the one way it ends (nav.retireVisit).
-		a.ghost = nil
-		if p := a.tree.FindPane(d.originPaneID); p != nil && d.crumb != nil {
-			if leave, ascend := a.ws.EndVisit(&p.Stack, *d.crumb); leave > 0 {
-				a.runGesture(nav.Gesture{Kind: nav.GestureLeaveLevels, Count: leave})
-			} else {
-				a.ascend(p, ascend, true)
-			}
-		}
 		a.draw()
 	case dragdrop.DropRejected:
 		a.cancelDragSnapBack(d)
@@ -259,15 +242,6 @@ func (a *App) commitMove(d *dragState, t *dropTarget, dropX, dropY int64) {
 			H:      row.H,
 			Claim:  rpc.PlacementOf(row),
 		}, snapBack))
-	}
-	if d.crumb != nil {
-		// Only a visit's crumb moves; its pane follows the row once it lands.
-		landed := ws[0].then
-		ws[0].then = func() {
-			landed()
-			a.runGesture(nav.Gesture{Kind: nav.GestureVisitMoved, PaneID: d.originPaneID,
-				DestPaneID: t.pane.ID, Door: a.cachedTileByID(d.tileID), TileID: t.door})
-		}
 	}
 	a.postInOrder(ws)
 }

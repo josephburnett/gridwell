@@ -162,7 +162,7 @@ var differs = map[string]string{
 func shimOnly(record) (string, bool) { return "", false }
 
 // barRegion routes through wsbar.RouteClick at x on a 400-wide bar holding a
-// workspace tile crumb, two chain crumbs, the last one an ephemeral visit, and
+// workspace tile crumb, two chain crumbs, each standing for a tile, and
 // a title at 200..280; a wheel in the band is gesture.ClassifyWheel's. Every
 // bar surface's Select is routed (bottomBarSelect).
 func barRegion(zone wsbar.Zone, x float64) verdict {
@@ -182,7 +182,7 @@ func barRegion(zone wsbar.Zone, x float64) verdict {
 				{Crumb: pane.Crumb{TileID: "w1", ParentAnchor: "g/1"}},
 				{Crumb: pane.Crumb{TileID: "w2", ParentAnchor: "g/1", ParentPath: []string{"w1"}}},
 			},
-			TitleX: 200, TitleW: 80, TitleOK: true, SlotMenu: true, Handles: map[int]wsbar.Handle{2: {ID: "w2", Visit: true}},
+			TitleX: 200, TitleW: 80, TitleOK: true, SlotMenu: true, Handles: map[int]string{2: "w2"},
 		})
 		barActions[h.Action] = true
 		return fmt.Sprint("bar ", h.Action), true
@@ -241,7 +241,7 @@ func deviceSurfaces() []surface {
 		{"bar: name beside the title", "input.go", barRegion(wsbar.ZoneBar, 190), "", true},
 		{"bar: workspace tile crumb", "input.go", barRegion(wsbar.ZoneBar, 10), "", true},
 		{"bar: crumb", "input.go", barRegion(wsbar.ZoneBar, wsbar.BoundaryW+2), "", true},
-		{"bar: ephemeral visit crumb", "input.go", barRegion(wsbar.ZoneBar, wsbar.BoundaryW+wsbar.RowH+2), "", true},
+		{"bar: current crumb", "input.go", barRegion(wsbar.ZoneBar, wsbar.BoundaryW+wsbar.RowH+2), "", true},
 		{"band beside the bar", "input.go", barRegion(wsbar.ZoneBand, 0), "", true},
 		{"+ menu", "input.go", shimOnly, "", false},
 		{"pane edge", "input.go", inGrid(gesture.Input{InGridView: true, Region: pane.RegionSplitTop},

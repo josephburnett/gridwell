@@ -523,7 +523,8 @@ either side of the bar covers no pane, and a click there does nothing. A crumb
 click is the ascent gesture; middle-click is the in-pane shortcut. Which
 crumbs drag, and with which button, is one table (`wsbar.Handles`,
 `wsbar.RouteClick`): every crumb standing for a tile right-drags as it, a
-visit's left-drags too, and the drag is the tile's own (`startCrumbDrag`).
+visit's the same, no crumb left-drags, and the drag is the tile's own
+(`startCrumbDrag`).
 
 **Clicks** land on what they hit, in any pane, and pane focus follows in the
 same press (`focusToPane`, the one owner). A surface that lives only over the

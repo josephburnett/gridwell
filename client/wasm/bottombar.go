@@ -10,12 +10,10 @@ import (
 	"github.com/josephburnett/gridwell/client/barslot"
 	"github.com/josephburnett/gridwell/client/bartitle"
 	"github.com/josephburnett/gridwell/client/contentrow"
-	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/scratch"
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
@@ -400,7 +398,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods, s
 		}
 		if p != nil {
 			in.SlotMenu = a.slotHasMenu(p)
-			in.Handles = a.crumbHandles(p, in.Chain)
+			in.Handles = wsbar.Handles(in.Chain, a.ws.Depth())
 		}
 	}
 	hit := wsbar.RouteClick(in)
@@ -425,9 +423,8 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods, s
 	case wsbar.ActionWorkspaceRename, wsbar.ActionLeaveLevels, wsbar.ActionAscend:
 		a.crumbAct(p, hit.Action, in.Chain[hit.Segment.Index])
 	case wsbar.ActionCrumbDrag:
-		if t := a.cachedTileByID(in.Handles[hit.Segment.Index].ID); t != nil {
-			a.startCrumbDrag(p, t, in.Chain[hit.Segment.Index], hit.Bare, hit.Segment, bx, top, sx, sy,
-				button, mods.Ctrl)
+		if t := a.cachedTileByID(in.Handles[hit.Segment.Index]); t != nil {
+			a.startCrumbDrag(p, t, in.Chain[hit.Segment.Index], hit.Bare, hit.Segment, bx, top, sx, sy, mods.Ctrl)
 		}
 	case wsbar.ActionSelect:
 		// A tile crumb is drawn only under a focused pane (NavChain).
@@ -455,31 +452,14 @@ func (a *App) crumbAct(p *pane.Pane, act wsbar.Action, nc navCrumb) {
 	}
 }
 
-// crumbHandles is wsbar.Handles over p's place: a frame's row is ephemeral by
-// p's scratch rule, the open level's workspace tile by the rule of the pane
-// it was entered from.
-func (a *App) crumbHandles(p *pane.Pane, chain []pane.NavCrumb) map[int]wsbar.Handle {
-	return wsbar.Handles(chain, a.ws.Depth(), func(id string, level bool) bool {
-		t := a.cachedTileByID(id)
-		if t == nil {
-			return false
-		}
-		if level {
-			eph, known := scratch.Ephemeral(a.levelScratch(), t.GridId)
-			return eph && known
-		}
-		return a.certainlyEphemeral(p, t)
-	})
-}
-
-// startCrumbDrag arms the drag of row t from its crumb nc, as any tile's
-// drag is armed (startTemplateDrag): it carries the row from its grid, so
-// dragdrop.DecideDrop decides as for every tile. The right
-// button copies, or with ctrl links, through the right-button release; a
-// release with no drag is bare, the crumb's click. The ghost starts as the
+// startCrumbDrag arms the right-drag of row t from its crumb nc, as any
+// tile's drag is armed (startTemplateDrag): it carries the row from its grid,
+// so dragdrop.DecideDrop decides as for every tile. It copies, or with ctrl
+// links, through the right-button release; a release with no drag is bare,
+// the crumb's click. The ghost starts as the
 // row drawn where the crumb is: the square drawChainCrumb paints, or a
 // boundary's band, held at the press's place along it.
-func (a *App) startCrumbDrag(p *pane.Pane, t *gridwellv1.Tile, nc navCrumb, bare wsbar.Action, seg wsbar.Segment, bx, top, sx, sy float64, button int, ctrl bool) {
+func (a *App) startCrumbDrag(p *pane.Pane, t *gridwellv1.Tile, nc navCrumb, bare wsbar.Action, seg wsbar.Segment, bx, top, sx, sy float64, ctrl bool) {
 	square := min(seg.W, wsbar.RowH)
 	side := square - 2
 	x, y := bx+seg.X+(square-side)/2, top+(wsbar.RowH-side)/2
@@ -493,16 +473,12 @@ func (a *App) startCrumbDrag(p *pane.Pane, t *gridwellv1.Tile, nc navCrumb, bare
 		ox = float64(t.W) * min(max((sx-bandX)/bandW, 0), 1)
 		oy = float64(t.H) * min(max((sy-top-3)/side, 0), 1)
 	}
-	intent := dragdrop.IntentMove
-	if button == 2 {
-		intent = rightDragIntent(ctrl)
-		a.rightDrag = &rightDragState{kind: rightDragCarry, startX: sx, startY: sy, curX: sx, curY: sy}
-	}
+	a.rightDrag = &rightDragState{kind: rightDragCarry, startX: sx, startY: sy, curX: sx, curY: sy}
 	a.dragging = &dragState{
 		originPaneID: p.ID,
 		crumb:        &nc,
 		crumbBare:    bare,
-		intent:       intent,
+		intent:       rightDragIntent(ctrl),
 		startScreenX: sx,
 		startScreenY: sy,
 		curScreenX:   sx,

@@ -11,8 +11,8 @@ import { createText, createTile, getTileContent, tileAt } from './oracle';
 // "It should right-click out to make a copy (or paste into a shell or text
 // file). Exactly the same as ephemeral tiles."): onto a shell it pastes the
 // tile's reference, onto a grid it copies, with ctrl it links, and the pane
-// the crumb rides keeps showing the tile. A left-drag of a crumb that is no
-// visit's is its click, and the click still ascends.
+// the crumb rides keeps showing the tile. A left-drag of any crumb is its
+// click (Joe, 2026-11-19), and the click still ascends.
 
 // What the node's private tmux shows of a shell, asked the way the node asks.
 function paneText(home: string, key: string): string {

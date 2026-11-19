@@ -818,26 +818,21 @@ func TestCopySwatchDrop(t *testing.T) {
 	}
 }
 
-// An ephemeral visit's crumb drags as the tile it is (CLAUDE.md, 2026-11-10):
-// it moves and copies as any row, but a drop that would link to it is
-// refused with the reason, a left-drag across a connection with the move's
-// own (2026-11-11), and the trashcan ends the visit.
+// An ephemeral visit's crumb drags as the tile it is: it copies as any row,
+// but a drop that would link to it is refused with the reason.
 func TestAVisitLinksNowhere(t *testing.T) {
-	base := DropInput{Started: true, TileID: "7", HasTarget: true}
+	base := DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, FromCrumb: true}
 	cases := []struct {
 		name       string
 		in         func(*DropInput)
 		row, visit DropAction
 		told       string
 	}{
-		{"a left-drag that moves", func(in *DropInput) {}, DropMove, DropMove, ""},
-		{"a left-drag across a connection", func(in *DropInput) { in.MovesAsLink = true }, DropLink, DropRejected, EphemeralNoFarMove},
-		{"a right-drag that copies", func(in *DropInput) { in.Intent = IntentCopy }, DropCopy, DropCopy, ""},
-		{"a right-drag that copies as a link", func(in *DropInput) { in.Intent, in.CopiesAsLink = IntentCopy, true }, DropLink, DropRejected, EphemeralNoLink},
+		{"a right-drag that copies", func(in *DropInput) {}, DropCopy, DropCopy, ""},
+		{"a right-drag that copies as a link", func(in *DropInput) { in.CopiesAsLink = true }, DropLink, DropRejected, EphemeralNoLink},
 		{"a ctrl + right-drag", func(in *DropInput) { in.Intent = IntentLink }, DropLink, DropRejected, EphemeralNoLink},
 		{"a ctrl + right-drag across a connection", func(in *DropInput) { in.Intent, in.MovesAsLink, in.CopiesAsLink = IntentLink, true, true }, DropLink, DropRejected, EphemeralNoLink},
 		{"a drop on a shell", func(in *DropInput) { in.PasteTarget, in.Intent = true, IntentLink }, DropPaste, DropPaste, ""},
-		{"the trashcan", func(in *DropInput) { in.HasTarget, in.OverDelete = false, true }, DropDelete, DropEndVisit, ""},
 	}
 	for _, c := range cases {
 		for _, eph := range []bool{false, true} {
@@ -857,24 +852,17 @@ func TestAVisitLinksNowhere(t *testing.T) {
 			}
 		}
 	}
-	end := DropInput{Started: true, TileID: "7", OverDelete: true, CarriesEphemeral: true}
-	if p := GhostPlanForDrop(DropEndVisit, end, "o", "", 40, 0); p.PaneID != "o" || p.Fragmentation != 1 {
-		t.Errorf("the trashcan's ghost for a visit = %+v, want it shattered in the origin pane", p)
-	}
 }
 
-// A crumb's tile drags as any tile does (Joe, 2026-11-18), with one arm of
-// its own: its trashcan is no gesture, since deleting the tile a pane is
-// inside is undecided, so it snaps back and says nothing. A visit's crumb
-// still ends the visit there.
+// A crumb's tile drags as any tile does, with one arm of its own: nothing is
+// deleted from the bar (Joe, 2026-11-19), so its trashcan snaps back, a
+// visit's as any other's.
 func TestACrumbIsNotDeleted(t *testing.T) {
-	trash := DropInput{Started: true, TileID: "7", Intent: IntentCopy, OverDelete: true, FromCrumb: true}
-	if got := DecideDrop(trash); got != DropRejected || NoEntry(trash) || Told(trash) != "" {
-		t.Errorf("a crumb's tile on the trashcan = %v (no entry %v, told %q), want a silent snap back", got, NoEntry(trash), Told(trash))
-	}
-	trash.CarriesEphemeral = true
-	if got := DecideDrop(trash); got != DropEndVisit {
-		t.Errorf("a visit's crumb on the trashcan = %v, want DropEndVisit", got)
+	for _, eph := range []bool{false, true} {
+		trash := DropInput{Started: true, TileID: "7", Intent: IntentCopy, OverDelete: true, FromCrumb: true, CarriesEphemeral: eph}
+		if got := DecideDrop(trash); got != DropRejected {
+			t.Errorf("a crumb's tile on the trashcan, ephemeral %v = %v, want a snap back", eph, got)
+		}
 	}
 	for _, c := range []struct {
 		in   DropInput
