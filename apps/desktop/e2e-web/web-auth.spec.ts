@@ -47,7 +47,7 @@ test('the password gate: prompt, wrong password, login, cookie survives reload',
   const read = await page.request.get(serve.origin + '/', { headers: { Accept: 'text/markdown, */*' } });
   expect(read.status()).toBe(401);
   expect(read.headers()['content-type']).toBe('text/plain; charset=utf-8');
-  expect(await read.text()).toContain('Authorization: Bearer');
+  expect(await read.text()).toMatch(/MCP API, preferred.*Authorization: Bearer/);
 
   await field.fill('not-it');
   await page.locator('button[type=submit]').click();

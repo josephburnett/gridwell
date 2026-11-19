@@ -64,7 +64,7 @@ read_tiles; a door names its grid as child_grid. Anything else reads it with
 curl -H 'Authorization: Bearer <the web password>' <url>: a text answers its
 body, a url its address, a page its bytes, a door or a grid read_grid's
 JSON, and any other tile read_tiles' JSON. With no password it answers 401
-and a line naming the bearer and this API. A browser opening it shows the
+and a line naming this API, preferred, then the bearer. A browser opening it shows the
 place, or with no password the login page.`
 
 // New is the MCP server over rt, the node's router, which every tool calls as

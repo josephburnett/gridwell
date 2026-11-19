@@ -145,7 +145,8 @@ func TestAReferenceAnswersItsContent(t *testing.T) {
 	t.Run("nothing else does, and it is told the ways in", func(t *testing.T) {
 		told := func(code int, typ, body string) bool {
 			return code == http.StatusUnauthorized && typ == "text/plain; charset=utf-8" &&
-				strings.Contains(body, "Authorization: Bearer") && strings.Contains(body, "MCP") && !strings.Contains(body, "Notes")
+				strings.Contains(body, "MCP API, preferred") && !strings.Contains(body, "Notes") &&
+				strings.Index(body, "MCP API") < strings.Index(body, "Authorization: Bearer")
 		}
 		if code, typ, body := get(curl, ref(text)); !told(code, typ, body) {
 			t.Errorf("GET with no password = %d %q %q, want 401 and the plain message", code, typ, body)

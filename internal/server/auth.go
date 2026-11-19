@@ -31,7 +31,7 @@ const (
 	// never expires; revocation is deleting the web-password file.
 	authCookieMaxAge = 400 * 24 * 60 * 60
 	// passwordRequired answers every refusal but a browser's navigation.
-	passwordRequired = "This Gridwell reference is password protected. Send the web password as a bearer token (Authorization: Bearer <the web password>), or read it through the Gridwell MCP API, /mcp on this node, with read_grid or read_tiles."
+	passwordRequired = "This Gridwell reference is password protected. Read it through the Gridwell MCP API, preferred: /mcp on this node, with read_grid or read_tiles. Or send the web password as a bearer token (Authorization: Bearer <the web password>)."
 )
 
 // AuthToken is the one derivation of the cookie value from the password.
