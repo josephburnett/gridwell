@@ -155,3 +155,66 @@ test("a door's crumb right-dragged onto a grid copies the door, with ctrl links 
   expect((await pane(gw, aId)).textFocus, 'the click ascended out of the text').toBe('');
   expect(await notices(window), 'nothing went wrong').toEqual([]);
 });
+
+// Every level's band right-drags as its workspace tile, an outer one's too
+// (Joe, 2026-11-19: "Yes, the workspace tiles (bands) should right drag too.
+// Tiles are tile."): the drag reads the row, not the tree the level parks.
+test("an outer level's band right-dropped on a shell pastes its reference, and onto a grid copies its workspace tile", async ({ gw, home, window }) => {
+  const origin = new URL(window.url()).origin;
+  await gw.enterSource('home');
+  const f = await gw.focused();
+  const grid = f.gridID;
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  const outer = await createTile(origin, grid, 'workspace', cx, cy);
+  const inner = await createTile(origin, grid, 'workspace', cx + 1, cy);
+  const shell = await createTile(origin, grid, 'shell', cx, cy + 1);
+  await gw.waitClientTileAt(f.id, cx, cy + 1, shell.id);
+  const depth = async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth;
+
+  // Two levels deep: into the outer workspace tile, then the inner one.
+  await gw.descendCell(cx, cy);
+  await expect.poll(depth, { timeout: 15_000 }).toBe(1);
+  await expect.poll(async () => (await gw.focused()).gridID).toBe(grid);
+  await gw.waitClientTileAt((await gw.focused()).id, cx + 1, cy, inner.id);
+  await gw.descendCell(cx + 1, cy);
+  await expect.poll(depth, { timeout: 15_000 }).toBe(2);
+  await expect.poll(async () => (await gw.focused()).gridID).toBe(grid);
+
+  // B on the shell, live, with `echo ` typed; A on the grid.
+  await gw.splitFocusedPaneVertical();
+  const bId = (await gw.focused()).id;
+  const aId = (await gw.panes()).find((p) => p.id !== bId)!.id;
+  await gw.descendCell(cx, cy + 1);
+  await gw.shellAttached();
+  await window.keyboard.type('echo ');
+  await gw.focusPane(await pane(gw, aId));
+  const segs = (await gw.bar()).segments.filter((s) => s.kind === 'workspace').map((s) => [s.level, s.tileID]);
+  expect(segs, 'the bar has both bands').toEqual([
+    [1, outer.id],
+    [2, inner.id],
+  ]);
+
+  const b = await pane(gw, bId);
+  const key = shell.id.split('/').pop()!;
+  const own = outer.id.split('/').pop()!;
+  await dragCrumb(window, gw, outer.id, { x: b.x + b.w / 2, y: b.y + b.h / 2 }, 'right');
+  await expect
+    .poll(() => new RegExp(`echo '?${origin.replace(/[.]/g, '\\.')}/\\S*${own}`).test(paneText(home, key)), { message: `a reference to ${own} was pasted`, timeout: 10_000 })
+    .toBe(true);
+  expect(await depth(), 'still two levels deep').toBe(2);
+
+  const a = await pane(gw, aId);
+  const ax = Math.round(a.cx);
+  const ay = Math.round(a.cy) + 2;
+  const n = ((await gw.getGrid(grid)).tiles ?? []).length;
+  await dragCrumb(window, gw, outer.id, await gw.cellCenter(aId, ax, ay), 'right');
+  await expect.poll(async () => tileAt(await gw.getGrid(grid), 'workspace', ax, ay)?.id, { timeout: 15_000 }).toBeTruthy();
+  const copy = tileAt(await gw.getGrid(grid), 'workspace', ax, ay)!;
+  expect(copy.id, 'a new row').not.toBe(outer.id);
+  expect(copy.link, 'a copy, not a link').toBeFalsy();
+  expect(((await gw.getGrid(grid)).tiles ?? []).length, 'one row, nothing else').toBe(n + 1);
+  expect(tileAt(await gw.getGrid(grid), 'workspace', cx, cy)?.id, 'the workspace tile did not move').toBe(outer.id);
+  expect(await depth(), 'still two levels deep').toBe(2);
+  expect(await notices(window), 'nothing went wrong').toEqual([]);
+});

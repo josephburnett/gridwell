@@ -878,16 +878,18 @@ These were decided deliberately. Do not reverse one without a new decision.
   copy (or paste into a shell or text file). Exactly the same as ephemeral
   tiles. Exactly the same as tiles in the menu."; Joe, 2026-11-19: "No,
   left-click or any crumb should not move or delete it. Only right-click to
-  copy (non destructive).", and of a visit's crumb, "Right button only, all
+  copy (non destructive). Yes, the workspace tiles (bands) should right drag
+  too. Tiles are tile.", and of a visit's crumb, "Right button only, all
   crumbs"). Every crumb in the bar standing for a tile
   (`pane.NavCrumb.SelectTarget`), a door's, a link's, a content tile's, an
   ephemeral visit's the same as any other, the current one included,
-  wherever it sits in the place, and the innermost level's boundary band,
-  right-drags as the tile it is, from the grid it sits on, through the one
-  drag and its verdicts (`dragdrop.DecideDrop`, `wsbar.Handles`): onto a
-  grid it copies, deep as any copy, with ctrl it links, onto a shell or a
-  raw text it pastes its reference, and the pane keeps showing it. An outer
-  level's band does not drag, since its tree is parked. Nothing is moved or
+  wherever it sits in the place, and every level's boundary band, an outer
+  level's too, since a copy, a link or a paste reads the row and not the
+  parked tree, right-drags as the tile it is, from the grid it sits on,
+  through the one drag and its verdicts (`dragdrop.DecideDrop`,
+  `wsbar.RouteClick`): onto a grid it copies, deep as any copy, with ctrl
+  it links, onto a shell or a raw text it pastes its reference, and the
+  pane keeps showing it. Nothing is moved or
   deleted from the bar: no crumb left-drags, and a crumb's drag over the
   trashcan snaps back (`dragdrop.DropInput.FromCrumb`). A visit is kept by
   copying it: a right-drag onto a grid copies the row, and the visit stays

@@ -521,9 +521,9 @@ That row is reserved layout — the pane tree ends at its top edge — so no pan
 and no surface sized from a pane, can occlude the bar; the plain background
 either side of the bar covers no pane, and a click there does nothing. A crumb
 click is the ascent gesture; middle-click is the in-pane shortcut. Which
-crumbs drag, and with which button, is one table (`wsbar.Handles`,
-`wsbar.RouteClick`): every crumb standing for a tile right-drags as it, a
-visit's the same, no crumb left-drags, and the drag is the tile's own
+crumbs drag, and with which button, is one table (`wsbar.RouteClick`):
+every crumb standing for a tile right-drags as it, a visit's and every
+level's band the same, no crumb left-drags, and the drag is the tile's own
 (`startCrumbDrag`).
 
 **Clicks** land on what they hit, in any pane, and pane focus follows in the

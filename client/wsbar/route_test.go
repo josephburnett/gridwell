@@ -1,7 +1,6 @@
 package wsbar
 
 import (
-	"maps"
 	"slices"
 	"testing"
 
@@ -56,12 +55,12 @@ func TestRouteClick(t *testing.T) {
 			barClick(2, 210), ActionRename, -1},
 		{"a left press on a workspace tile crumb leaves its levels",
 			barClick(0, 10), ActionLeaveLevels, 0},
-		{"a right press on a workspace tile crumb renames the workspace",
-			barClick(2, 10), ActionWorkspaceRename, 0},
+		{"a right press on a workspace tile crumb arms its tile's drag",
+			barClick(2, 10), ActionCrumbDrag, 0},
 		{"a left press on a chain crumb ascends to it",
 			barClick(0, BoundaryW+2), ActionAscend, 1},
-		{"a right press on a chain crumb does nothing",
-			barClick(2, BoundaryW+2), ActionNone, -1},
+		{"a right press on a chain crumb arms its tile's drag",
+			barClick(2, BoundaryW+2), ActionCrumbDrag, 1},
 		{"a middle press on a chain crumb does nothing",
 			barClick(1, BoundaryW+2), ActionNone, -1},
 		{"a left press beside the title, past the crumbs, zooms like the name",
@@ -110,14 +109,17 @@ func TestRouteClickSlotMenu(t *testing.T) {
 
 // Which crumbs drag, and with which buttons (Joe, 2026-11-19: "Only
 // right-click to copy (non destructive)"): every crumb standing for a tile
-// right-drags as it, a visit's as any other's, no crumb left-drags, and a
-// release with no drag is the crumb's own click. A grid crumb drags for
-// neither button. A finger is the left button, so its press on a crumb is
-// that crumb's click.
+// right-drags as it, a visit's as any other's, and every level's band, an
+// outer one's too ("Tiles are tile"); no crumb left-drags, and a release
+// with no drag is the crumb's own click. A grid crumb drags for neither
+// button. A finger is the left button, so its press on a crumb is that
+// crumb's click.
 func TestRouteClickCrumbDrag(t *testing.T) {
 	grid := barClick(0, BoundaryW+2)
 	grid.Chain = slices.Clone(grid.Chain)
 	grid.Chain[1] = pane.NavCrumb{Crumb: pane.Crumb{Anchor: "g/1", ParentAnchor: "g/1"}}
+	nested := slices.Clone(grid.Chain)
+	nested[1] = pane.NavCrumb{Workspace: true, WsLevel: 2, TileID: "ws2", GridID: "g/0"}
 	cases := []struct {
 		name                string
 		at                  int
@@ -126,6 +128,8 @@ func TestRouteClickCrumbDrag(t *testing.T) {
 		bareLeft, bareRight Action
 	}{
 		{"the workspace tile's boundary", 0, 10, nil, ActionLeaveLevels, ActionWorkspaceRename},
+		{"an outer level's boundary", 0, 10, nested, ActionLeaveLevels, ActionWorkspaceRename},
+		{"the inner level's boundary", 1, BoundaryW + 2, nested, ActionLeaveLevels, ActionWorkspaceRename},
 		{"a door crumb", 1, BoundaryW + 2, nil, ActionAscend, ActionNone},
 		{"the current crumb", 2, BoundaryW + RowH + 2, nil, ActionAscend, ActionNone},
 		{"a grid crumb", 1, BoundaryW + 2, grid.Chain, ActionAscend, ActionNone},
@@ -136,7 +140,6 @@ func TestRouteClickCrumbDrag(t *testing.T) {
 			if c.chain != nil {
 				in.Chain = c.chain
 			}
-			in.Handles = Handles(in.Chain, 1)
 			bare := c.bareLeft
 			if button == 2 {
 				bare = c.bareRight
@@ -153,23 +156,6 @@ func TestRouteClickCrumbDrag(t *testing.T) {
 				t.Errorf("%s, button %d: RouteClick = %+v, want %+v", c.name, button, got, want)
 			}
 		}
-	}
-}
-
-// The handles in a chain: every crumb standing for a tile, wherever it sits,
-// a link's door included, and the innermost level's boundary; an outer
-// level's boundary and a grid crumb are never one.
-func TestHandlesInChain(t *testing.T) {
-	chain := []pane.NavCrumb{
-		{CloseOnly: true},
-		{Workspace: true, WsLevel: 1, TileID: "ws1", GridID: "g/0"},
-		{Workspace: true, WsLevel: 2, TileID: "ws2", GridID: "g/2"},
-		{Crumb: pane.Crumb{Level: 0, Anchor: "g/1"}},
-		{Crumb: pane.Crumb{Level: 1, TileID: "d1"}},
-		{Crumb: pane.Crumb{Level: 2, Anchor: "g/9", TileID: "lnk"}},
-	}
-	if got, want := Handles(chain, 2), map[int]string{2: "ws2", 4: "d1", 5: "lnk"}; !maps.Equal(got, want) {
-		t.Errorf("Handles = %v, want %v", got, want)
 	}
 }
 
@@ -220,7 +206,6 @@ func TestRouteClickSelect(t *testing.T) {
 	closeOnly.Chain = slices.Clone(closeOnly.Chain)
 	closeOnly.Chain[0] = pane.NavCrumb{CloseOnly: true, Crumb: pane.Crumb{Anchor: "g/0", ParentAnchor: "g/0"}}
 	current := barClick(0, BoundaryW+RowH+2)
-	current.Handles = map[int]string{2: "w2"}
 	cases := []struct {
 		name string
 		in   Click
@@ -257,7 +242,7 @@ func TestRouteClickSelect(t *testing.T) {
 		}
 	}
 	// Shift with any other button is that button's press.
-	if got := RouteClick(shift(barClick(2, 10))); got.Action != ActionWorkspaceRename {
-		t.Errorf("shift + right on a workspace tile crumb = %v, want %v", got.Action, ActionWorkspaceRename)
+	if got := RouteClick(shift(barClick(2, 10))); got.Action != ActionCrumbDrag || got.Bare != ActionWorkspaceRename {
+		t.Errorf("shift + right on a workspace tile crumb = %+v, want its drag, bare the rename", got)
 	}
 }

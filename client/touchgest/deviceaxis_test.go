@@ -182,9 +182,10 @@ func barRegion(zone wsbar.Zone, x float64) verdict {
 				{Crumb: pane.Crumb{TileID: "w1", ParentAnchor: "g/1"}},
 				{Crumb: pane.Crumb{TileID: "w2", ParentAnchor: "g/1", ParentPath: []string{"w1"}}},
 			},
-			TitleX: 200, TitleW: 80, TitleOK: true, SlotMenu: true, Handles: map[int]string{2: "w2"},
+			TitleX: 200, TitleW: 80, TitleOK: true, SlotMenu: true,
 		})
-		barActions[h.Action] = true
+		// A crumb drag's bare release is the click it would be.
+		barActions[h.Action], barActions[h.Bare] = true, true
 		return fmt.Sprint("bar ", h.Action), true
 	}
 }

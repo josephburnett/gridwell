@@ -295,7 +295,7 @@ type DropInput struct {
 	// CarriesEphemeral is a carried row on the scratch grid (rpc.Ephemeral):
 	// a visit's crumb, which links nowhere (EphemeralNoLink).
 	CarriesEphemeral bool
-	// FromCrumb is a drag from a crumb (wsbar.Handles), whose trashcan is no
+	// FromCrumb is a drag from a crumb (wsbar.ActionCrumbDrag), whose trashcan is no
 	// gesture: nothing is deleted from the bar (Joe, 2026-11-19).
 	FromCrumb bool
 }

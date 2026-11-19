@@ -32,8 +32,9 @@ const (
 	// ActionLeaveLevels pops out to Segment's level, for a workspace tile crumb or
 	// the leading close-only root.
 	ActionLeaveLevels
-	// ActionCrumbDrag arms the right-drag of Segment's tile (Handles), as of
-	// any tile; a release with no drag is Hit.Bare, the crumb's click.
+	// ActionCrumbDrag arms the right-drag of the tile Segment's crumb stands
+	// for (pane.NavCrumb.SelectTarget), as of any tile; a release with no
+	// drag is Hit.Bare, the crumb's click.
 	ActionCrumbDrag
 	// ActionAscend ascends to Segment's crumb.
 	ActionAscend
@@ -64,8 +65,6 @@ type Click struct {
 	// SlotMenu is whether the slot's mode has a right-click menu at all; see
 	// circlemenu.For.
 	SlotMenu bool
-	// Handles is Handles' answer.
-	Handles map[int]string
 }
 
 // Hit's Segment is the crumb the action names, for the crumb actions; Bare
@@ -76,35 +75,16 @@ type Hit struct {
 	Bare    Action
 }
 
-// Handles is each crumb standing for a tile (pane.NavCrumb.SelectTarget) but
-// an outer level's boundary, whose tree is parked, by chain index: every one
-// right-drags as its tile, and none left-drags (Joe, 2026-11-19).
-func Handles(chain []pane.NavCrumb, depth int) map[int]string {
-	out := map[int]string{}
-	for i, nc := range chain {
-		id, _, _, ok := nc.SelectTarget()
-		if !ok || nc.Workspace && nc.WsLevel != depth {
-			continue
-		}
-		out[i] = id
-	}
-	return out
-}
-
-// crumbDrag is the drag a press on handle s arms, its bare release the
-// click the crumb would take without one.
-func crumbDrag(in Click, s Segment) Hit {
-	in.Handles = nil
-	return Hit{Action: ActionCrumbDrag, Segment: s, Bare: RouteClick(in).Action}
-}
-
 // RouteClick asks the zone, then the two fixed ends of the bar, then the
 // chain, because the slot and the title sit over the band and not in it. A
 // left press anywhere between the crumbs and the slot is a press on the name,
 // so the zoom handle is as wide as the space the name is centered in; rename
 // stays on the drawn text, so an edit is never offered off the name it edits.
 // A select press (shift alone with the left button, as on a grid) toggles a
-// tile crumb's tile and does nothing anywhere else in the band.
+// tile crumb's tile and does nothing anywhere else in the band. The right
+// button drags every crumb standing for a tile, every level's band included,
+// since a copy reads the row and not the parked tree; no crumb left-drags
+// (Joe, 2026-11-19).
 func RouteClick(in Click) Hit {
 	switch {
 	case in.Zone == ZoneOutside:
@@ -138,14 +118,18 @@ func RouteClick(in Click) Hit {
 			return Hit{Action: ActionRename}
 		}
 		s, ok := At(in.Segments, in.X)
-		_, handle := in.Handles[s.Index]
-		switch {
-		case ok && handle:
-			return crumbDrag(in, s)
-		case ok && in.Chain[s.Index].Workspace:
-			return Hit{Action: ActionWorkspaceRename, Segment: s}
+		if !ok {
+			return Hit{Action: ActionNone}
 		}
-		return Hit{Action: ActionNone}
+		nc := in.Chain[s.Index]
+		bare := Hit{Action: ActionNone}
+		if nc.Workspace {
+			bare = Hit{Action: ActionWorkspaceRename, Segment: s}
+		}
+		if _, _, _, tile := nc.SelectTarget(); tile {
+			return Hit{Action: ActionCrumbDrag, Segment: s, Bare: bare.Action}
+		}
+		return bare
 	}
 	switch {
 	case inSlot:

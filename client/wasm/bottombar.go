@@ -398,7 +398,6 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods, s
 		}
 		if p != nil {
 			in.SlotMenu = a.slotHasMenu(p)
-			in.Handles = wsbar.Handles(in.Chain, a.ws.Depth())
 		}
 	}
 	hit := wsbar.RouteClick(in)
@@ -423,7 +422,8 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods, s
 	case wsbar.ActionWorkspaceRename, wsbar.ActionLeaveLevels, wsbar.ActionAscend:
 		a.crumbAct(p, hit.Action, in.Chain[hit.Segment.Index])
 	case wsbar.ActionCrumbDrag:
-		if t := a.cachedTileByID(in.Handles[hit.Segment.Index]); t != nil {
+		id, _, _, _ := in.Chain[hit.Segment.Index].SelectTarget()
+		if t := a.cachedTileByID(id); t != nil {
 			a.startCrumbDrag(p, t, in.Chain[hit.Segment.Index], hit.Bare, hit.Segment, bx, top, sx, sy, mods.Ctrl)
 		}
 	case wsbar.ActionSelect:
