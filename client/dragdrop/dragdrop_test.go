@@ -855,13 +855,20 @@ func TestAVisitLinksNowhere(t *testing.T) {
 }
 
 // A crumb's tile drags as any tile does, with one arm of its own: nothing is
-// deleted from the bar (Joe, 2026-11-19), so its trashcan snaps back, a
-// visit's as any other's.
+// deleted from the bar (Joe, 2026-11-19), so its trashcan is refused, a
+// visit's as any other's, and the refusal says why: told, and written under
+// the no-entry badge.
 func TestACrumbIsNotDeleted(t *testing.T) {
-	for _, eph := range []bool{false, true} {
-		trash := DropInput{Started: true, TileID: "7", Intent: IntentCopy, OverDelete: true, FromCrumb: true, CarriesEphemeral: eph}
-		if got := DecideDrop(trash); got != DropRejected {
-			t.Errorf("a crumb's tile on the trashcan, ephemeral %v = %v, want a snap back", eph, got)
+	for _, intent := range []Intent{IntentCopy, IntentLink} {
+		for _, eph := range []bool{false, true} {
+			trash := DropInput{Started: true, TileID: "7", Intent: intent, OverDelete: true, FromCrumb: true, CarriesEphemeral: eph}
+			if got := DecideDrop(trash); got != DropRejected || !NoEntry(trash) || Told(trash) != CrumbNoDelete {
+				t.Errorf("a crumb's tile on the trashcan, intent %v, ephemeral %v = %v (no entry %v, told %q), want refused with %q",
+					intent, eph, got, NoEntry(trash), Told(trash), CrumbNoDelete)
+			}
+			if p := GhostPlanForDrop(DropRejected, trash, "o", "", 40, 0); !p.Forbidden || p.Why != CrumbNoDelete || p.PaneID != "o" {
+				t.Errorf("its ghost = %+v, want the no-entry badge over %q in the origin pane", p, CrumbNoDelete)
+			}
 		}
 	}
 	for _, c := range []struct {
@@ -875,6 +882,24 @@ func TestACrumbIsNotDeleted(t *testing.T) {
 	} {
 		if got := DecideDrop(c.in); got != c.want {
 			t.Errorf("a crumb's tile %+v = %v, want %v as for any tile", c.in, got, c.want)
+		}
+	}
+}
+
+// Every refusal the user is told is written under the ghost's no-entry
+// badge, whatever the drag carries; one that is not told writes nothing.
+func TestEveryToldRefusalIsWorn(t *testing.T) {
+	for _, in := range []DropInput{
+		{Started: true, TileID: "7", OverDelete: true, Touch: true, CarriesFile: true},
+		{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, CarriesEphemeral: true},
+		{Started: true, TileID: "7", HasTarget: true, PasteTarget: true},
+		{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, PasteTarget: true, PasteRefusal: "x takes no edits"},
+		{Started: true, TileID: "7", Intent: IntentCopy, OverDelete: true, FromCrumb: true},
+		{Started: true, TileID: "7", HasTarget: true, Forbidden: true},
+	} {
+		p := GhostPlanForDrop(DecideDrop(in), in, "o", "t", 40, 40)
+		if p.Why != Told(in) || p.Forbidden != NoEntry(in) {
+			t.Errorf("%+v: ghost %+v, want why %q and no entry %v", in, p, Told(in), NoEntry(in))
 		}
 	}
 }

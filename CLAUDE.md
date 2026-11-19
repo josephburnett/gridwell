@@ -879,7 +879,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   tiles. Exactly the same as tiles in the menu."; Joe, 2026-11-19: "No,
   left-click or any crumb should not move or delete it. Only right-click to
   copy (non destructive). Yes, the workspace tiles (bands) should right drag
-  too. Tiles are tile.", and of a visit's crumb, "Right button only, all
+  too. Tiles are tile. Yes, any snap-back that is a denial of my request
+  should say why. ... Consistency consistency consistency.", and of a
+  visit's crumb, "Right button only, all
   crumbs"). Every crumb in the bar standing for a tile
   (`pane.NavCrumb.SelectTarget`), a door's, a link's, a content tile's, an
   ephemeral visit's the same as any other, the current one included,
@@ -891,13 +893,15 @@ These were decided deliberately. Do not reverse one without a new decision.
   it links, onto a shell or a raw text it pastes its reference, and the
   pane keeps showing it. Nothing is moved or
   deleted from the bar: no crumb left-drags, and a crumb's drag over the
-  trashcan snaps back (`dragdrop.DropInput.FromCrumb`). A visit is kept by
+  trashcan is refused with "a crumb's drag copies; it does not delete",
+  told as information and written under the no-entry badge, as every told
+  refusal is (`dragdrop.CrumbNoDelete`, `dragdrop.Told`). A visit is kept by
   copying it: a right-drag onto a grid copies the row, and the visit stays
   as it was, grey, retired when it is left. A drop that would link to a
   visit, a ctrl + right-drag or a copy that lands as a link, is refused
   with "a link to an ephemeral visit would die with it", since no link
   holds a visit (`dragdrop.EphemeralNoLink`), and wears the no-entry
-  badge. A press that never becomes a drag is the crumb's click
+  badge with the reason under it. A press that never becomes a drag is the crumb's click
   (`wsbar.Hit.Bare`): on the current crumb nothing, on any other an ascent
   to it, and on a level's band its own, left leaving to that level and
   right renaming it.
@@ -973,7 +977,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   a file or a directory dropped on another directory's grid, a rename
   across directories, or on the trashcan is refused with the reason ("a
   finger does not move or delete a file; use a mouse"), the ghost wearing
-  the no-entry badge and snapping back, nothing asked of the node, because
+  the no-entry badge with the reason under it and snapping back, nothing asked of the node, because
   a stray finger should not reshape the disk. A finger still places and
   resizes a file within its grid, copies or links it, creates from the +
   menu, and does anything to a Gridwell tile wherever it sits; a mouse does

@@ -6,7 +6,7 @@ import { createText, getTile, handshake } from './oracle';
 // An ephemeral visit's crumb is its tile as every crumb is (Joe, 2026-11-19:
 // "Right button only, all crumbs"): a right-drag copies it onto a grid and
 // the visit stays as it was, a link to it is refused, and a left-drag or the
-// trashcan moves and deletes nothing.
+// trashcan moves and deletes nothing, the trashcan saying why.
 
 type Button = 'left' | 'right';
 
@@ -220,7 +220,7 @@ test('a text visit from a template is copied by a right-drag, and ctrl + right-d
   await stillAVisit(gw, scratch, visit);
 });
 
-test('a visit dragged onto the trashcan stays', async ({ window, gw }) => {
+test('a visit dragged onto the trashcan stays, and says why', async ({ window, gw }) => {
   const origin = new URL(window.url()).origin;
   const tg = await templatesGrid(window);
   const tpl = await createText(origin, tg, 0, 0, 'a text to keep');
@@ -230,10 +230,13 @@ test('a visit dragged onto the trashcan stays', async ({ window, gw }) => {
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const visit = (await gw.focused()).textFocus;
 
-  for (const button of ['left', 'right'] as const) {
-    await dragCrumb(window, gw, visit, await gw.circleCenter(), button);
-    await stillAVisit(gw, scratch, visit);
-  }
+  // A left-drag is the crumb's click, which does nothing and says nothing.
+  await dragCrumb(window, gw, visit, await gw.circleCenter());
+  await stillAVisit(gw, scratch, visit);
+  expect(await notices(window), 'a click is no refusal').toEqual([]);
+  await dragCrumb(window, gw, visit, await gw.circleCenter(), 'right');
+  await stillAVisit(gw, scratch, visit);
+  await expect.poll(() => notices(window)).toEqual(["a crumb's drag copies; it does not delete"]);
   expect(await onGrid(gw, tg, tpl.id), 'the template stayed').toBeTruthy();
 });
 
@@ -290,8 +293,10 @@ test('a workspace visit right-dragged off its boundary crumb is copied with its 
   expect(await depth(), 'still inside').toBe(1);
   expect((await gw.focused()).textFocus, 'the panes are as they were').toBe(text.id);
 
-  // Over the trashcan the band snaps back.
+  // Over the trashcan the band snaps back and says why.
+  expect(await notices(window), 'nothing went wrong').toEqual([]);
   await dragCrumb(window, gw, ws.id, await gw.circleCenter(), 'right');
+  await expect.poll(() => notices(window)).toEqual(["a crumb's drag copies; it does not delete"]);
   expect(await depth(), 'still inside').toBe(1);
   expect(await onGrid(gw, scratch, ws.id), 'the visit is still on the scratch grid').toBeTruthy();
 
@@ -300,5 +305,4 @@ test('a workspace visit right-dragged off its boundary crumb is copied with its 
   await expect.poll(depth).toBe(0);
   await expect.poll(async () => await onGrid(gw, scratch, ws.id), { timeout: 10_000 }).toBeUndefined();
   expect((await onGrid(gw, home.gridID, copy.id))?.id, 'the copy stayed').toBe(copy.id);
-  expect(await notices(window), 'nothing went wrong').toEqual([]);
 });

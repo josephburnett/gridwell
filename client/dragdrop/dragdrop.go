@@ -295,8 +295,8 @@ type DropInput struct {
 	// CarriesEphemeral is a carried row on the scratch grid (rpc.Ephemeral):
 	// a visit's crumb, which links nowhere (EphemeralNoLink).
 	CarriesEphemeral bool
-	// FromCrumb is a drag from a crumb (wsbar.ActionCrumbDrag), whose trashcan is no
-	// gesture: nothing is deleted from the bar (Joe, 2026-11-19).
+	// FromCrumb is a drag from a crumb (wsbar.ActionCrumbDrag), whose
+	// trashcan is refused (CrumbNoDelete).
 	FromCrumb bool
 }
 
@@ -315,10 +315,14 @@ const EphemeralNoLink = "a link to an ephemeral visit would die with it"
 // (Joe, 2026-11-16).
 const PasteNeedsRight = "only a right-drag pastes; a left-drag moves"
 
+// CrumbNoDelete is why a crumb's drag released on the trashcan is refused:
+// nothing is deleted from the bar (Joe, 2026-11-19).
+const CrumbNoDelete = "a crumb's drag copies; it does not delete"
+
 // Told is the reason a refused drop tells the user, "" when it says nothing.
 func Told(in DropInput) string {
 	switch why := WhyRejected(in); why {
-	case FingerNoFile, EphemeralNoLink, PasteNeedsRight, in.PasteRefusal:
+	case FingerNoFile, EphemeralNoLink, PasteNeedsRight, CrumbNoDelete, in.PasteRefusal:
 		return why
 	}
 	return ""
@@ -392,7 +396,7 @@ func decideDrop(in DropInput) (DropAction, string) {
 	case in.OverDelete && in.Touch && in.CarriesFile:
 		return DropRejected, FingerNoFile
 	case in.OverDelete && in.FromCrumb:
-		return DropRejected, "a crumb's tile"
+		return DropRejected, CrumbNoDelete
 	case in.OverDelete:
 		return DropDelete, ""
 	case !in.HasTarget:
@@ -439,7 +443,8 @@ type GhostPlan struct {
 	// Outline outlines the tile the drop acts on, as the trashcan is lit: the
 	// shell or the text a paste lands in, the tile the copy swatch copies.
 	Outline bool
-	// Why is written under the no-entry badge: why a paste is refused.
+	// Why is written under the no-entry badge: the reason a refusal is told
+	// (Told).
 	Why string
 }
 
@@ -462,11 +467,8 @@ func GhostPlanForDrop(action DropAction, in DropInput,
 	case DropRejected:
 		if forbidden {
 			// Over the trashcan there is no target pane.
-			p := GhostPlan{PaneID: cmp.Or(targetPaneID, originPaneID), TargetCellSize: srcCellSize, Forbidden: true, Cursor: "not-allowed"}
-			if in.PasteTarget {
-				p.Why = WhyRejected(in)
-			}
-			return p
+			return GhostPlan{PaneID: cmp.Or(targetPaneID, originPaneID), TargetCellSize: srcCellSize,
+				Forbidden: true, Cursor: "not-allowed", Why: Told(in)}
 		}
 		return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize}
 	default: // DropMove / DropCopy

@@ -143,6 +143,12 @@ test("a door's crumb right-dragged onto a grid copies the door, with ctrl links 
   expect(link.childGridId, "the door's own grid").toBe(door.childGridId);
   expect(((await gw.getGrid(grid)).tiles ?? []).length, 'two rows, nothing else').toBe(n + 2);
 
+  // Over the trashcan it is refused and says why: nothing is deleted from the bar.
+  expect(await notices(window), 'nothing went wrong').toEqual([]);
+  await dragCrumb(window, gw, door.id, await gw.circleCenter(), 'right');
+  await expect.poll(() => notices(window)).toEqual(["a crumb's drag copies; it does not delete"]);
+  expect(((await gw.getGrid(grid)).tiles ?? []).length, 'nothing deleted').toBe(n + 2);
+
   // The pane kept the text, the door did not move, and the click ascends.
   const a = await pane(gw, aId);
   expect(a.textFocus, 'the pane still shows the text').toBe(text.id);
@@ -153,7 +159,7 @@ test("a door's crumb right-dragged onto a grid copies the door, with ctrl links 
   await gw.waitIdle();
   await expect.poll(async () => (await pane(gw, aId)).gridID).toBe(door.childGridId);
   expect((await pane(gw, aId)).textFocus, 'the click ascended out of the text').toBe('');
-  expect(await notices(window), 'nothing went wrong').toEqual([]);
+  expect(await notices(window), 'nothing else was said').toEqual(["a crumb's drag copies; it does not delete"]);
 });
 
 // Every level's band right-drags as its workspace tile, an outer one's too
