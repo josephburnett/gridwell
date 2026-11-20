@@ -28,6 +28,9 @@ const toldDrop = async (window: Page): Promise<[string, number][]> =>
     .filter((n: any) => n.source === 'drop')
     .map((n: any) => [String(n.message), Number(n.count)]);
 
+const offersFile = async (gw: GridwellDriver): Promise<boolean> =>
+  (await gw.menu()).items.some((i) => !i.isSwatch && i.kind === 'file');
+
 const ghostWhy = (window: Page): Promise<string> =>
   window.evaluate(() => (window as any).__gridwellTest.ghost().why);
 
@@ -188,6 +191,26 @@ test.describe('a swatch refused for what it is', () => {
     expect(await window.locator('#gw-url-modal.open').count(), 'no name is asked for').toBe(0);
     expect(await count(gw, inside.gridID), 'nothing was made').toBe(1);
     expect(fs.readdirSync(ROOT).sort(), 'nothing on disk').toEqual(before);
+  });
+
+  // An open grid shows what its source knows: a directory that goes while a
+  // pane shows it takes the file swatch away, with no gesture.
+  test('a shown directory that goes stops offering the file swatch', async ({ gw }) => {
+    const { dir } = await homeAndDirectory(gw);
+    fs.mkdirSync(path.join(ROOT, 'going'));
+    await expect
+      .poll(async () => ((await gw.getGrid(dir.gridID)).tiles ?? []).some((t) => t.altText === 'going'))
+      .toBe(true);
+    const door = ((await gw.getGrid(dir.gridID)).tiles ?? []).find((t) => t.altText === 'going')!;
+    await createText(gw.origin, door.childGridId!, 0, 0, 'kept');
+    await gw.focusPane(dir);
+    await gw.waitClientTileAt(dir.id, Number(door.x ?? 0), Number(door.y ?? 0), door.id);
+    await gw.descendCell(Number(door.x ?? 0), Number(door.y ?? 0));
+    expect((await gw.focused()).gridID, 'inside the directory').toBe(door.childGridId);
+    await gw.openMenu();
+    await expect.poll(() => offersFile(gw), 'offered while the directory is there').toBe(true);
+    fs.rmSync(path.join(ROOT, 'going'), { recursive: true, force: true });
+    await expect.poll(() => offersFile(gw), 'withdrawn once it is gone').toBe(false);
   });
 });
 

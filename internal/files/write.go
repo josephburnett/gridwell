@@ -420,7 +420,7 @@ func (s *Source) SetSelection(_ context.Context, req *pb.SetSelectionRequest) (*
 			continue
 		}
 		row, err := s.mint(id)
-		if errGone(err) {
+		if gwerr.IsDeadLink(err) || errors.Is(err, store.ErrNotFound) {
 			continue
 		}
 		if err != nil {

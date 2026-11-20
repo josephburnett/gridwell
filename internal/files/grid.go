@@ -8,7 +8,6 @@ import (
 	"cmp"
 	"context"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -425,9 +424,9 @@ func (s *Source) selection(gid int64) ([]string, error) {
 	return s.mem.Selection(gid)
 }
 
-// listingSum is a listing as a client holds it, without the content stamps:
-// bytes that moved are their file's TileChanged, and a directory whose files
-// are written while its names stay has not moved.
+// listingSum is a listing as a client holds it, its names and its grid's
+// facts, without the selection, which SelectionChanged tells, or the content
+// stamps: bytes that moved are their file's TileChanged.
 type listingSum [sha256.Size]byte
 
 func sumOf(l *listing) listingSum {
@@ -439,6 +438,9 @@ func sumOf(l *listing) listingSum {
 		fmt.Fprintf(h, "%q %q %q %t %q %q %q %q %d %t\n", e.Key, e.Label, e.Kind, e.ServesPage, e.LinkTarget,
 			e.Child, e.readOnly, e.presentation, e.preview, e.gone)
 	}
+	g := proto.CloneOf(l.grid)
+	g.Selection = nil
+	fmt.Fprint(h, g)
 	var out listingSum
 	h.Sum(out[:0])
 	return out
@@ -503,6 +505,3 @@ func (s *Source) settle(l *listing, check bool) (moved bool) {
 	g.gen++
 	return moved
 }
-
-// errGone is true when err is the answer for a path that is not there.
-func errGone(err error) bool { return gwerr.IsDeadLink(err) || errors.Is(err, store.ErrNotFound) }
