@@ -263,7 +263,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   await expect
     .poll(async () => {
       const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
-      return errs.notices.some((n: any) => n.source === 'menu');
+      return errs.notices.some((n: any) => n.source === 'drop' && /belongs to another node/.test(String(n.message)));
     })
     .toBe(true);
   expect(((await gw.getGrid(f.gridID)).tiles ?? []).length, 'no cross-node tile was created').toBe(before);

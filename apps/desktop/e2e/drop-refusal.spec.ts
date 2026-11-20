@@ -18,6 +18,16 @@ const notices = async (window: Page): Promise<string[]> =>
 const told = async (window: Page): Promise<[string, number][]> =>
   ((await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? []).map((n: any) => [String(n.message), Number(n.count)]);
 
+const count = async (gw: GridwellDriver, grid: string): Promise<number> =>
+  ((await gw.getGrid(grid)).tiles ?? []).length;
+
+// The drop's own notices, whatever else the panes report: a connection's
+// health, a pane on the files.
+const toldDrop = async (window: Page): Promise<[string, number][]> =>
+  ((await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? [])
+    .filter((n: any) => n.source === 'drop')
+    .map((n: any) => [String(n.message), Number(n.count)]);
+
 const ghostWhy = (window: Page): Promise<string> =>
   window.evaluate(() => (window as any).__gridwellTest.ghost().why);
 
@@ -104,14 +114,7 @@ test('a swatch dropped onto a taken cell is refused with the reason', async ({ g
 // reasons should be blue notification bars at the bottoms.").
 test.describe('a swatch refused for what it is', () => {
   const ROOT = makeRunDir();
-  test.use({
-    filesRoots: [{ root: ROOT, label: 'docs' }],
-    extraYaml: `connections:
-    - name: fixedcon
-      label: rtb
-      addr: 127.0.0.1:1
-`,
-  });
+  test.use({ filesRoots: [{ root: ROOT, label: 'docs' }] });
 
   // Two panes side by side, the left on home, the right on the root.
   async function homeAndDirectory(gw: GridwellDriver): Promise<{ home: PaneInfo; dir: PaneInfo }> {
@@ -123,10 +126,11 @@ test.describe('a swatch refused for what it is', () => {
     await gw.focusPane((await gw.panes()).find((p) => p.id === r0.id)!);
     await gw.enterSource('docs (files)');
     const panes = await gw.panes();
-    return { home: panes.find((p) => p.id === l0.id)!, dir: panes.find((p) => p.id === r0.id)! };
+    return {
+      home: panes.find((p) => p.id === l0.id)!,
+      dir: panes.find((p) => p.id === r0.id)!,
+    };
   }
-
-  const count = async (gw: GridwellDriver, grid: string): Promise<number> => ((await gw.getGrid(grid)).tiles ?? []).length;
 
   test('a file swatch dropped on a Gridwell grid says a file is made in a directory', async ({ gw, window }) => {
     const { home, dir } = await homeAndDirectory(gw);
@@ -144,7 +148,7 @@ test.describe('a swatch refused for what it is', () => {
     await expect.poll(() => ghostWhy(window), 'the ghost wears the reason').toBe('a file is made in a directory');
     await m.up();
     await gw.waitIdle();
-    await expect.poll(() => told(window)).toEqual([['a file is made in a directory', 1]]);
+    await expect.poll(() => toldDrop(window)).toEqual([['a file is made in a directory', 1]]);
     expect(await window.locator('#gw-url-modal.open').count(), 'no name is asked for').toBe(0);
     expect(await count(gw, home.gridID), 'nothing was made').toBe(n);
     expect(fs.readdirSync(ROOT).sort(), 'nothing on disk').toEqual(before);
@@ -152,21 +156,25 @@ test.describe('a swatch refused for what it is', () => {
 
   test('a file swatch dropped on a gone directory says it cannot be written', async ({ gw, window }) => {
     const { dir } = await homeAndDirectory(gw);
-    // A directory holding a Gridwell text, then removed underneath it.
+    // A directory holding a Gridwell text, removed underneath it before the
+    // client first reads it.
     fs.mkdirSync(path.join(ROOT, 'held'));
     await expect
       .poll(async () => ((await gw.getGrid(dir.gridID)).tiles ?? []).some((t) => t.altText === 'held'))
       .toBe(true);
     const door = ((await gw.getGrid(dir.gridID)).tiles ?? []).find((t) => t.altText === 'held')!;
+    await createText(gw.origin, door.childGridId!, 0, 0, 'kept');
+    fs.rmSync(path.join(ROOT, 'held'), { recursive: true, force: true });
+    await expect
+      .poll(async () => ((await gw.getGrid(dir.gridID)).tiles ?? []).find((t) => t.altText === 'held')?.gone, {
+        message: 'the parent lists it as a gone door',
+      })
+      .toBe(true);
     await gw.focusPane(dir);
+    await gw.waitClientTileAt(dir.id, Number(door.x ?? 0), Number(door.y ?? 0), door.id);
     await gw.descendCell(Number(door.x ?? 0), Number(door.y ?? 0));
     const inside = await gw.focused();
-    const [tx, ty] = [Math.round(inside.cx), Math.round(inside.cy)];
-    await gw.openMenu();
-    await gw.dragCreate('markdown', tx, ty);
-    await expect.poll(() => count(gw, inside.gridID)).toBe(1);
-    fs.rmSync(path.join(ROOT, 'held'), { recursive: true, force: true });
-    await expect.poll(async () => ((await gw.getGrid(inside.gridID)).grid as any)?.writable ?? false, { message: 'the grid is gone' }).toBe(false);
+    expect(inside.gridID, 'inside the gone directory').toBe(door.childGridId);
 
     // The left pane opens the root, where the file swatch is offered.
     const left = (await gw.panes()).find((p) => p.id !== dir.id)!;
@@ -174,12 +182,22 @@ test.describe('a swatch refused for what it is', () => {
     await gw.enterSource('docs (files)');
     const before = fs.readdirSync(ROOT).sort();
     await gw.openMenu();
-    const at = await gw.cellCenter(dir.id, tx + 1, ty);
+    const at = await gw.cellCenter(dir.id, 2, 0);
     await gw.dragCreateToScreen('file', at.x, at.y);
-    await expect.poll(() => told(window)).toEqual([['this directory cannot be written', 1]]);
+    await expect.poll(() => toldDrop(window)).toEqual([['this directory cannot be written', 1]]);
     expect(await window.locator('#gw-url-modal.open').count(), 'no name is asked for').toBe(0);
     expect(await count(gw, inside.gridID), 'nothing was made').toBe(1);
     expect(fs.readdirSync(ROOT).sort(), 'nothing on disk').toEqual(before);
+  });
+});
+
+test.describe('a door swatch refused', () => {
+  test.use({
+    extraYaml: `connections:
+    - name: fixedcon
+      label: rtb
+      addr: 127.0.0.1:1
+`,
   });
 
   test('a swatch of a source that will not open says what its click says', async ({ gw, window }) => {
@@ -189,10 +207,11 @@ test.describe('a swatch refused for what it is', () => {
     await expect
       .poll(async () => (await gw.sources()).find((p) => p.label === 'rtb')?.status, { timeout: 30_000 })
       .toBe('broken');
-    const rtb = (await gw.sources()).find((p) => p.label === 'rtb')!;
     await gw.openMenu();
     await gw.dragSourceLink('rtb', Math.round(f.cx), Math.round(f.cy));
-    await expect.poll(() => told(window)).toEqual([[`rtb: ${rtb.infoError}`, 1]]);
+    // The words its click says, over the row as it is now.
+    const infoError = (await gw.sources()).find((p) => p.label === 'rtb')!.infoError;
+    await expect.poll(() => toldDrop(window)).toEqual([[`rtb: ${infoError}`, 1]]);
     expect(await count(gw, f.gridID), 'nothing was made').toBe(n);
   });
 });
