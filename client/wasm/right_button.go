@@ -41,6 +41,11 @@ type rightDragState struct {
 	startX, startY float64
 	curX, curY     float64
 
+	// forward is the main forward that armed it, 0 for a drag the canvas
+	// started. On macOS only the page learns a forwarded drag's release, so
+	// main follows the view until setRightDrag tells it the drag is gone.
+	forward int
+
 	// Swap-only.
 	originPaneID string
 
@@ -69,6 +74,15 @@ type rightDragState struct {
 	clickCellX, clickCellY   int64
 	tileNewX, tileNewY       int64
 	tileNewW, tileNewH       int64
+}
+
+// setRightDrag is the one writer of a.rightDrag, so a forwarded drag tells main
+// it ended however it is dropped: released, cancelled or replaced.
+func (a *App) setRightDrag(rd *rightDragState) {
+	if old := a.rightDrag; old != nil && old != rd && old.forward != 0 {
+		a.bridgeRightForwardEnded(old.forward)
+	}
+	a.rightDrag = rd
 }
 
 // rightDragIntent reads the press's modifier: ctrl flips the right button from
@@ -105,23 +119,23 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64, intent drag
 	case gesture.TileCenter, gesture.TileResize:
 		a.armTileGesture(p, r, tile, sx, sy, intent, splitNav)
 	case gesture.Swap:
-		a.rightDrag = &rightDragState{
+		a.setRightDrag(&rightDragState{
 			kind:         rightDragSwap,
 			startX:       sx,
 			startY:       sy,
 			curX:         sx,
 			curY:         sy,
 			originPaneID: p.ID,
-		}
+		})
 	case gesture.Split:
-		a.rightDrag = &rightDragState{
+		a.setRightDrag(&rightDragState{
 			kind:      rightDragSplit,
 			startX:    sx,
 			startY:    sy,
 			curX:      sx,
 			curY:      sy,
 			splitAxis: in.Region.Side().Direction(),
-		}
+		})
 	}
 }
 
@@ -165,20 +179,24 @@ func (a *App) onViewPress(vp viewPress, button int) {
 
 // onForwardedRightDown begins the right-button pane gesture the last right
 // press over a live url view became, at that press; the view keeps the rest of
-// the drag, which main forwards too.
-func (a *App) onForwardedRightDown() {
+// the drag, which main forwards too. Main hears once that forward id is over:
+// when the gesture it armed is dropped, or now when it armed none.
+func (a *App) onForwardedRightDown(id int) {
 	vp := a.viewRight
 	a.viewRight = nil
-	if vp == nil || gesture.Press(a.trans.Any(), a.armed()) == gesture.PressNothing {
+	before := a.rightDrag
+	if vp != nil && gesture.Press(a.trans.Any(), a.armed()) != gesture.PressNothing {
+		if p := a.tree.FindPane(vp.paneID); p != nil {
+			// IntentCopy: a content descent can only arm pane gestures, which ignore it.
+			a.onRightDown(p, paneRectFor(a, p), vp.sx, vp.sy, dragdrop.IntentCopy, false)
+			a.draw()
+		}
+	}
+	if rd := a.rightDrag; rd != nil && rd != before {
+		rd.forward = id
 		return
 	}
-	p := a.tree.FindPane(vp.paneID)
-	if p == nil {
-		return
-	}
-	// IntentCopy: a content descent can only arm pane gestures, which ignore it.
-	a.onRightDown(p, paneRectFor(a, p), vp.sx, vp.sy, dragdrop.IntentCopy, false)
-	a.draw()
+	a.bridgeRightForwardEnded(id)
 }
 
 // onRightMove is the only path that mutates the tree mid-drag; the rest preview.
@@ -234,7 +252,7 @@ func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, 
 	if inTileCenter(n, p, r, sx, sy) {
 		common.kind = rightDragTileCenter
 		common.cursorInCenter = true
-		a.rightDrag = &common
+		a.setRightDrag(&common)
 		a.armRightCopy(p, r, n, sx, sy, intent)
 	} else {
 		common.kind = rightDragTileResize
@@ -245,7 +263,7 @@ func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, 
 		common.tileNewY = n.Y
 		common.tileNewW = n.W
 		common.tileNewH = n.H
-		a.rightDrag = &common
+		a.setRightDrag(&common)
 	}
 	a.draw()
 }
@@ -288,7 +306,7 @@ func (a *App) finishRightDrag(sx, sy float64) {
 	if rd == nil {
 		return
 	}
-	a.rightDrag = nil
+	a.setRightDrag(nil)
 
 	tile := rd.kind == rightDragTileCenter || rd.kind == rightDragTileResize
 	switch {

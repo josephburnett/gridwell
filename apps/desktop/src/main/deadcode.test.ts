@@ -43,6 +43,10 @@ const ALLOWED: Record<string, string> = {
     'the declared capture bound; captureAttempt and captureJpegBase64 default to it, so only the test that waits it out names it',
   'main/viewtrace.ts:WINDOW_SETTLE_MS':
     'the declared settle for a window drag\'s records; windowStateRecorder waits it, so only the test that ticks past it names it',
+  'main/forwardeddrag.ts:CURSOR_POLL_MS':
+    'the declared cursor poll; ForwardedDrag waits it, so only the test that reads what it scheduled names it',
+  'main/forwardeddrag.ts:forwardedDragStep':
+    'the step table ForwardedDrag reads; its rows are unit-tested directly',
   'main/capture.ts:MIRROR_INTERVAL_MS':
     'the declared mirror cadence; MirrorPump waits it, so only the test that reads what it scheduled names it',
   'main/capture.ts:CaptureAttempt':

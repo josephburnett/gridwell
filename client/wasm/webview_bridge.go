@@ -107,6 +107,12 @@ func (a *App) bridgeCall(g js.Value, method string, args js.Value, onOK func(js.
 	promise.Call("then", then, catch)
 }
 
+// bridgeRightForwardEnded tells main the gesture forward id armed is over, so
+// it stops following the view; see rightDragState.forward.
+func (a *App) bridgeRightForwardEnded(id int) {
+	a.bridgeVerb("rightForwardEnded", map[string]any{"id": id}, nil, nil)
+}
+
 // bridgeVerb is the one call shape: the fields become the verb's single
 // argument object, and false says there is no bridge, which a caller whose
 // promise carries a payload must answer for itself.
@@ -294,7 +300,7 @@ func (a *App) installWebviewListeners() {
 		}},
 		// The view says its last right press became a drag.
 		{"onRightForward", func(ev js.Value) {
-			a.onForwardedRightDown()
+			a.onForwardedRightDown(ev.Get("id").Int())
 		}},
 		// The rest of that drag, which the view keeps; a canvas duplicate is harmless.
 		{"onRightMoveForward", func(ev js.Value) {

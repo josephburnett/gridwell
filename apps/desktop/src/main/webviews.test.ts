@@ -326,6 +326,18 @@ test('a move re-keys the view onto the new pane: its bounds, no reload, and ever
   assert.equal(wc.closed, 1);
 });
 
+test('paneOf names the pane a live view serves, after a move too, and no pane for any other webContents', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS);
+  const wc = r.views[0].webContents! as unknown as WebContents;
+  assert.equal(r.reg.paneOf(wc), 'p1');
+  assert.equal(r.reg.paneOf(r.root as unknown as WebContents), undefined, 'the root is no live view');
+  r.reg.move('p1', 'w1:p1', BOUNDS, false);
+  assert.equal(r.reg.paneOf(wc), 'w1:p1');
+  await r.reg.remove('w1:p1');
+  assert.equal(r.reg.paneOf(wc), undefined, 'a removed view serves no pane');
+});
+
 test('a move into a hidden pane parks the view at the size it had, and one with no bounds keeps them', async () => {
   const r = rig();
   await r.reg.place('w1:p1', 'u1/9', SLACK, BOUNDS);

@@ -232,9 +232,10 @@ export class WebviewRegistry {
     return [...this.entries.keys()];
   }
 
-  holdsView(wc: WebContents): boolean {
-    for (const e of this.entries.values()) if (e.view.webContents === wc) return true;
-    return false;
+  // paneOf is the pane whose live view wc is, undefined for any other.
+  paneOf(wc: WebContents): string | undefined {
+    for (const e of this.entries.values()) if (e.view.webContents === wc) return e.paneId;
+    return undefined;
   }
 
   tileIdFor(paneId: string): string | undefined {

@@ -476,7 +476,7 @@ func (a *App) startCrumbDrag(p *pane.Pane, t *gridwellv1.Tile, nc navCrumb, bare
 		ox = float64(t.W) * min(max((sx-bandX)/bandW, 0), 1)
 		oy = float64(t.H) * min(max((sy-top-3)/side, 0), 1)
 	}
-	a.rightDrag = &rightDragState{kind: rightDragCarry, startX: sx, startY: sy, curX: sx, curY: sy}
+	a.setRightDrag(&rightDragState{kind: rightDragCarry, startX: sx, startY: sy, curX: sx, curY: sy})
 	a.dragging = &dragState{
 		originPaneID: p.ID,
 		crumb:        &nc,

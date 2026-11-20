@@ -627,7 +627,11 @@ of any button and from every frame, on the view's own input events and sends
 it with its pane and point (`EV.press`). Each lands in `focusToPane`, so a
 press over a page moves focus like every other press. A right-drag that starts over the view is the pane
 gesture it would be on the canvas, and a right-click without a drag is the
-page's own `contextmenu` (`urlview-preload.ts`); Gridwell pops no menu of
+page's own `contextmenu` (`urlview-preload.ts`). The view keeps that drag's
+moves and release, and main re-aims them at the page; on macOS the view hears
+none once the pointer is off it and says `mouseLeave`, so from there main reads
+the OS cursor each frame until the page says the gesture ended
+(`forwardeddrag.ts`); Gridwell pops no menu of
 its own over a page. A view whose webContents
 ends outside `remove()` — a page that called `window.close()` — is retired at
 once (`retire`): its entry goes, every later call for the pane is a no-op, and

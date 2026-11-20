@@ -89,6 +89,21 @@ export function viewShown(paneId: string, tileId: string, hidden: boolean): Trac
   return view(hidden ? 'hide' : 'show', paneId, tileId);
 }
 
+// A right-drag forwarded from a live view (forwardeddrag.ts): when main starts
+// following it, when the view says the pointer left it and main starts reading
+// the cursor, and how it ended, with the moves the view told and the clock told.
+export function dragFollowed(paneId: string): TraceEvent {
+  return view('drag-follow', paneId, '');
+}
+
+export function dragBlind(paneId: string): TraceEvent {
+  return view('drag-blind', paneId, '');
+}
+
+export function dragEnded(paneId: string, how: string, told: number, polled: number): TraceEvent {
+  return view('drag-end', paneId, how, { how, told: String(told), polled: String(polled) });
+}
+
 // The keyboard's owner given OS focus: a view's pane, '' for the root. cause
 // is what applied it, steal:<focusguard.GuardPhase> for a focus taken back;
 // took false is a focus the OS did not make true.

@@ -111,7 +111,8 @@ func (a *App) cancelGesture(relayed, onCanvas bool) bool {
 		return true
 	}
 	lr, d := a.leftResize, a.dragging
-	a.leftResize, a.rightDrag, a.dragging, a.band, a.stripScroll = nil, nil, nil, nil, nil
+	a.setRightDrag(nil)
+	a.leftResize, a.dragging, a.band, a.stripScroll = nil, nil, nil, nil
 	// Every press focuses its pane before it arms anything.
 	a.emit(traceevent.Cancel(a.tree.Focus, relayed))
 	if u.Dividers {
@@ -422,7 +423,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if mp, _, ok := a.menuPaneForPointer(); ok && args[0].Get("button").Int() == 2 {
 		if t, idx := a.menuTemplateAt(mp, sx, sy); t != nil {
 			args[0].Call("preventDefault")
-			a.rightDrag = &rightDragState{kind: rightDragCarry, startX: sx, startY: sy, curX: sx, curY: sy}
+			a.setRightDrag(&rightDragState{kind: rightDragCarry, startX: sx, startY: sy, curX: sx, curY: sy})
 			a.startTemplateDrag(mp, idx, t, sx, sy, rightDragIntent(modsOf(args[0]).Ctrl))
 			return nil
 		}

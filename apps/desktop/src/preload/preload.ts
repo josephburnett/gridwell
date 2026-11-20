@@ -53,6 +53,8 @@ const VERBS = {
   moveWebview: CH.move,
   // The keyboard's owner; see KeyboardArgs.
   setKeyboard: CH.setKeyboard,
+  // The gesture an onRightForward armed is over; see ForwardArgs.
+  rightForwardEnded: CH.rightForwardEnded,
   removeWebview: CH.remove,
   goBack: CH.goBack,
   reload: CH.reload,

@@ -22,3 +22,4 @@ apps/desktop/src/main/trace.ts:TRACE_FLUSH_MS | debounce | the trace flush's clo
 apps/desktop/src/main/quit.ts:setTimer | bound | QUIT_FLUSH_WATCHDOG_MS: quit goes ahead if the windows never close
 apps/desktop/src/main/capture.ts:finish | bound | settleWithin, the capture watchdog
 apps/desktop/src/main/capture.ts:setTimer | poll | MirrorPump: a live view does not say when its pixels change
+apps/desktop/src/main/forwardeddrag.ts:setTimer | poll | CURSOR_POLL_MS: a live view that said mouseLeave cannot tell where a forwarded right-drag's pointer is

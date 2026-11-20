@@ -26,6 +26,7 @@ export const CH = {
   setMirrored: 'gw:setMirrored', // MirroredArgs → void
   move: 'gw:move', // MoveArgs → void; rejects when fromPaneId holds no view
   setKeyboard: 'gw:setKeyboard', // KeyboardArgs → void: the keyboard's owner
+  rightForwardEnded: 'gw:rightForwardEnded', // ForwardArgs → void: the gesture that forward armed is over
   handOverTrace: 'gw:handOverTrace', // void → string: '' once the node holds
                                      // main's trace records, else why not.
   clientExit: 'gw:clientExit', // ClientExitArgs → void: from web/index.html's loader
@@ -44,7 +45,7 @@ export const EV = {
   frame: 'gw:frame', // FrameEvent
   nav: 'gw:nav',     // NavEvent
   press: 'gw:press', // ViewPress — a press over a live url view, from any of its frames
-  rightForward: 'gw:right-forward',   // nothing — the last right press became a drag
+  rightForward: 'gw:right-forward',   // ForwardArgs — the last right press became a drag
   rightMoveForward: 'gw:right-move-forward', // ForwardedRightdown — a move of that drag, which the view keeps
   rightUpForward: 'gw:right-up-forward',     // ForwardedRightdown — its release
   error: 'gw:error', // ErrorEvent — see ErrorEvent below
@@ -78,6 +79,13 @@ export interface ViewTouchScroll {
   sy: number;
   dx: number;
   dy: number;
+}
+
+// One right-drag main forwards from a live view: EV.rightForward names it,
+// and the page echoes it on CH.rightForwardEnded exactly once, when the
+// gesture it armed ends or at once when it armed none.
+export interface ForwardArgs {
+  id: number;
 }
 
 // Window-content coordinates, which equal the renderer's canvas pixels 1:1.

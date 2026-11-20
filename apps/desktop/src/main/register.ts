@@ -1,4 +1,4 @@
-import { ipcMain, BaseWindow, InputEvent, IpcMainEvent, IpcMainInvokeEvent, Menu, MenuItemConstructorOptions, MouseInputEvent, WebContents } from 'electron';
+import { ipcMain, screen, BaseWindow, IpcMainEvent, IpcMainInvokeEvent, Menu, MenuItemConstructorOptions, WebContents } from 'electron';
 import {
   CH,
   EV,
@@ -19,8 +19,10 @@ import {
   MoveArgs,
   KeyboardArgs,
   ClientExitArgs,
+  ForwardArgs,
 } from './ipc';
-import { forwardedDragStep, ipcRefusal, IpcSender, toContentPoint } from './viewutil';
+import { ipcRefusal, IpcSender } from './viewutil';
+import { ForwardedDrag } from './forwardeddrag';
 import { choiceMenuTemplate } from './contextmenu';
 import { WebviewRegistry } from './webviews';
 import { handOverTrace, logLine, trace } from './trace';
@@ -39,7 +41,7 @@ function safeSend(wc: WebContents, channel: string, payload: unknown): void {
 
 // registerWebviewIpc connects the renderer-facing IPC channels to the registry,
 // once, after the root window is created. origin is the client's, the one page
-// the root may hold; win is the window toContentPoint re-aims a drag's moves
+// the root may hold; win is the window a forwarded drag's points are mapped
 // against; onMirrored takes the mirror pump's pane set.
 export function registerWebviewIpc(
   registry: WebviewRegistry,
@@ -52,7 +54,7 @@ export function registerWebviewIpc(
   // sender viewutil.ipcRefusal refuses.
   const refused = (channel: string, who: IpcSender, e: IpcMainEvent | IpcMainInvokeEvent): string | null => {
     const frame = e.senderFrame;
-    const facts = { rootMainFrame: e.sender === rootWC && !!frame && !frame.parent, url: frame?.url ?? '', liveView: registry.holdsView(e.sender) };
+    const facts = { rootMainFrame: e.sender === rootWC && !!frame && !frame.parent, url: frame?.url ?? '', liveView: registry.paneOf(e.sender) !== undefined };
     const why = ipcRefusal(who, facts, origin);
     if (why) logLine('error', `[gridwell] ${channel} refused: ${why}`);
     return why;
@@ -71,17 +73,18 @@ export function registerWebviewIpc(
   };
 
   // A right press main sent as EV.press became a drag, which the view that
-  // took the press keeps, parked or not, and its page sees none of outside its
-  // bounds; see forwardedDragStep.
+  // took the press keeps; see ForwardedDrag.
+  const drags = new ForwardedDrag({
+    win,
+    send: (channel, payload) => safeSend(rootWC, channel, payload),
+    cursor: () => {
+      const c = screen.getCursorScreenPoint();
+      return { sx: c.x, sy: c.y };
+    },
+    trace,
+  });
   on(VIEW.rightdown, ({ sender: view }): void => {
-    safeSend(rootWC, EV.rightForward, {});
-    const onInput = (_e: unknown, ie: InputEvent): void => {
-      const m = ie as Partial<MouseInputEvent>;
-      const { to, over } = forwardedDragStep(ie.type, m.button);
-      if (to) safeSend(rootWC, to, toContentPoint(win, { sx: m.globalX ?? 0, sy: m.globalY ?? 0 }));
-      if (over) view.off('input-event', onInput);
-    };
-    view.on('input-event', onInput);
+    drags.start(view, registry.paneOf(view) ?? '');
   });
 
   // The registry injects an equivalent mouseWheel back into the view, because
@@ -112,6 +115,10 @@ export function registerWebviewIpc(
 
   handle(CH.setKeyboard, (a: KeyboardArgs): void => {
     registry.setKeyboard(a.paneId);
+  });
+
+  handle(CH.rightForwardEnded, (a: ForwardArgs): void => {
+    drags.pageEnded(a.id);
   });
 
   handle(CH.remove, async (a: RemoveArgs): Promise<FreezeResult> => {

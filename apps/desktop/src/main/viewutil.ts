@@ -1,4 +1,4 @@
-import { EV, type Bounds, type ForwardedRightdown, type ScreenPoint, type ViewPress } from './ipc';
+import { type Bounds, type ForwardedRightdown, type ScreenPoint, type ViewPress } from './ipc';
 
 // The decisions a live url view obeys, apart from webviews.ts so they run under
 // `node --test` with no Electron import.
@@ -237,15 +237,6 @@ export function viewPress(
   const button = DOM_BUTTON[ie.button ?? ''];
   if (ie.type !== 'mouseDown' || button === undefined) return null;
   return { paneId, button, ...toContentPoint(win, { sx: ie.globalX ?? 0, sy: ie.globalY ?? 0 }) };
-}
-
-// forwardedDragStep is what one of a live view's input events is to a
-// right-drag forwarded from it: the channel to re-aim it at the canvas on, and
-// whether the drag is over, at its release or a press after a lost one.
-export function forwardedDragStep(type: string, button?: string): { to?: string; over: boolean } {
-  if (type === 'mouseMove') return { to: EV.rightMoveForward, over: false };
-  if (type === 'mouseUp' && button === 'right') return { to: EV.rightUpForward, over: true };
-  return { over: type === 'mouseDown' };
 }
 
 // classifyRightPress returns true for a drag. urlview-preload.ts inlines the
