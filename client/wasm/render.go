@@ -397,6 +397,7 @@ func (a *App) draw() {
 	}
 
 	fillRectC(a.cctx, 0, 0, a.width, a.height, a.pal.Bg)
+	a.e2e.ghostPainted = a.e2e.ghostPainted[:0]
 
 	a.adoptPendingViews()
 	rects := a.layoutPanes()
@@ -455,6 +456,7 @@ func (a *App) draw() {
 			lerp(e.w, a.width-wsOutlinePx), lerp(e.h, h-wsOutlinePx))
 		a.cctx.Set("lineWidth", 1.0)
 	}
+	a.drawGhost()
 
 	// Both persisters derive from the live tree, armed by a fingerprint of what
 	// each would write: a draw is not a change, and a live tile repaints on the
@@ -614,32 +616,6 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					if n, ok := g.Tiles[a.ghost.outlineTile]; ok {
 						left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
 						a.drawFocusedTileOutline(a.cctx, left, top, float64(n.W)*cellSize, float64(n.H)*cellSize)
-					}
-				}
-				if a.ghost != nil && a.ghost.paneID == p.ID {
-					gcs := a.ghost.displayedCellSize
-					if gcs <= 0 {
-						gcs = cellSize
-					}
-					if _, back := a.ghost.Returning(0); !back {
-						a.drawGhostTile(a.ghost.tile, a.ghost.X, a.ghost.Y, gcs, r,
-							a.ghost.displayedFragmentation)
-					}
-					c := carryOf(a.ghost.carried)
-					for i := 1; i < len(c); i++ {
-						if _, back := a.ghost.Returning(i); back {
-							continue
-						}
-						dx, dy := c.Offset(i)
-						a.drawGhostTile(a.ghost.carried[i], a.ghost.X+float64(dx)*gcs,
-							a.ghost.Y+float64(dy)*gcs, gcs, r, a.ghost.displayedFragmentation)
-					}
-				}
-				if a.ghost != nil && a.ghost.homePaneID == p.ID {
-					for i, n := range a.ghost.carried {
-						if b, back := a.ghost.Returning(i); back {
-							a.drawGhostTile(n, b.X, b.Y, b.Cell, r, a.ghost.displayedFragmentation)
-						}
 					}
 				}
 			}
@@ -1074,11 +1050,35 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 	}
 }
 
+// drawGhost paints the drag's ghost once, over every pane and the bar,
+// because it follows the cursor wherever it goes; every live surface is
+// parked while it does (pane.ParkSurface).
+func (a *App) drawGhost() {
+	gh := a.ghost
+	if gh == nil {
+		return
+	}
+	c := carryOf(gh.carried)
+	for i := range max(len(gh.carried), 1) {
+		n, dx, dy := gh.tile, int64(0), int64(0)
+		if i > 0 {
+			n = gh.carried[i]
+			dx, dy = c.Offset(i)
+		}
+		x, y, cell := gh.X+float64(dx)*gh.displayedCellSize, gh.Y+float64(dy)*gh.displayedCellSize, gh.displayedCellSize
+		if b, back := gh.Returning(i); back {
+			x, y, cell = b.X, b.Y, b.Cell
+		}
+		a.drawGhostTile(n, x, y, cell, gh.displayedFragmentation)
+	}
+}
+
 // drawGhostTile is drawNodeWithPreview at near-zero fragmentation; over a
 // black hole it cross-fades into a trashcan. n is drawn at its own size in
 // cells of parentCellSize.
-func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, parentCellSize float64, r pane.Rect, frag float64) {
+func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, parentCellSize float64, frag float64) {
 	w, h := float64(n.W)*parentCellSize, float64(n.H)*parentCellSize
+	a.e2e.ghostPainted = append(a.e2e.ghostPainted, map[string]any{"id": n.Id, "x": x, "y": y, "w": w, "h": h})
 	fam := pane.TileFamily(n)
 	// Dashed means this is, or becomes, a link: it shows mid-drag which
 	// right-button mode is armed.

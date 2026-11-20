@@ -4,7 +4,6 @@
 package dragdrop
 
 import (
-	"cmp"
 	"math"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -471,7 +470,6 @@ func decideDrop(in DropInput) (DropAction, string) {
 
 // GhostPlan is how the in-flight drag ghost renders for a drop verdict.
 type GhostPlan struct {
-	PaneID         string  // pane whose coordinate space the ghost rests in
 	TargetCellSize float64 // size the ghost lerps toward
 	Fragmentation  float64 // 1 shatters into the trashcan
 	Forbidden      bool    // draw the no-entry badge
@@ -487,31 +485,29 @@ type GhostPlan struct {
 	Why string
 }
 
-// GhostPlanForDrop takes both pane ids and cell sizes because the ghost rests
-// in a different pane per verdict, and in the input the verdict was decided
-// on. The preview gathers no placement, so its ghost never wears a taken
-// cell: the commit does the overlap check and tells it.
-func GhostPlanForDrop(action DropAction, in DropInput,
-	originPaneID, targetPaneID string, srcCellSize, targetCellSize float64) GhostPlan {
+// GhostPlanForDrop takes both cell sizes because the ghost takes a different
+// one per verdict, and the input the verdict was decided on. The preview
+// gathers no placement, so its ghost never wears a taken cell: the commit
+// does the overlap check and tells it.
+func GhostPlanForDrop(action DropAction, in DropInput, srcCellSize, targetCellSize float64) GhostPlan {
 	forbidden := NoEntry(in)
 	switch action {
 	case DropDelete:
-		return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize * 0.2, Fragmentation: 1.0}
+		return GhostPlan{TargetCellSize: srcCellSize * 0.2, Fragmentation: 1.0}
 	case DropLink:
-		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize, Link: true}
+		return GhostPlan{TargetCellSize: targetCellSize, Link: true}
 	case DropPaste:
-		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize, Outline: true}
+		return GhostPlan{TargetCellSize: targetCellSize, Outline: true}
 	case DropTemplate:
-		return GhostPlan{PaneID: targetPaneID, TargetCellSize: srcCellSize, Link: in.CopiesAsLink, Outline: true}
+		return GhostPlan{TargetCellSize: srcCellSize, Link: in.CopiesAsLink, Outline: true}
 	case DropRejected:
 		if forbidden {
-			// Over the trashcan there is no target pane.
-			return GhostPlan{PaneID: cmp.Or(targetPaneID, originPaneID), TargetCellSize: srcCellSize,
+			return GhostPlan{TargetCellSize: srcCellSize,
 				Forbidden: true, Cursor: "not-allowed", Why: Told(in)}
 		}
-		return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize}
+		return GhostPlan{TargetCellSize: srcCellSize}
 	default: // DropMove / DropCopy
-		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize}
+		return GhostPlan{TargetCellSize: targetCellSize}
 	}
 }
 

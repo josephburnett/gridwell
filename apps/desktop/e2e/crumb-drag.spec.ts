@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { test, expect } from './fixtures';
 import type { GridwellDriver, PaneInfo } from './driver';
 import { homeEnv } from './homes';
-import { createText, createTile, getTileContent, tileAt } from './oracle';
+import { createText, createTile, getTile, getTileContent, tileAt } from './oracle';
 
 // Every crumb standing for a tile right-drags as its tile (Joe, 2026-11-18:
 // "It should right-click out to make a copy (or paste into a shell or text
@@ -281,4 +281,162 @@ test("a crumb's drag keeps the + a +, and a release there deletes nothing", asyn
   await expect.poll(() => notices(window)).toEqual(["a crumb's drag copies; it does not delete"]);
   expect(tileAt(await gw.getGrid(grid), 'door', cx, cy)?.id, 'the door is still there').toBe(door.id);
   expect(tileAt(await gw.getGrid(door.childGridId!), 'text', ix, iy)?.id, 'and what it holds').toBe(text.id);
+});
+
+// A crumb's drag shows its tile on the cursor, as a grid tile's does (Joe,
+// 2026-11-20: "when it dragging from the nav I don't see the tile on my
+// cursor. I should. Same. Experience."): over the bar row, over the pane the
+// crumb rides, whatever that pane shows, and over a grid, where it is the
+// size a right-drag of the same tile from that grid shows.
+
+type Pt = { x: number; y: number };
+type Painted = { id: string; x: number; y: number; w: number; h: number };
+
+// A right-drag pressed at from through each point of via, then Esc and the
+// release: what the ghost painted at each point once its size settled. One
+// page turn, for dragCrumb's reason.
+async function ghostAlong(window: Page, from: Pt, via: Pt[]): Promise<Painted[][]> {
+  return window.evaluate(
+    async ([f, pts]: [Pt, Pt[]]) => {
+      const t = (window as any).__gridwellTest;
+      const canvas = document.querySelector('canvas')!;
+      const fire = (type: string, p: Pt, buttons: number) =>
+        canvas.dispatchEvent(new MouseEvent(type, { clientX: p.x, clientY: p.y, buttons, button: 2, bubbles: true }));
+      const frame = () => new Promise((r) => requestAnimationFrame(() => r(null)));
+      const out: Painted[][] = [];
+      fire('mousedown', f, 2);
+      for (const p of pts) {
+        fire('mousemove', { x: (f.x + p.x) / 2, y: (f.y + p.y) / 2 }, 2);
+        fire('mousemove', p, 2);
+        let last = '';
+        for (let i = 0; i < 90; i++) {
+          await frame();
+          const now = JSON.stringify(t.ghost().painted.map((g: Painted) => [g.w, g.h]));
+          if (now === last && now !== '[]') break;
+          last = now;
+        }
+        out.push(t.ghost().painted);
+      }
+      (globalThis as any).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      fire('mouseup', pts[pts.length - 1], 0);
+      return out;
+    },
+    [from, via] as [Pt, Pt[]],
+  );
+}
+
+const crumbAt = async (gw: GridwellDriver, tileID: string): Promise<Pt> => {
+  const bar = await gw.bar();
+  const crumb = bar.segments.find((s) => s.tileID === tileID);
+  expect(crumb, `the bar has the crumb of ${tileID}`).toBeTruthy();
+  return { x: crumb!.x + crumb!.w / 2, y: bar.top + bar.height / 2 };
+};
+
+// Pane A descended into tile, B on the grid it sits on. The ghost of tile's
+// crumb is painted over the bar, over A and over B, and over B's cell it is
+// what a right-drag of tile from B paints there; nothing is written.
+async function ghostFollows(window: Page, gw: GridwellDriver, origin: string, grid: string, tile: string, aId: string, bId: string, cx: number, cy: number) {
+  const before = await getTile(origin, tile);
+  const bar = await gw.bar();
+  const a = await pane(gw, aId);
+  const b = await pane(gw, bId);
+  const from = await crumbAt(gw, tile);
+  const cell = await gw.cellCenter(bId, Math.round(b.cx), Math.round(b.cy) + 2);
+  const [overBar, overA, overB] = await ghostAlong(window, from, [
+    { x: from.x + 60, y: bar.top + bar.height / 2 },
+    { x: a.x + a.w / 2, y: a.y + a.h / 2 },
+    cell,
+  ]);
+  await gw.waitIdle();
+  for (const [where, painted] of [['the bar', overBar], ['the pane it rides', overA], ['a grid', overB]] as const) {
+    expect(painted.map((g) => g.id), `the ghost is painted over ${where}`).toEqual([tile]);
+  }
+  expect(overB[0].x <= cell.x && cell.x <= overB[0].x + overB[0].w, 'it follows the cursor').toBe(true);
+  await expect.poll(() => window.evaluate(() => (window as any).__gridwellTest.ghost().active), { message: 'Esc let it go' }).toBe(false);
+  const after = await getTile(origin, tile);
+  expect([after.version, after.gridId, after.x, after.y], 'nothing was written').toEqual([before.version, before.gridId, before.x, before.y]);
+
+  const [fromGrid] = await ghostAlong(window, await gw.cellCenter(bId, cx, cy), [cell]);
+  await gw.waitIdle();
+  expect(fromGrid.map((g) => [g.id, g.w, g.h]), "the same ghost as the grid tile's").toEqual(overB.map((g) => [g.id, g.w, g.h]));
+
+  expect(tileAt(await gw.getGrid(grid), after.kind ?? '', cx, cy)?.id, 'nothing moved').toBe(tile);
+  expect(await notices(window), 'nothing went wrong').toEqual([]);
+}
+
+// Two panes on home's grid with tile kind at its center; A descended into it.
+async function descendedInto(gw: GridwellDriver, origin: string, kind: string) {
+  await gw.enterSource('home');
+  const f = await gw.focused();
+  const grid = f.gridID;
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  const tile = kind === 'text' ? await createText(origin, grid, cx, cy, 'a text to carry\n') : await createTile(origin, grid, kind, cx, cy);
+  await gw.waitClientTileAt(f.id, cx, cy, tile.id);
+  await gw.splitFocusedPaneVertical();
+  const bId = (await gw.focused()).id;
+  const aId = (await gw.panes()).find((p) => p.id !== bId)!.id;
+  await gw.focusPane(await pane(gw, aId));
+  await gw.descendCell(cx, cy);
+  return { grid, cx, cy, tile: tile.id, aId, bId };
+}
+
+test("a text's crumb drag shows the text on the cursor, over the bar, its own pane and a grid", async ({ gw, window }) => {
+  const origin = new URL(window.url()).origin;
+  const d = await descendedInto(gw, origin, 'text');
+  await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).toBe(d.tile);
+  if (!(await gw.textareaInfo())) await gw.toggleTextMode();
+  await expect.poll(async () => (await gw.textareaInfo())?.tileID, { message: 'the raw editor is up' }).toBe(d.tile);
+  await ghostFollows(window, gw, origin, d.grid, d.tile, d.aId, d.bId, d.cx, d.cy);
+  await gw.focusPane(await pane(gw, d.aId));
+  expect((await gw.textareaInfo())?.tileID, 'the raw editor is back').toBe(d.tile);
+  await gw.toggleTextMode();
+  await expect.poll(() => gw.textareaInfo(), { message: 'rendered' }).toBeNull();
+  await ghostFollows(window, gw, origin, d.grid, d.tile, d.aId, d.bId, d.cx, d.cy);
+});
+
+test("a live url's crumb drag shows the url on the cursor, and the page comes back", async ({ electronApp, gw, window }) => {
+  const origin = new URL(window.url()).origin;
+  const marker = 'gwe2ecrumbghost';
+  const d = await descendedInto(gw, origin, 'url');
+  await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
+  await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?${marker}=1`);
+  await window.locator('#gw-url-form').evaluate((fm: HTMLFormElement) => fm.requestSubmit());
+  const live = () =>
+    electronApp.evaluate(({ webContents }, m) => webContents.getAllWebContents().filter((w) => w.getURL().includes(m)).length, marker);
+  await expect.poll(live, { timeout: 15_000 }).toBe(1);
+  await gw.waitIdle();
+  const shown = () => window.evaluate(() => (window as any).__gridwellTest.urlViews());
+  const views = await shown();
+  await ghostFollows(window, gw, origin, d.grid, d.tile, d.aId, d.bId, d.cx, d.cy);
+  expect(await live(), 'the same page').toBe(1);
+  await expect.poll(shown, { message: 'the view is shown as it was' }).toEqual(views);
+});
+
+test("a live shell's crumb drag shows the shell on the cursor", async ({ gw, window }) => {
+  const origin = new URL(window.url()).origin;
+  const d = await descendedInto(gw, origin, 'shell');
+  await gw.shellAttached();
+  await ghostFollows(window, gw, origin, d.grid, d.tile, d.aId, d.bId, d.cx, d.cy);
+});
+
+test("a level's band drag shows its workspace tile on the cursor", async ({ gw, window }) => {
+  const origin = new URL(window.url()).origin;
+  await gw.enterSource('home');
+  const f = await gw.focused();
+  const grid = f.gridID;
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  const ws = await createTile(origin, grid, 'workspace', cx, cy);
+  await gw.waitClientTileAt(f.id, cx, cy, ws.id);
+  await gw.descendCell(cx, cy);
+  await expect.poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth, { timeout: 15_000 }).toBe(1);
+  await expect.poll(async () => (await gw.focused()).gridID).toBe(grid);
+  await gw.splitFocusedPaneVertical();
+  const bId = (await gw.focused()).id;
+  const aId = (await gw.panes()).find((p) => p.id !== bId)!.id;
+  await gw.waitClientTileAt(bId, cx, cy, ws.id);
+  await expect.poll(async () => Number((await getTile(origin, ws.id)).version ?? 0), { message: 'the split is in the layout' }).toBeGreaterThan(0);
+  await gw.waitIdle();
+  await ghostFollows(window, gw, origin, grid, ws.id, aId, bId, cx, cy);
 });

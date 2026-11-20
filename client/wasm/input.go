@@ -686,8 +686,6 @@ func (a *App) advanceDragGhost(d *dragState, sx, sy float64) bool {
 		tile:              d.snapshotTile,
 		carried:           d.carried,
 		Formation:         anim.Formation{Flight: anim.Flight{X: d.originScreenX, Y: d.originScreenY}},
-		paneID:            d.originPaneID,
-		homePaneID:        d.originPaneID,
 		displayedCellSize: size,
 		targetCellSize:    size,
 		copySwatch:        d.copySwatch,

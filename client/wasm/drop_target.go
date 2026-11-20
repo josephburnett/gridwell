@@ -182,21 +182,16 @@ func (a *App) previewDrop(d *dragState, sx, sy float64) {
 	in, t, _, _ := a.dropInputAt(d, sx, sy, false /* placement */)
 
 	// The verdict picks the action and GhostPlanForDrop the styling, both in
-	// client/dragdrop. The ghost rests in a different pane per verdict, so
-	// feed all three candidate pane ids and sizes.
-	var targetPaneID string
+	// client/dragdrop.
 	var targetCellSize float64
 	if t != nil {
-		targetPaneID = t.pane.ID
 		targetCellSize = t.cellSize
 	}
-	plan := dragdrop.GhostPlanForDrop(dragdrop.DecideDrop(in), in,
-		d.originPaneID, targetPaneID, d.srcCellSize, targetCellSize)
+	plan := dragdrop.GhostPlanForDrop(dragdrop.DecideDrop(in), in, d.srcCellSize, targetCellSize)
 	a.ghost.why, a.ghost.outlinePane, a.ghost.outlineTile = plan.Why, "", ""
 	if plan.Outline {
 		a.ghost.outlinePane, a.ghost.outlineTile = t.pane.ID, t.tile.Id
 	}
-	a.ghost.paneID = plan.PaneID
 	a.ghost.targetCellSize = plan.TargetCellSize
 	a.ghost.targetFragmentation = plan.Fragmentation
 	a.ghost.forbidden = plan.Forbidden

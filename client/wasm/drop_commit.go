@@ -326,15 +326,13 @@ func (a *App) occupiedForDrop(gridID string, c dragdrop.Carry, x, y int64, vacat
 // landGhostAtCell lands the ghost on the drop target's cell. Move, link and
 // copy all use it, so the three cannot place the same drop differently.
 func (a *App) landGhostAtCell(t *dropTarget, dropX, dropY int64) {
-	a.landGhost(t.pane.ID, t.cellSize,
+	a.landGhost(t.cellSize,
 		t.originX+float64(dropX)*t.cellSize, t.originY+float64(dropY)*t.cellSize)
 }
 
-// landGhost snaps the ghost to the screen cell (toX, toY) as a tile of
-// paneID.
-func (a *App) landGhost(paneID string, cellSize, toX, toY float64) {
+// landGhost snaps the ghost to the screen cell (toX, toY) at cellSize.
+func (a *App) landGhost(cellSize, toX, toY float64) {
 	if a.ghost != nil {
-		a.ghost.paneID = paneID
 		if cellSize > 0 {
 			a.ghost.targetCellSize = cellSize
 		}
@@ -388,7 +386,6 @@ func (a *App) snapBackToOrigin(d *dragState) {
 	if a.ghost == nil {
 		return
 	}
-	a.ghost.paneID = d.originPaneID
 	if d.srcCellSize > 0 {
 		a.ghost.targetCellSize = d.srcCellSize
 	}

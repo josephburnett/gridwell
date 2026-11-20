@@ -38,6 +38,8 @@ type e2e struct {
 	selectionPainted map[string][]string
 	// crumbsSelected is the tiles whose bar crumbs last drew with it.
 	crumbsSelected []string
+	// ghostPainted is each ghost tile the last draw painted, in screen px.
+	ghostPainted []any
 	// oneShotsArmed and oneShotsLive are the evidence that no js.Func
 	// outlives its call; drawsArmed separates draws, whose count is the
 	// host's to decide.
@@ -869,6 +871,7 @@ func (a *App) thGhost(js.Value, []js.Value) any {
 		"carried":      carried,
 		"returning":    returning,
 		"why":          why,
+		"painted":      append([]any{}, a.e2e.ghostPainted...),
 	}
 }
 

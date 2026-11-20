@@ -40,7 +40,7 @@ func TestDecideDropOntoAPasteTarget(t *testing.T) {
 		if got != c.want || why != c.why || Told(in) != c.told {
 			t.Errorf("%s: %v %q told %q, want %v %q told %q", c.name, got, why, Told(in), c.want, c.why, c.told)
 		}
-		p := GhostPlanForDrop(got, in, "o", "t", 40, 40)
+		p := GhostPlanForDrop(got, in, 40, 40)
 		if refused := got == DropRejected; refused != p.Forbidden || refused && p.Why != why {
 			t.Errorf("%s: ghost %+v, want the badge naming %q", c.name, p, why)
 		}

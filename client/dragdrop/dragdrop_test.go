@@ -575,11 +575,8 @@ func TestCarryCopiesAsLink(t *testing.T) {
 
 func TestGhostPlanForDrop(t *testing.T) {
 	const (
-		origin = "origin"
-		target = "target"
-		doc    = "doc"
-		srcSz  = 50.0
-		tgtSz  = 80.0
+		srcSz = 50.0
+		tgtSz = 80.0
 	)
 	cases := []struct {
 		name      string
@@ -587,30 +584,29 @@ func TestGhostPlanForDrop(t *testing.T) {
 		forbidden bool
 		want      GhostPlan
 	}{
-		{"delete shrinks+fragments in origin", DropDelete, false,
-			GhostPlan{PaneID: origin, TargetCellSize: srcSz * 0.2, Fragmentation: 1.0}},
-		{"rejected forbidden cross-grid: no-entry in target", DropRejected, true,
-			GhostPlan{PaneID: target, TargetCellSize: srcSz, Forbidden: true, Cursor: "not-allowed"}},
-		{"rejected off-canvas: glide back in origin, no badge", DropRejected, false,
-			GhostPlan{PaneID: origin, TargetCellSize: srcSz}},
+		{"delete shrinks and fragments", DropDelete, false,
+			GhostPlan{TargetCellSize: srcSz * 0.2, Fragmentation: 1.0}},
+		{"rejected forbidden cross-grid: no-entry", DropRejected, true,
+			GhostPlan{TargetCellSize: srcSz, Forbidden: true, Cursor: "not-allowed"}},
+		{"rejected off-canvas: glide back, no badge", DropRejected, false,
+			GhostPlan{TargetCellSize: srcSz}},
 		{"move snaps to target cell", DropMove, false,
-			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
+			GhostPlan{TargetCellSize: tgtSz}},
 		{"copy snaps to target cell", DropCopy, false,
-			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
+			GhostPlan{TargetCellSize: tgtSz}},
 		// A cross-namespace left-drag previews as a link, or the source's
 		// survival after the drop would read as a surprise duplicate.
 		{"link snaps to target cell with the chain badge", DropLink, false,
-			GhostPlan{PaneID: target, TargetCellSize: tgtSz, Link: true}},
+			GhostPlan{TargetCellSize: tgtSz, Link: true}},
 		{"paste outlines the shell", DropPaste, false,
-			GhostPlan{PaneID: target, TargetCellSize: tgtSz, Outline: true}},
+			GhostPlan{TargetCellSize: tgtSz, Outline: true}},
 		// The copy swatch keeps its size over the tile it copies, which it
 		// outlines.
 		{"the copy swatch outlines the tile", DropTemplate, false,
-			GhostPlan{PaneID: target, TargetCellSize: srcSz, Outline: true}},
+			GhostPlan{TargetCellSize: srcSz, Outline: true}},
 	}
 	for _, c := range cases {
-		got := GhostPlanForDrop(c.action, DropInput{Forbidden: c.forbidden},
-			origin, target, srcSz, tgtSz)
+		got := GhostPlanForDrop(c.action, DropInput{Forbidden: c.forbidden}, srcSz, tgtSz)
 		if got != c.want {
 			t.Errorf("%s: GhostPlanForDrop = %+v, want %+v", c.name, got, c.want)
 		}
@@ -786,9 +782,8 @@ func TestFingerDoesNotMoveOrDeleteAFile(t *testing.T) {
 			}
 		}
 	}
-	// Over the trashcan there is no target pane, so the badge stays with the origin.
-	if p := GhostPlanForDrop(DropRejected, DropInput{Forbidden: true}, "a", "", 10, 0); p.PaneID != "a" || !p.Forbidden {
-		t.Errorf("a refused trashcan drop's ghost = %+v, want the origin pane with the badge", p)
+	if p := GhostPlanForDrop(DropRejected, DropInput{Forbidden: true}, 10, 0); !p.Forbidden {
+		t.Errorf("a refused trashcan drop's ghost = %+v, want the badge", p)
 	}
 }
 
@@ -813,7 +808,7 @@ func TestCopySwatchDrop(t *testing.T) {
 	}
 	link := over
 	link.CopiesAsLink = true
-	if p := GhostPlanForDrop(DropTemplate, link, "o", "t", 48, 80); !p.Link || !p.Outline {
+	if p := GhostPlanForDrop(DropTemplate, link, 48, 80); !p.Link || !p.Outline {
 		t.Errorf("a copy that links = %+v, want the link ghost outlining the tile", p)
 	}
 }
@@ -861,8 +856,8 @@ func TestAVisitCrumbMoves(t *testing.T) {
 	}
 	visit := base
 	visit.CarriesEphemeral = true
-	if p := GhostPlanForDrop(DropMove, visit, "o", "t", 40, 80); p.Link || p.Forbidden || p.PaneID != "t" {
-		t.Errorf("a visit's move ghost = %+v, want a plain ghost in the target pane", p)
+	if p := GhostPlanForDrop(DropMove, visit, 40, 80); p.Link || p.Forbidden {
+		t.Errorf("a visit's move ghost = %+v, want a plain ghost", p)
 	}
 	if forbid := visit; DecideDrop(forbid) != DropMove {
 		t.Errorf("a visit's move = %v, want DropMove", DecideDrop(forbid))
@@ -937,8 +932,8 @@ func TestACrumbIsNotDeleted(t *testing.T) {
 				t.Errorf("a crumb's tile on the trashcan, intent %v, ephemeral %v = %v (no entry %v, told %q), want refused with %q",
 					intent, eph, got, NoEntry(trash), Told(trash), CrumbNoDelete)
 			}
-			if p := GhostPlanForDrop(DropRejected, trash, "o", "", 40, 0); !p.Forbidden || p.Why != CrumbNoDelete || p.PaneID != "o" {
-				t.Errorf("its ghost = %+v, want the no-entry badge over %q in the origin pane", p, CrumbNoDelete)
+			if p := GhostPlanForDrop(DropRejected, trash, 40, 0); !p.Forbidden || p.Why != CrumbNoDelete {
+				t.Errorf("its ghost = %+v, want the no-entry badge over %q", p, CrumbNoDelete)
 			}
 		}
 	}
@@ -968,7 +963,7 @@ func TestEveryToldRefusalIsWorn(t *testing.T) {
 		{Started: true, TileID: "7", Intent: IntentCopy, OverDelete: true, FromCrumb: true},
 		{Started: true, TileID: "7", HasTarget: true, Forbidden: true},
 	} {
-		p := GhostPlanForDrop(DecideDrop(in), in, "o", "t", 40, 40)
+		p := GhostPlanForDrop(DecideDrop(in), in, 40, 40)
 		if p.Why != Told(in) || p.Forbidden != NoEntry(in) {
 			t.Errorf("%+v: ghost %+v, want why %q and no entry %v", in, p, Told(in), NoEntry(in))
 		}
@@ -1022,7 +1017,7 @@ func TestEveryDenialSaysWhy(t *testing.T) {
 		if Told(in) != c.told || NoEntry(in) != (c.told != "") {
 			t.Errorf("%s: told %q (no entry %v), want %q", c.name, Told(in), NoEntry(in), c.told)
 		}
-		p := GhostPlanForDrop(DropRejected, in, "o", "t", 40, 40)
+		p := GhostPlanForDrop(DropRejected, in, 40, 40)
 		if p.Forbidden != c.worn || p.Why != c.told {
 			t.Errorf("%s: ghost %+v, want badge %v over %q", c.name, p, c.worn, c.told)
 		}
