@@ -302,6 +302,9 @@ type DropInput struct {
 	// FromCrumb is a drag from a crumb (wsbar.ActionCrumbDrag), whose
 	// trashcan is refused (CrumbNoDelete).
 	FromCrumb bool
+	// MenuRefusal is menu.DropOn's reason a + menu swatch's release is
+	// refused, "" when it lands or says nothing.
+	MenuRefusal string
 }
 
 // FingerNoFile is why a finger's drag of a file or a directory onto another
@@ -431,6 +434,8 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropRejected, TakesNoDrop
 	case !in.HasTarget:
 		return DropRejected, noTarget
+	case in.FromMenu && in.MenuRefusal != "":
+		return DropRejected, in.MenuRefusal
 	case in.FromMenu:
 		return DropFromMenu, ""
 	case in.PasteTarget && in.Intent == IntentMove:

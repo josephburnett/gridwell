@@ -199,33 +199,40 @@ func (a *App) visitShellFromMenu(p *pane.Pane) {
 	a.visitEphemeralShell(p) // reports if there is nowhere to open
 }
 
-// commitMenuDrop resolves the menu drag at release. menu.DropOn
-// says what the release does; this gathers the facts and runs it. The
-// destination is the (t, dropX, dropY) the one gather produced for the verdict
-// that routed this call, so the create lands exactly where DecideDrop said it
-// may, and dropTargetAt owns what is legal.
-func (a *App) commitMenuDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
+// menuRelease gathers what menu.DropOn reads at (t, dropX, dropY), the
+// target dropInputAt resolved; the preview has no placement, so no cell is
+// taken.
+func (a *App) menuRelease(d *dragState, t *dropTarget, dropX, dropY int64, placement bool) menu.Release {
 	pr, isPrimitive := primitiveFor(d.item.primitive)
 	r := menu.Release{Target: t != nil, Disk: !d.item.isSwatch && isPrimitive && pr.disk}
 	if d.item.isSwatch {
 		r.Door = d.item.source
 	}
-	if r.Target {
-		// The target's grid is the open door's child when the cursor went
-		// into one, not the pane's own leaf grid.
+	if !r.Target {
+		return r
+	}
+	// The target's grid is the open door's child when the cursor went into
+	// one, not the pane's own leaf grid.
+	if placement {
 		r.Occupied = a.occupiedForDrop(t.gridID, dragdrop.Carry{{
 			W: max(d.snapshotTile.W, 1), H: max(d.snapshotTile.H, 1)}}, dropX, dropY, false)
-		r.SameNode = a.gridNodeNS(t.gridID) == d.menuNS
-		r.AcceptsTiles, r.TilesKnown = a.gridAcceptsTiles(t.gridID)
-		o := a.offerOn(t.gridID)
-		r.Directory, r.DiskWritable = o.Directory, o.Disk()
 	}
-	verdict, why := menu.DropOn(r)
+	r.SameNode = a.gridNodeNS(t.gridID) == d.menuNS
+	r.AcceptsTiles, r.TilesKnown = a.gridAcceptsTiles(t.gridID)
+	o := a.offerOn(t.gridID)
+	r.Directory, r.DiskWritable = o.Directory, o.Disk()
+	return r
+}
+
+// commitMenuDrop runs a menu drag's release that dragdrop.DecideDrop did not
+// refuse; a refusal menu.DropOn words was told there (DropInput.MenuRefusal).
+// The destination is the (t, dropX, dropY) the one gather produced for that
+// verdict, so the create lands exactly where it said it may.
+func (a *App) commitMenuDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
+	pr, isPrimitive := primitiveFor(d.item.primitive)
+	verdict, _ := menu.DropOn(a.menuRelease(d, t, dropX, dropY, true))
 	switch verdict {
 	case menu.DropSnapBack:
-		if why != "" {
-			a.reportErr(errsurface.Info, "menu", why)
-		}
 		a.cancelDragSnapBack(d)
 		return
 	case menu.DropLink:

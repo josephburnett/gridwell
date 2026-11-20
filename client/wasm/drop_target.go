@@ -12,6 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/paste"
 	"github.com/josephburnett/gridwell/client/scratch"
@@ -160,12 +161,14 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	if dragdrop.Moves(in) {
 		in.Forbidden = a.dropForbiddenForMove(d, t, in.MovesAsLink)
 	}
-	if !placement {
-		return in, t, 0, 0
+	if placement {
+		dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
+		in.SameCell = in.SameGrid && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
+		in.Occupied = a.occupiedForDrop(t.gridID, d.carry(), dropX, dropY, dragdrop.Moves(in))
 	}
-	dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
-	in.SameCell = in.SameGrid && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
-	in.Occupied = a.occupiedForDrop(t.gridID, d.carry(), dropX, dropY, dragdrop.Moves(in))
+	if d.fromMenu {
+		_, in.MenuRefusal = menu.DropOn(a.menuRelease(d, t, dropX, dropY, placement))
+	}
 	return in, t, dropX, dropY
 }
 

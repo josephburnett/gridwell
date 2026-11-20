@@ -135,7 +135,15 @@ test.describe('a swatch refused for what it is', () => {
     await gw.focusPane(dir);
     await gw.openMenu();
     const at = await gw.cellCenter(home.id, Math.round(home.cx), Math.round(home.cy));
-    await gw.dragCreateToScreen('file', at.x, at.y);
+    const item = (await gw.menu()).items.find((i) => !i.isSwatch && i.kind === 'file')!;
+    const m = window.mouse;
+    await m.move(item.x + item.w / 2, item.y + item.h / 2);
+    await m.down();
+    await m.move(item.x + item.w / 2 + 10, item.y + item.h / 2 + 10);
+    await m.move(at.x, at.y, { steps: 8 });
+    await expect.poll(() => ghostWhy(window), 'the ghost wears the reason').toBe('a file is made in a directory');
+    await m.up();
+    await gw.waitIdle();
     await expect.poll(() => told(window)).toEqual([['a file is made in a directory', 1]]);
     expect(await window.locator('#gw-url-modal.open').count(), 'no name is asked for').toBe(0);
     expect(await count(gw, home.gridID), 'nothing was made').toBe(n);

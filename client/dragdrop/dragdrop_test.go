@@ -954,6 +954,10 @@ func TestEveryDenialSaysWhy(t *testing.T) {
 			in.TileID, in.FromMenu, in.HasTarget, in.OverContent = "", true, false, true
 			return in
 		}, TakesNoDrop, true},
+		{"a swatch the menu refuses", func(in DropInput) DropInput {
+			in.TileID, in.FromMenu, in.MenuRefusal = "", true, "a file is made in a directory"
+			return in
+		}, "a file is made in a directory", true},
 		{"its own cell", func(in DropInput) DropInput { in.SameGrid, in.SameCell = true, true; return in }, "", false},
 		{"no pane at all", func(in DropInput) DropInput { in.HasTarget = false; return in }, "", false},
 		{"the copy swatch over no tile", func(in DropInput) DropInput {
