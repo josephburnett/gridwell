@@ -1,71 +1,119 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
+import { settle } from './cadence';
 
-// Hovering a door and wheeling zooms the grid inside the door, changing its
-// stored preview framing, which is a server fact, rather than the grid the pane
-// shows. Empty space is the escape hatch: a wheel there zooms the pane. The
-// spec crosses the whole seam: real wheel events, the classifier,
-// zoomtrans.DoorWheelView, the per-notch cache patch, the settle persister's
-// SetFraming, and server truth read back through GetGrid.
+// The wheel zooms the grid the pane shows wherever the cursor is, a door
+// included; alt + wheel zooms the grid inside the door under the cursor, its
+// framing on the door's row, and over anything else does nothing
+// (gesture.ClassifyWheel). The spec crosses the whole seam: real wheel events
+// with altKey, the classifier, zoomtrans.DoorWheelView, the settle
+// persister's SetFraming, and the rows read back through GetGrid.
 
-test('wheel over a door zooms the door; over empty space, the pane (#210)', async ({
-  gw,
-  window,
-}) => {
+const view = (p: { cx: number; cy: number; zoom: number }) => ({ cx: p.cx, cy: p.cy, zoom: p.zoom });
+
+async function altWheel(window: any, dy: number): Promise<void> {
+  await window.keyboard.down('Alt');
+  await window.mouse.wheel(0, dy);
+  await window.keyboard.up('Alt');
+}
+
+test('a wheel over a door zooms the pane and leaves the door row as it was', async ({ gw, window }) => {
+  const c = await gw.cadences();
   await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
+  await gw.openMenu();
+  await gw.dragCreate('door', cx, cy);
+  await gw.waitIdle();
+  await settle(window, c.framingSaveMs);
+  const before = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)!;
+  expect(before, 'door created').toBeTruthy();
 
+  const z0 = (await gw.focused()).zoom;
+  const pt = await gw.cellCenter(home.id, cx, cy);
+  await window.mouse.move(pt.x, pt.y);
+  await expect
+    .poll(async () => {
+      await window.mouse.wheel(0, -120);
+      return (await gw.focused()).zoom;
+    })
+    .toBeGreaterThan(z0);
+  await gw.waitIdle();
+  await settle(window, c.framingSaveMs);
+  const after = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)!;
+  expect(JSON.stringify(after), 'the door row is byte-identical').toBe(JSON.stringify(before));
+});
+
+test('alt + wheel over a door zooms its inside and leaves the pane where it was', async ({ gw, window }) => {
+  await gw.enterSource('home');
+  const home = await gw.focused();
+  const cx = Math.round(home.cx);
+  const cy = Math.round(home.cy);
   await gw.openMenu();
   await gw.dragCreate('door', cx, cy);
   const door = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)!;
   expect(door, 'door created').toBeTruthy();
   expect(Number(door.viewZoom ?? 0), 'a fresh door has no stored view yet').toBe(0);
+  await gw.waitIdle();
+  const paneBefore = view(await gw.focused());
 
-  const paneZoomBefore = (await gw.focused()).zoom;
-
-  // The door's persisted zoom rises above the unvisited default of 0.125, and
-  // the pane's own zoom is untouched.
-  const pt = await gw.cellCenter((await gw.focused()).id, cx, cy);
+  // The door's stored zoom rises above the unvisited default of 0.125, both
+  // ways of the wheel are the door's, and the pane's view is untouched.
+  const pt = await gw.cellCenter(home.id, cx, cy);
   await window.mouse.move(pt.x, pt.y);
-  for (let i = 0; i < 6; i++) {
-    await window.mouse.wheel(0, -120);
-  }
+  const doorZoom = async () =>
+    Number((tileAt(await gw.getGrid(home.gridID), 'door', cx, cy) as { viewZoom?: number | string })?.viewZoom ?? 0);
+  for (let i = 0; i < 6; i++) await altWheel(window, -120);
+  await expect.poll(doorZoom, { timeout: 10_000 }).toBeGreaterThan(0.125);
+  const zoomedIn = await doorZoom();
+  for (let i = 0; i < 3; i++) await altWheel(window, 120);
+  await expect.poll(doorZoom, { timeout: 10_000 }).toBeLessThan(zoomedIn);
+  await gw.waitIdle();
+  expect(view(await gw.focused()), "the pane's view did not move").toEqual(paneBefore);
+});
+
+test('alt + wheel over the background changes nothing', async ({ gw, window }) => {
+  const c = await gw.cadences();
+  await gw.enterSource('home');
+  const home = await gw.focused();
+  const cx = Math.round(home.cx);
+  const cy = Math.round(home.cy);
+  await gw.openMenu();
+  await gw.dragCreate('door', cx, cy);
+  await gw.waitIdle();
+  await settle(window, c.framingSaveMs);
+  const gridBefore = JSON.stringify(await gw.getGrid(home.gridID));
+  const paneBefore = view(await gw.focused());
+
+  const empty = await gw.cellCenter(home.id, cx + 3, cy + 2);
+  await window.mouse.move(empty.x, empty.y);
+  for (let i = 0; i < 6; i++) await altWheel(window, -120);
+  await gw.waitIdle();
+  await settle(window, c.framingSaveMs);
+  expect(view(await gw.focused()), "the pane's view did not move").toEqual(paneBefore);
+  expect(JSON.stringify(await gw.getGrid(home.gridID)), 'every row is byte-identical').toBe(gridBefore);
+
+  // The same alt wheels reach the canvas: over the door they zoom its inside.
+  const pt = await gw.cellCenter(home.id, cx, cy);
+  await window.mouse.move(pt.x, pt.y);
   await expect
     .poll(
       async () => {
-        const t = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy);
-        return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
+        await altWheel(window, -120);
+        const t = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy) as { viewZoom?: number | string };
+        return Number(t?.viewZoom ?? 0);
       },
       { timeout: 10_000 },
     )
-    .toBeGreaterThan(0.125);
-  expect((await gw.focused()).zoom, 'the pane zoom did not move').toBeCloseTo(paneZoomBefore, 5);
-
-  // A far corner cell with no tile: the pane zooms and the door's stored view
-  // stays as the hover-zoom left it.
-  const t1 = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)!;
-  const doorZoomAfter = Number(t1.viewZoom ?? 0);
-  const f = await gw.focused();
-  await window.mouse.move(f.x + f.w * 0.1, f.y + f.h * 0.9);
-  await window.mouse.wheel(0, -120);
-  await expect.poll(async () => (await gw.focused()).zoom).not.toBeCloseTo(paneZoomBefore, 5);
-  await gw.waitIdle();
-  const t2 = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)!;
-  expect(Number(t2.viewZoom ?? 0), 'the door view survived the pane zoom').toBeCloseTo(
-    doorZoomAfter,
-    5,
-  );
+    .toBeGreaterThan(0);
 });
 
-// The door wheel-zoom is cursor-anchored: the child point under the cursor
-// stays under it, so a burst of notches with the cursor off-center drifts the
-// stored view toward the cursor. The framing is a float center (view_cx,
-// view_cy) so that sub-cell drift survives to the store; quantizing the stored
-// origin to integer cells would round it away and the persisted framing would
-// never move.
-test('an off-center wheel burst drifts the door view toward the cursor (#219)', async ({
+// The door's zoom is cursor-anchored: the child point under the cursor stays
+// under it, so a burst of notches with the cursor off-center drifts the stored
+// view toward the cursor. The framing is a float center (view_cx, view_cy) so
+// that sub-cell drift survives to the store.
+test('an off-center alt + wheel burst drifts the door view toward the cursor (#219)', async ({
   gw,
   window,
 }) => {
@@ -89,9 +137,7 @@ test('an off-center wheel burst drifts the door view toward the cursor (#219)', 
   // the view center must chase it down and right.
   const pt = await gw.cellCenter((await gw.focused()).id, cx, cy);
   await window.mouse.move(pt.x + 18, pt.y + 18);
-  for (let i = 0; i < 10; i++) {
-    await window.mouse.wheel(0, -120);
-  }
+  for (let i = 0; i < 10; i++) await altWheel(window, -120);
   await expect
     .poll(
       async () => {
@@ -101,93 +147,4 @@ test('an off-center wheel burst drifts the door view toward the cursor (#219)', 
       { message: 'the stored center must drift toward the cursor', timeout: 10_000 },
     )
     .toBeGreaterThan(vx0 + vy0);
-});
-
-test('zoom OUT over a view-filling door goes to the pane; zoom IN stays the door (2026-08-13)', async ({
-  gw,
-  window,
-}) => {
-  await gw.enterSource('home');
-  const home = await gw.focused();
-  const cx = Math.round(home.cx);
-  const cy = Math.round(home.cy);
-  await gw.openMenu();
-  await gw.dragCreate('door', cx, cy);
-  // The redirect exists for the no-visible-outer-context state, so what this
-  // door has to be is bigger than gesture.DoorZoomOutRedirect of the content
-  // box — a coverage, not a cell count. Sizing it off the pane's own cell
-  // extent keeps that true at any screen size; a fixed 15x11 covered two
-  // thirds at 1280x800 and under half at 1600x1000.
-  const sized = await gw.focused();
-  const c00 = await gw.cellCenter(sized.id, cx, cy);
-  const c11 = await gw.cellCenter(sized.id, cx + 1, cy + 1);
-  const cellPx = Math.min(c11.x - c00.x, c11.y - c00.y);
-  const doorW = Math.ceil((sized.w * 0.9) / cellPx);
-  const doorH = Math.ceil((sized.h * 0.9) / cellPx);
-  const wx = cx - Math.floor(doorW / 2);
-  const wy = cy - Math.floor(doorH / 2);
-  const fresh = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)!;
-  const sigBefore = await window.evaluate(
-    (args) => JSON.stringify((window as any).__gridwellTest.gridSigs(args.gid)[args.id] ?? ''),
-    { gid: home.gridID, id: fresh.id },
-  );
-  const { moveTile } = await import('./oracle');
-  await moveTile(gw.origin, fresh.id, home.gridID, wx, wy, doorW, doorH);
-  // The resize is a foreign write, so wait until the client's cache applied the
-  // TileChanged event. Otherwise the wheel below still sees a 1x1 door, with
-  // near-zero coverage, and routes to the door zoom.
-  await expect
-    .poll(
-      () =>
-        window.evaluate(
-          (args) => JSON.stringify((window as any).__gridwellTest.gridSigs(args.gid)[args.id] ?? ''),
-          { gid: home.gridID, id: fresh.id },
-        ),
-      { timeout: 10_000 },
-    )
-    .not.toBe(sigBefore);
-  await gw.waitIdle();
-
-  const zoomedIn = (await gw.focused()).zoom;
-  const doorBefore = tileAt(await gw.getGrid(home.gridID), 'door', wx, wy)!;
-
-  // Wheeling out over the door's center is the redirect: the pane zooms out and
-  // the door's stored preview framing stays byte-identical.
-  const c = await gw.cellCenter((await gw.focused()).id, cx, cy);
-  await window.mouse.move(c.x, c.y);
-  // Repeat the gesture inside the poll, since a single synthetic wheel event is
-  // occasionally dropped under xvfb load. A broken redirect keeps the pane at 1
-  // however many notches arrive, so repeating stays discriminating.
-  await expect
-    .poll(async () => {
-      await window.mouse.wheel(0, 120);
-      return (await gw.focused()).zoom;
-    })
-    .toBeLessThan(zoomedIn);
-  await gw.waitIdle();
-  const doorAfter = tileAt(await gw.getGrid(home.gridID), 'door', wx, wy)!;
-  expect(doorAfter.viewZoom ?? 0, 'the door framing must not move on a redirected zoom-out').toEqual(
-    doorBefore.viewZoom ?? 0,
-  );
-  expect(doorAfter.version, 'no write rode the redirect').toEqual(doorBefore.version);
-
-  // The door-preview zoom still wins for zoom-in at any coverage.
-  const paneZoom = (await gw.focused()).zoom;
-  await window.mouse.move(c.x, c.y);
-  for (let i = 0; i < 4; i++) await window.mouse.wheel(0, -120);
-  await expect
-    .poll(
-      async () =>
-        Number(
-          (tileAt(await gw.getGrid(home.gridID), 'door', wx, wy) as {
-            viewZoom?: number | string;
-          })?.viewZoom ?? 0,
-        ),
-      { timeout: 10_000 },
-    )
-    .toBeGreaterThan(0.125);
-  expect((await gw.focused()).zoom, 'zoom-in over the door leaves the pane alone').toBeCloseTo(
-    paneZoom,
-    5,
-  );
 });

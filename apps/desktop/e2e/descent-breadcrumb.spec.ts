@@ -35,8 +35,8 @@ test('a chain crumb click ascends all the way to that level and keeps the round 
   expect(segs.length).toBe(1);
   expect(segs[0].anchor, 'the root crumb names the anchor').toBe(f0.anchor);
 
-  // Wheel-zoom over empty space, since over a door the wheel zooms the door.
-  // This gives the root a viewport the jump's landing can be compared against.
+  // Wheel-zoom, which gives the root a viewport the jump's landing can be
+  // compared against.
   const rootEmpty = await gw.cellCenter(f0.id, cx + 5, cy + 3);
   await window.mouse.move(rootEmpty.x, rootEmpty.y);
   await window.mouse.wheel(0, 120);

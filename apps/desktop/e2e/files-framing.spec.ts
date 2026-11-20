@@ -19,8 +19,8 @@ async function doorTo(gw: GridwellDriver, gridID: string, name: string): Promise
   return ((await gw.getGrid(gridID)).tiles ?? []).find((t: any) => t.altText === name);
 }
 
-// Zooms and pans the focused pane over cells no tile holds, so the wheel
-// zooms the pane rather than a door's preview (gesture.ClassifyWheel).
+// Zooms and pans the focused pane over cells no tile holds, so the pan's press
+// lands on no tile.
 async function reframe(gw: GridwellDriver, win: Page, notches = 1): Promise<PaneInfo> {
   const p = await gw.focused();
   const empty = await gw.cellCenter(p.id, Math.round(p.cx) + 1, Math.round(p.cy) + 1);

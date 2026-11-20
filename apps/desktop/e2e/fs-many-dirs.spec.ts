@@ -58,7 +58,6 @@ test('a directory of many directories reads each once and stays quiet', async ({
   // Zoomed out until every door is on screen, as the trace's pane was.
   const previewed = () => doors.filter((w) => reads.has(w.childGridId!)).length;
   for (let i = 0; i < 16 && previewed() < DIRS; i++) {
-    // Over an empty cell: a wheel over a door is not the grid's.
     const empty = await gw.cellCenter(here.id, -1, 0);
     await window.mouse.move(empty.x, empty.y);
     await window.mouse.wheel(0, 300);

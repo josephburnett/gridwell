@@ -94,16 +94,15 @@ var mouseOnly = []struct{ gesture, decision string }{
 	{"shift + left-drag on the background sweeps a band", ""},
 	{"ctrl or cmd + click descends in a split", ""},
 	{"ctrl + right-drag links", ""},
+	{"alt + wheel over a door zooms its inside", `"a finger has no alt, so a pinch always zooms the pane" (2026-11-20)`},
 }
 
 // record is what a verdict reads of a gesture: the button of its press,
-// whether shift was held and whether it moved, or the direction of its wheel,
-// and whether a finger made it.
+// whether shift was held and whether it moved, and whether a finger made it.
 type record struct {
 	button  int // -1 for a wheel
 	shift   bool
 	moved   bool
-	zoomOut bool
 	selects bool
 	touch   bool
 }
@@ -125,8 +124,6 @@ func recordOf(as []tg.Action) (record, error) {
 			released = true
 		case tg.MouseMove:
 			r.moved = true
-		case tg.Wheel:
-			r.zoomOut = a.DeltaY > 0
 		case tg.Select:
 			r.selects = true
 		}
@@ -200,7 +197,6 @@ func inGrid(in gesture.Input, click func() (string, bool), wheel gesture.WheelIn
 	return func(r record) (string, bool) {
 		switch {
 		case r.button < 0:
-			wheel.ZoomOut = r.zoomOut
 			return fmt.Sprint("wheel ", gesture.ClassifyWheel(wheel)), true
 		case r.button == 2:
 			return fmt.Sprint("right ", gesture.Classify(in)), true
@@ -234,7 +230,7 @@ func tileDrag(next verdict) verdict {
 }
 
 func deviceSurfaces() []surface {
-	door := gesture.WheelInput{OverEnterableDoor: true, DoorCoverage: 0.1}
+	door := gesture.WheelInput{OverEnterableDoor: true}
 	return []surface{
 		{"notice row", "input.go", shimOnly, "", false},
 		{"bar: + circle", "input.go", barRegion(wsbar.ZoneBar, 380), "", true},
@@ -259,14 +255,14 @@ func deviceSurfaces() []surface {
 		// Select there finds no armed drag, as the mouse's shift press arms none.
 		{"any pane mid-transition", "input.go", func(r record) (string, bool) {
 			if r.button < 0 {
-				return fmt.Sprint("wheel ", gesture.ClassifyWheel(gesture.WheelInput{ZoomOut: r.zoomOut})), true
+				return fmt.Sprint("wheel ", gesture.ClassifyWheel(gesture.WheelInput{})), true
 			}
 			return fmt.Sprint("press focuses, gesture ", gesture.PressStartsGesture(true)), true
 		}, "", true},
 		{"live content", "input.go", func(r record) (string, bool) {
 			switch {
 			case r.button < 0:
-				return fmt.Sprint("wheel ", gesture.ClassifyWheel(gesture.WheelInput{TextFocused: true, InContentBox: true, ZoomOut: r.zoomOut})), true
+				return fmt.Sprint("wheel ", gesture.ClassifyWheel(gesture.WheelInput{TextFocused: true, InContentBox: true})), true
 			case r.button == 0 && !r.moved:
 				return fmt.Sprint("land ", gesture.Land(gesture.SurfaceRawText, true)), true
 			}

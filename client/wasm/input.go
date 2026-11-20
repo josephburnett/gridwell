@@ -13,7 +13,6 @@ import (
 	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
@@ -248,8 +247,9 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	args[0].Call("preventDefault")
 	dy := args[0].Get("deltaY").Float()
 	sx, sy := mouseXY(args[0], a.canvas)
+	alt := args[0].Get("altKey").Truthy()
 	if mp, _, ok := a.menuPaneForPointer(); ok && gesture.ClassifyWheel(gesture.WheelInput{
-		OverMenu: a.pointInMenu(mp, sx, sy)}) == gesture.WheelScrollMenu {
+		OverMenu: a.pointInMenu(mp, sx, sy), Alt: alt}) == gesture.WheelScrollMenu {
 		if a.menu.ScrollStrip(dy, a.menuLayoutFor(mp)) {
 			a.scheduleDraw(traceevent.WhyWheel)
 		}
@@ -260,7 +260,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	if bx, top, bw, barOK := a.bottomBarRect(); barOK {
 		if zone := wsbar.Where(sx, sy, bx, top, bw); zone != wsbar.ZoneOutside {
 			fp := a.tree.FocusedPane()
-			if fp != nil && gesture.ClassifyWheel(gesture.WheelInput{Zone: zone, TextFocused: fp.ContentID() != ""}) == gesture.WheelZoomFocused {
+			if fp != nil && gesture.ClassifyWheel(gesture.WheelInput{Zone: zone, TextFocused: fp.ContentID() != "", Alt: alt}) == gesture.WheelZoomFocused {
 				fr := a.paneRectByID(fp.ID)
 				a.wheelZoomPaneAt(fp, fr, dy, fr.X+fr.W/2, fr.Y+fr.H/2)
 			}
@@ -273,17 +273,10 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	}
 	// gesture.ClassifyWheel routes; this handler only resolves the impure facts.
 	var hoverDoor *gridwellv1.Tile
-	doorCoverage := 0.0
 	ps, shown := p.Screen(r)
 	if shown && p.ContentID() == "" {
 		if t := a.tileAtScreen(p, r, sx, sy); t != nil && rpc.IsDoorKind(t.Kind) && t.ChildGridId != "" {
 			hoverDoor = t
-			x0, y0 := ps.CellToScreen(float64(t.X), float64(t.Y))
-			x1, _ := ps.CellToScreen(float64(t.X)+1, float64(t.Y))
-			cell := x1 - x0
-			b := panebox.ContentBox(r, paneBorderPx)
-			doorCoverage = gesture.RectCoverage(
-				x0, y0, float64(t.W)*cell, float64(t.H)*cell, b.X, b.Y, b.W, b.H)
 		}
 	}
 	switch gesture.ClassifyWheel(gesture.WheelInput{
@@ -293,8 +286,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		InContentBox:      pointInPaneContent(r, sx, sy),
 		TextModeRendered:  p.TextMode == rpc.TextModeRendered,
 		OverEnterableDoor: hoverDoor != nil,
-		ZoomOut:           dy > 0,
-		DoorCoverage:      doorCoverage,
+		Alt:               alt,
 	}) {
 	case gesture.WheelSwallow:
 		// A live URL view scrolls itself; a stray wheel must not zoom the pane.
@@ -308,9 +300,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	case gesture.WheelIgnore:
 		return nil
 	case gesture.WheelZoomDoor:
-		// The wheel zooms the grid inside the hovered door, its stored preview
-		// framing, not the grid the pane shows. The settle persister posts one
-		// framing write per tile at flush.
+		// The settle persister posts one framing write per tile at flush.
 		x0, y0 := ps.CellToScreen(float64(hoverDoor.X), float64(hoverDoor.Y))
 		x1, _ := ps.CellToScreen(float64(hoverDoor.X)+1, float64(hoverDoor.Y))
 		parentCell := x1 - x0

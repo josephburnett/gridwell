@@ -1105,6 +1105,16 @@ These were decided deliberately. Do not reverse one without a new decision.
   keeps no framing until the user frames it. The settled view is the
   frame's: a navigation lands it, a framing write takes it, and a split's
   copy carries it (`pane.Frame.FramingWrite`).
+- The wheel zooms the grid the pane shows, wherever the cursor is, a door
+  included (Joe, 2026-11-20: "I would like zoom *through* a grid tile to
+  stop happening. ... I would still like to be able to do it but with a key
+  modifier. ... And in that mode we *only* zoom tiles not the grid."). Alt +
+  wheel (option on macOS) zooms the grid inside the door under the cursor,
+  its framing on the door's row, and nothing else, so over anything but a
+  door, the bar included, it does nothing. Alt, because ctrl + wheel is
+  what a trackpad pinch sends, shift is the select key, and ctrl and cmd
+  are the split's. A finger has no alt, so a pinch always zooms the pane
+  (`gesture.ClassifyWheel`).
 - Pane closing is progressive crush: drag-through with red warning.
 - The rendered view is a sanitized HTML overlay. Task-list checkboxes are
   the one interactive control; everything else is read-only.

@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
+import { settle } from './cadence';
 
 // The bottom bar sits in always-reserved layout, a full-width band across the
 // window's bottom, and rides the focused pane inside it. It carries the one nav
@@ -113,11 +114,27 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   await gw.leaveWorkspace();
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
 
-  // A wheel over the band zooms the current pane on its center, which is the
-  // escape hatch for door-tiled grids.
-  const zBefore = (await gw.focused()).zoom;
+  // Alt + wheel over the band zooms nothing, since alt zooms no grid: the
+  // focused pane's view and its grid's rows stay byte-identical.
+  const c = await gw.cadences();
   const b3 = await bar(window);
   await window.mouse.move(b3.left + b3.width / 2, b3.top + b3.height / 2);
+  await settle(window, c.framingSaveMs);
+  const viewOf = (p: { cx: number; cy: number; zoom: number }) => ({ cx: p.cx, cy: p.cy, zoom: p.zoom });
+  const paneBefore = viewOf(await gw.focused());
+  const gridBefore = JSON.stringify(await gw.getGrid(rootGrid));
+  for (let i = 0; i < 4; i++) {
+    await window.keyboard.down('Alt');
+    await window.mouse.wheel(0, -120);
+    await window.keyboard.up('Alt');
+  }
+  await gw.waitIdle();
+  await settle(window, c.framingSaveMs);
+  expect(viewOf(await gw.focused()), "alt + wheel over the bar left the pane's view").toEqual(paneBefore);
+  expect(JSON.stringify(await gw.getGrid(rootGrid)), 'every row is byte-identical').toBe(gridBefore);
+
+  // A plain wheel over the band zooms the current pane on its center.
+  const zBefore = (await gw.focused()).zoom;
   await window.mouse.wheel(0, -120);
   await expect.poll(async () => (await gw.focused()).zoom).not.toBeCloseTo(zBefore, 5);
 });
