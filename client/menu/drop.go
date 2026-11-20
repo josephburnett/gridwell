@@ -1,23 +1,25 @@
 package menu
 
+import "github.com/josephburnett/gridwell/client/dragdrop"
+
 // What a menu drag's release does. Every swatch rides the same drag, so one
-// verdict answers for every one of them, and a release that creates nothing
-// still says why.
+// verdict answers for every one of them, and a release that refuses what it
+// asked says why, in the words a tile's drag uses (dragdrop.Told).
 
 type Drop int
 
 const (
 	// DropSnapBack returns the ghost to its swatch and leaves the menu open.
 	DropSnapBack Drop = iota
-	// DropRefuse is a primitive over another node's grid: the swatch was gated
-	// by the menu's node, so it refuses visibly rather than snapping back with
-	// no reason given.
-	DropRefuse
 	// DropLink places a door to another namespace onto the door's root grid.
 	DropLink
 	// DropCreate creates the primitive the swatch names.
 	DropCreate
 )
+
+// OtherNode is why a primitive over another node's grid is refused: the
+// swatch was gated by the menu's node.
+const OtherNode = "this menu belongs to another node — drop into a grid on that node, or open the menu here"
 
 // Release is the world state a drop reads. The caller resolves every field
 // against the destination the drag-preview already settled on, so the create
@@ -32,10 +34,10 @@ type Release struct {
 	// Enterable is sourcehealth.Classify == Enterable. DropOn reads it on the
 	// door arm alone, so the caller may leave it false elsewhere.
 	Enterable bool
-	// AcceptsTiles is the destination's Grid.accepts_tiles. Unknown is false:
-	// minting into a grid that may refuse the link would show a tile
-	// the next read takes back.
-	AcceptsTiles bool
+	// AcceptsTiles is the destination's Grid.accepts_tiles, TilesKnown
+	// whether its grid is read. A door needs it known: minting into a grid
+	// that may refuse the link would show a tile the next read takes back.
+	AcceptsTiles, TilesKnown bool
 	// SameNode is whether the destination belongs to the node whose menu
 	// offered the swatch.
 	SameNode bool
@@ -46,20 +48,27 @@ type Release struct {
 }
 
 // DropOn asks the destination before the swatch, because a drop with nowhere
-// to land is a snap-back whatever was dragged.
-func DropOn(r Release) Drop {
+// to land is a snap-back whatever was dragged. why is the refusal told, ""
+// when it says nothing.
+func DropOn(r Release) (d Drop, why string) {
+	refuses := r.TilesKnown && !r.AcceptsTiles
 	switch {
-	case !r.Target, r.Occupied:
-		return DropSnapBack
+	case !r.Target:
+		return DropSnapBack, ""
+	case r.Occupied:
+		return DropSnapBack, dragdrop.CellTaken
+	case r.Door && refuses:
+		return DropSnapBack, dragdrop.TakesNoTiles
+	case r.Door && r.Enterable && r.AcceptsTiles:
+		return DropLink, ""
 	case r.Door:
-		if r.Enterable && r.AcceptsTiles {
-			return DropLink
-		}
-		return DropSnapBack
+		return DropSnapBack, ""
 	case !r.SameNode:
-		return DropRefuse
+		return DropSnapBack, OtherNode
+	case refuses:
+		return DropSnapBack, dragdrop.TakesNoTiles
 	case r.Disk && !r.DiskWritable:
-		return DropSnapBack
+		return DropSnapBack, ""
 	}
-	return DropCreate
+	return DropCreate, ""
 }

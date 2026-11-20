@@ -215,20 +215,19 @@ func (a *App) commitMenuDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 		r.Occupied = a.occupiedForDrop(t.gridID, dragdrop.Carry{{
 			W: max(d.snapshotTile.W, 1), H: max(d.snapshotTile.H, 1)}}, dropX, dropY, false)
 		r.SameNode = a.gridNodeNS(t.gridID) == d.menuNS
-		r.AcceptsTiles, _ = a.gridAcceptsTiles(t.gridID)
+		r.AcceptsTiles, r.TilesKnown = a.gridAcceptsTiles(t.gridID)
 		r.DiskWritable = a.offerOn(t.gridID).Disk()
 		if r.Door {
 			st, classified := sourcehealth.Classify(d.item.source)
 			r.Enterable = classified && st == sourcehealth.Enterable
 		}
 	}
-	switch menu.DropOn(r) {
+	verdict, why := menu.DropOn(r)
+	switch verdict {
 	case menu.DropSnapBack:
-		a.cancelDragSnapBack(d)
-		return
-	case menu.DropRefuse:
-		a.reportErr(errsurface.Info, "menu",
-			"this menu belongs to another node — drop into a grid on that node, or open the menu here")
+		if why != "" {
+			a.reportErr(errsurface.Info, "menu", why)
+		}
 		a.cancelDragSnapBack(d)
 		return
 	case menu.DropLink:

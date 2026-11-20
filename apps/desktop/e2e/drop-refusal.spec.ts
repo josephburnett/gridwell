@@ -80,3 +80,19 @@ test('a drop onto a rendered text is refused with the reason, worn under the bad
   expect([at.gridId, at.x, at.y], 'the tile did not move').toEqual([moved.gridId, moved.x, moved.y]);
   expect(((await gw.getGrid(f.gridID)).tiles ?? []).length, 'nothing was made').toBe(n);
 });
+
+test('a swatch dropped onto a taken cell is refused with the reason', async ({ gw, window }) => {
+  const origin = new URL(window.url()).origin;
+  await gw.enterSource('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  const a = await createText(origin, f.gridID, cx, cy, 'a');
+  await gw.waitClientTileAt(f.id, cx, cy, a.id);
+  const n = ((await gw.getGrid(f.gridID)).tiles ?? []).length;
+
+  await gw.openMenu();
+  await gw.dragCreate('markdown', cx, cy);
+  await expect.poll(() => notices(window)).toEqual(['that cell is taken']);
+  expect(((await gw.getGrid(f.gridID)).tiles ?? []).length, 'nothing was made').toBe(n);
+});
