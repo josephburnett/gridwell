@@ -805,7 +805,7 @@ func (a *App) fetchGrid(id string) <-chan struct{} { return a.fetchGridFor(id, f
 
 // fetchGridFor is fetchGrid, for a door's preview when preview is set.
 func (a *App) fetchGridFor(id string, preview bool) <-chan struct{} {
-	if id == "" {
+	if !namesRow(id) {
 		return nil
 	}
 	// An undeclared namespace is never asked: the latch stands in for the answer.
@@ -854,7 +854,7 @@ func (a *App) fetchLinkTarget(tileID string) {
 }
 
 func (a *App) readTileByID(tileID string, surfaces func(inflight.Verdict) bool) {
-	if tileID == "" {
+	if !namesRow(tileID) {
 		return
 	}
 	// An undeclared namespace is not asked; see fetchGrid.

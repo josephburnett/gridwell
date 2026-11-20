@@ -925,7 +925,7 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 // after a fresher one, and never asks for bytes this client's own write is
 // about to file.
 func (a *App) fetchTileContent(tileID string, again bool) {
-	if tileID == "" {
+	if !namesRow(tileID) {
 		return
 	}
 	if _, ok := a.c.TileContent(tileID); (ok && !again) || a.c.Writing(tileID) {

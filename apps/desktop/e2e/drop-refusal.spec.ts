@@ -21,8 +21,7 @@ const told = async (window: Page): Promise<[string, number][]> =>
 const count = async (gw: GridwellDriver, grid: string): Promise<number> =>
   ((await gw.getGrid(grid)).tiles ?? []).length;
 
-// The drop's own notices, whatever else the panes report: a connection's
-// health, a pane on the files.
+// The drop's own notices, whatever else a broken connection's health says.
 const toldDrop = async (window: Page): Promise<[string, number][]> =>
   ((await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? [])
     .filter((n: any) => n.source === 'drop')
@@ -151,7 +150,7 @@ test.describe('a swatch refused for what it is', () => {
     await expect.poll(() => ghostWhy(window), 'the ghost wears the reason').toBe('a file is made in a directory');
     await m.up();
     await gw.waitIdle();
-    await expect.poll(() => toldDrop(window)).toEqual([['a file is made in a directory', 1]]);
+    await expect.poll(() => told(window)).toEqual([['a file is made in a directory', 1]]);
     expect(await window.locator('#gw-url-modal.open').count(), 'no name is asked for').toBe(0);
     expect(await count(gw, home.gridID), 'nothing was made').toBe(n);
     expect(fs.readdirSync(ROOT).sort(), 'nothing on disk').toEqual(before);
@@ -187,7 +186,7 @@ test.describe('a swatch refused for what it is', () => {
     await gw.openMenu();
     const at = await gw.cellCenter(dir.id, 2, 0);
     await gw.dragCreateToScreen('file', at.x, at.y);
-    await expect.poll(() => toldDrop(window)).toEqual([['this directory cannot be written', 1]]);
+    await expect.poll(() => told(window)).toEqual([['this directory cannot be written', 1]]);
     expect(await window.locator('#gw-url-modal.open').count(), 'no name is asked for').toBe(0);
     expect(await count(gw, inside.gridID), 'nothing was made').toBe(1);
     expect(fs.readdirSync(ROOT).sort(), 'nothing on disk').toEqual(before);
@@ -225,7 +224,7 @@ test.describe('a swatch refused for what it is', () => {
       await gw.openMenu();
       const at = await gw.cellCenter(dir.id, 2, 0);
       await gw.dragCreateToScreen('file', at.x, at.y);
-      await expect.poll(() => toldDrop(window)).toEqual([['this directory cannot be written', 1]]);
+      await expect.poll(() => told(window)).toEqual([['this directory cannot be written', 1]]);
       expect(await window.locator('#gw-url-modal.open').count(), 'no name is asked for').toBe(0);
       expect(fs.readdirSync(shut), 'nothing on disk').toEqual([]);
 

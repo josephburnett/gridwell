@@ -21,6 +21,9 @@ func (a *App) deadNamespace(id string) bool {
 	return deadlink.Dead(id, a.sources, a.nodeID())
 }
 
+// namesRow is whether id can be a row's: every row's is qualified, and a ghost's ("", onDisk) is not.
+func namesRow(id string) bool { return rpc.UUIDOf(id) != "" }
+
 // deadLink reports that a tile's link is dead at some hop (deadlink.DeadTile):
 // the one thing the renderer, the descent guard and the fetch paths all read.
 func (a *App) deadLink(n *gridwellv1.Tile) bool {
@@ -35,11 +38,8 @@ func (a *App) answeredDead(id string) bool {
 }
 
 // gridWritable reports Grid.writable, whether the grid's bodies take edits,
-// and whether that is known. Both grid facts travel on the grid, because a
-// uuid lookup against the local source list cannot answer for a remote
-// source reached through a connection. An uncached grid answers (false,
-// false), never a guess, and each caller picks its own default where the
-// reason is visible.
+// and whether that is known: an uncached grid answers (false, false), never
+// a guess, and each caller picks its own default where the reason is visible.
 func (a *App) gridWritable(gridID string) (writable, known bool) {
 	g, ok := a.gridMeta(gridID)
 	return g.GetWritable(), ok

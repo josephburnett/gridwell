@@ -97,6 +97,15 @@ test('ordinary use does no work nobody asked for', async ({ gw, home, window }, 
     await expect
       .poll(() => window.evaluate((id: string) => (window as any).__gridwellTest.panes().find((p: any) => p.id === id).tileIds.length, here.id))
       .toBeGreaterThan(here.tileIds.length);
+    // The file swatch's ghost is no row and asks for nothing.
+    await gw.openMenu();
+    const item = (await gw.menu()).items.find((i) => !i.isSwatch && i.kind === 'file')!;
+    await window.mouse.move(item.x + item.w / 2, item.y + item.h / 2);
+    await window.mouse.down();
+    await window.mouse.move(here.x + here.w / 2, here.y + here.h / 2, { steps: 8 });
+    await window.keyboard.press('Escape');
+    await window.mouse.up();
+    expect((await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? [], 'nothing said').toEqual([]);
     await gw.ascendViaCrumb();
   });
 
