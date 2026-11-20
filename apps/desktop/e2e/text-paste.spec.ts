@@ -2,7 +2,8 @@ import type { Page } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test, expect } from './fixtures';
-import { createText, createTile, getTile, getTileContent } from './oracle';
+import { createText, createTile, getTile, getTileContent, tileAt } from './oracle';
+import { settle } from './cadence';
 import type { GridwellDriver, PaneInfo } from './driver';
 import { makeRunDir } from './homes';
 
@@ -10,8 +11,10 @@ import { makeRunDir } from './homes';
 // dropped tile's reference where the pointer is, through the editor, so the
 // save claims the version and bumps it once (Joe, 2026-11-16). A left-drop is
 // refused with the reason and writes nothing, a rendered pane takes no paste,
-// and a text that takes no edits refuses with its reason. A reference clicked
-// out of a live tile opens the place it names below.
+// and a text that takes no edits refuses with its reason. A paste that lands
+// moves pane focus to its pane, so typing goes on after the reference (Joe,
+// 2026-11-20). A reference clicked out of a live tile opens the place it
+// names below.
 
 const ROOT = makeRunDir();
 test.use({ filesRoots: [{ root: ROOT, label: 'code' }] });
@@ -77,13 +80,16 @@ test('a tile right-dropped on a raw text pane lands its reference where the poin
   const pasted = await getTile(origin, s.pasted.id);
   expect([pasted.gridId, pasted.x, pasted.y], 'the dropped tile did not move').toEqual([s.pasted.gridId, s.pasted.x, s.pasted.y]);
   expect((await gw.focused()).id, 'the text pane took focus').toBe(s.bId);
+  await window.keyboard.type(' typed');
+  await expect.poll(() => getTileContent(origin, s.text.id), { message: 'typing went on after the reference', timeout: 10_000 })
+    .toBe(BODY + ref + ' typed');
 
   // A rendered pane takes no paste.
   await gw.toggleTextMode();
   await gw.focusPane((await gw.panes()).find((p: PaneInfo) => p.id === s.aId)!);
   await dropAt(gw, window, s.aId, s.cx + 1, s.cy, at.x, at.y, 'right');
   await gw.waitIdle();
-  expect(await getTileContent(origin, s.text.id), 'a rendered pane took nothing').toBe(BODY + ref);
+  expect(await getTileContent(origin, s.text.id), 'a rendered pane took nothing').toBe(BODY + ref + ' typed');
   await expect.poll(() => notices(window), { message: 'and says why' }).toContain('nothing here takes a drop');
 
   // The reference, clicked in the rendered view, opens the tile it names in
@@ -145,4 +151,42 @@ test('a text that takes no edits refuses a paste with its reason', async ({ gw, 
   await expect.poll(() => notices(window), { message: 'the paste was refused with the reason' })
     .toContain('locked.txt cannot be written: permission denied');
   expect(fs.readFileSync(file, 'utf8')).toBe('hands off\n');
+});
+
+test('a paste inside a workspace tile moves the focus its layout keeps', async ({ gw, window }) => {
+  const origin = new URL(window.url()).origin;
+  await gw.enterSource('home');
+  const f = await gw.focused();
+  const [wx, wy] = [Math.round(f.cx), Math.round(f.cy)];
+  await gw.openMenu();
+  await gw.dragCreate('workspace', wx, wy);
+  const ws = tileAt(await gw.getGrid(f.gridID), 'workspace', wx, wy)!;
+  expect(ws, 'the workspace tile persisted').toBeTruthy();
+  const c = await gw.cadences();
+  await gw.descendCell(wx, wy);
+  await gw.waitIdle();
+  const layoutFocus = async () => String(JSON.parse(await gw.getTileContent(ws.id)).focus ?? '');
+
+  // The pane inside shows the grid the workspace tile sits on, so the texts
+  // go on the row below it.
+  const grid = (await gw.focused()).gridID;
+  const [cx, cy] = [wx, wy + 1];
+  const text = await createText(origin, grid, cx, cy, BODY);
+  const pasted = await createText(origin, grid, cx + 1, cy, 'the referenced body');
+  await gw.splitFocusedPaneVertical();
+  const bId = (await gw.focused()).id;
+  await gw.descendCell(cx, cy);
+  await expect.poll(() => gw.textareaValue(), { timeout: 10_000 }).toBe(BODY);
+  const b = (await gw.panes()).find((p: PaneInfo) => p.id === bId)!;
+  const aId = (await gw.panes()).find((p: PaneInfo) => p.id !== bId)!.id;
+  await gw.focusPane((await gw.panes()).find((p: PaneInfo) => p.id === aId)!);
+  await gw.waitIdle();
+  await settle(window, c.workspaceSaveMs);
+  await expect.poll(async () => aId.endsWith(await layoutFocus()), { message: 'the layout keeps the grid pane focused', timeout: 10_000 }).toBe(true);
+  const ref = `${origin}/${grid}/${pasted.id.split('/').pop()}`;
+
+  await dropAt(gw, window, aId, cx + 1, cy, b.x + b.w / 2, b.y + b.h * 0.6, 'right');
+  await expect.poll(() => getTileContent(origin, text.id), { message: 'the reference landed', timeout: 10_000 }).toBe(BODY + ref);
+  expect((await gw.focused()).id, 'the text pane took focus').toBe(bId);
+  await expect.poll(async () => bId.endsWith(await layoutFocus()), { message: 'the layout keeps the text pane focused', timeout: 10_000 }).toBe(true);
 });

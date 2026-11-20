@@ -1011,6 +1011,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   hex pane take no paste; a text that takes no edits refuses with its
   reason (`paste.TextRefusal`). Every refusal is told and written under
   the no-entry badge; a paste that lands outlines the shell or the text.
+  A paste that lands moves pane focus to the pane it landed in, and the
+  keyboard's owner follows (Joe, 2026-11-20: "When I drop a tile into a
+  pane that can receive it (text or shell) then I want the focus to move
+  there too.").
 - A finger does not move or delete a file (2026-11-08): on a touch press,
   a file or a directory dropped on another directory's grid, a rename
   across directories, or on the trashcan is refused with the reason ("a

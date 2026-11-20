@@ -154,8 +154,16 @@ func (a *App) commitShared(verdict dragdrop.DropAction, d *dragState, t *dropTar
 
 // commitPaste asks the node owning the shell to type what the carry names
 // into its tmux, spelled under this page's origin, or inserts it into the
-// text; a refusal is a notice.
+// text; a refusal is a notice. The paste's pane takes focus, so typing goes
+// on where the paste went, to gesture.Keyboard's owner there (Joe,
+// 2026-11-20); a text's must, since the textarea lives only over the focused
+// pane.
 func (a *App) commitPaste(d *dragState, t *dropTarget) {
+	if t.into == paste.IntoText && !strings.HasPrefix(a.origin, "http") {
+		a.reportErr(errsurface.Error, "paste", "this page has no web address to spell a reference under")
+		return
+	}
+	a.focusToPane(t.pane)
 	if t.into == paste.IntoText {
 		a.pasteIntoText(d, t)
 		return
@@ -176,17 +184,9 @@ func (a *App) commitPaste(d *dragState, t *dropTarget) {
 
 // pasteIntoText inserts the carry's references at the release through the
 // editor, so the edit is the user's own: one undo step, and saved by the save
-// chain under the version it claims. The press focused the drag's pane, and
-// the textarea lives only over the focused pane, so the text's pane takes
-// focus first; its body is held, since the pane painted it, and one that is
-// not is refused rather than waited for.
+// chain under the version it claims. The text's body is held, since the pane
+// painted it, and one that is not is refused rather than waited for.
 func (a *App) pasteIntoText(d *dragState, t *dropTarget) {
-	if !strings.HasPrefix(a.origin, "http") {
-		a.reportErr(errsurface.Error, "paste", "this page has no web address to spell a reference under")
-		return
-	}
-	// Its draw gives the editor the keyboard, which the insert types through.
-	a.focusToPane(t.pane)
 	_, file, _, desc := a.focusedTextDescent()
 	if _, held := a.tileBody(file); !held || desc.Mode != rpc.TextModeText || a.overlays.lastTextareaTileID != t.pane.ContentID() {
 		a.reportErr(errsurface.Info, "paste", "the text has not loaded; drop again")

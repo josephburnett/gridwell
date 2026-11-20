@@ -11,7 +11,9 @@ import { tileAt } from './oracle';
 // the file; a home tile right-dropped on a shell tile on the grid, its tmux
 // running with no terminal attached, types its reference, the window's origin
 // and the tile's place. A left-drop is refused with the reason and types
-// nothing, since a paste leaves the tile where it is (Joe, 2026-11-16).
+// nothing, since a paste leaves the tile where it is (Joe, 2026-11-16). A
+// paste that lands moves pane focus to its pane, so typing goes on there: a
+// live shell's terminal, a grid's canvas (Joe, 2026-11-20).
 
 const ROOT = makeRunDir();
 const MARKER = `pasted-${Math.random().toString(36).slice(2, 8)}`;
@@ -28,6 +30,12 @@ function paneText(home: string, key: string): string {
   });
   return r.status === 0 ? r.stdout : '';
 }
+
+const keyboard = async (window: Page): Promise<{ owner: string; pane: string; holds: boolean }> =>
+  window.evaluate(() => {
+    const k = (window as any).__gridwellTest.keyboard();
+    return { owner: k.owner, pane: k.pane, holds: k.holds };
+  });
 
 const notices = async (window: Page): Promise<string[]> =>
   ((await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? []).map((n: any) => String(n.message));
@@ -87,9 +95,11 @@ test('a file right-dropped on a shell pastes its path; a tile, its reference', a
   const unmoved = ((await gw.getGrid(b.gridID)).tiles ?? []).find((t: any) => t.id === notes.id)!;
   expect([unmoved.x, unmoved.y], 'the left-drop snapped back').toEqual([notes.x, notes.y]);
   expect(await shellText(), 'the left-drop typed nothing').not.toContain(path.join(ROOT, 'notes.txt'));
+  expect((await gw.focused()).id, "a refused drop leaves focus on the press's pane").toBe(b.id);
   await dropOnShell('right');
-  // The press focused the file's pane; the shell's terminal is read focused.
-  await gw.clickScreen(live.x + live.w / 2, live.y + live.h / 2);
+  await expect
+    .poll(() => keyboard(window), { message: "the shell's pane took focus and its terminal the keyboard", timeout: 10_000 })
+    .toEqual({ owner: 'terminal', pane: a.id, holds: true });
   const pathTyped = async () => (await shellText()).includes(`cat ${path.join(ROOT, 'notes.txt')}`);
   await expect.poll(pathTyped, { message: 'the path was pasted after cat', timeout: 10_000 }).toBe(true);
   const after = ((await gw.getGrid(b.gridID)).tiles ?? []).find((t: any) => t.id === notes.id)!;
@@ -108,4 +118,21 @@ test('a file right-dropped on a shell pastes its path; a tile, its reference', a
     .poll(() => paneText(home, key).includes(`echo ${ref}`), { message: `the reference ${ref} was pasted`, timeout: 10_000 })
     .toBe(true);
   expect(tileAt(await gw.getGrid(a.gridID), 'text', cx + 1, cy)?.id, 'the text did not move').toBe(text.id);
+
+  // From the other pane onto the shell tile: the grid's pane takes focus,
+  // and its canvas the keyboard.
+  await gw.focusPane((await gw.panes()).find((p: any) => p.id === b.id)!);
+  const onTile = await gw.cellCenter(a.id, cx, cy);
+  await m.move(from.x, from.y);
+  await m.down({ button: 'right' });
+  await m.move(from.x + 8, from.y + 8);
+  await m.move(onTile.x, onTile.y, { steps: 10 });
+  await m.up({ button: 'right' });
+  await gw.waitIdle();
+  await expect
+    .poll(() => paneText(home, key).includes(`echo ${ref}${path.join(ROOT, 'notes.txt')}`), { message: 'the path was pasted', timeout: 10_000 })
+    .toBe(true);
+  await expect
+    .poll(() => keyboard(window), { message: "the grid's pane took focus and its canvas the keyboard", timeout: 10_000 })
+    .toEqual({ owner: 'canvas', pane: a.id, holds: true });
 });
