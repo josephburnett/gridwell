@@ -978,7 +978,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   (2026-10-15, `dragdrop.CarryOf`). Every refused drop is told with its
   reason, and written under the ghost's no-entry badge where the preview
   can know it: a taken cell, a grid that takes no new tiles, a grid that
-  does not move tiles, a pane that takes no drop; only a drop back on its
+  does not move tiles, a pane that takes no drop, and of a + menu swatch a
+  file or a directory released outside a directory ("a file is made in a
+  directory") or on one that cannot be written ("this directory cannot be
+  written"), and a door whose source will not open, in the words its click
+  says (`sourcehealth.ClickNotice`), each told as information, a blue
+  notice (Joe, 2026-11-20: "All the reasons should be blue notification
+  bars at the bottoms."; `menu.DropOn`); only a drop back on its
   own cell, a release over no pane and the copy swatch released over no
   tile say nothing (Joe, 2026-11-19: "any snap-back that is a denial of my
   request should say why"; `dragdrop.Told`).

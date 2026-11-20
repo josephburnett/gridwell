@@ -15,7 +15,6 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/sourcehealth"
 )
 
 // The + menu swatch as a gesture: arming a menu drag, what a bare click
@@ -207,8 +206,10 @@ func (a *App) visitShellFromMenu(p *pane.Pane) {
 // may, and dropTargetAt owns what is legal.
 func (a *App) commitMenuDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 	pr, isPrimitive := primitiveFor(d.item.primitive)
-	r := menu.Release{Target: t != nil, Door: d.item.isSwatch,
-		Disk: !d.item.isSwatch && isPrimitive && pr.disk}
+	r := menu.Release{Target: t != nil, Disk: !d.item.isSwatch && isPrimitive && pr.disk}
+	if d.item.isSwatch {
+		r.Door = d.item.source
+	}
 	if r.Target {
 		// The target's grid is the open door's child when the cursor went
 		// into one, not the pane's own leaf grid.
@@ -216,11 +217,8 @@ func (a *App) commitMenuDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 			W: max(d.snapshotTile.W, 1), H: max(d.snapshotTile.H, 1)}}, dropX, dropY, false)
 		r.SameNode = a.gridNodeNS(t.gridID) == d.menuNS
 		r.AcceptsTiles, r.TilesKnown = a.gridAcceptsTiles(t.gridID)
-		r.DiskWritable = a.offerOn(t.gridID).Disk()
-		if r.Door {
-			st, classified := sourcehealth.Classify(d.item.source)
-			r.Enterable = classified && st == sourcehealth.Enterable
-		}
+		o := a.offerOn(t.gridID)
+		r.Directory, r.DiskWritable = o.Directory, o.Disk()
 	}
 	verdict, why := menu.DropOn(r)
 	switch verdict {
