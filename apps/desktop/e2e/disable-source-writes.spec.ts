@@ -115,3 +115,34 @@ test('a select on a disabled far grid is drawn, refused and taken down', async (
   }[];
   expect(notices.filter((n) => n.source.startsWith('rpc:')), 'no error notice').toEqual([]);
 });
+
+// A copy onto a grid that takes no new tiles is refused before it is sent,
+// and says why (Joe, 2026-11-19).
+test('a copy onto a disabled far grid is refused with the reason', async ({ gw, window }) => {
+  await gw.enterSource('second');
+  const far = (await gw.sources()).find((p) => p.label === 'second')!;
+  const f = await gw.focused();
+  const [cx, cy] = [Math.round(f.cx), Math.round(f.cy) - 1];
+  const note = await createLeafLink(gw.origin, f.gridID, '', 'copied.md', cx, cy);
+  await gw.waitClientTileAt(f.id, cx, cy, note.id);
+  await gw.waitIdle();
+
+  const reads = await gw.watchGridReads();
+  await disableSource(gw.origin, far.uuid);
+  await expect
+    .poll(() => reads.of(f.gridID), { message: 'the view showing the far home reads it again', timeout: 15_000 })
+    .toBeGreaterThan(0);
+  await reads.stop();
+  await gw.waitIdle();
+
+  let sent = 0;
+  await window.route('**/gridwell.v1.Gridwell/CopyTile', async (r) => {
+    sent++;
+    await r.continue();
+  });
+  await gw.copyTileCell(cx, cy, cx + 2, cy);
+  const messages = async (): Promise<string[]> =>
+    ((await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? []).map((n: any) => String(n.message));
+  await expect.poll(messages).toContain('this grid takes no new tiles');
+  expect(sent, 'no copy was sent').toBe(0);
+});

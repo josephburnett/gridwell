@@ -36,6 +36,9 @@ function count(snap: GridSnapshot, kind: string): number {
   return (snap.tiles ?? []).filter((t) => t.kind === kind).length;
 }
 
+const notices = async (win: Page): Promise<string[]> =>
+  ((await win.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? []).map((n: any) => String(n.message));
+
 function ghostActive(win: Page): Promise<boolean> {
   return win.evaluate(() => (window as any).__gridwellTest.ghost().active);
 }
@@ -87,6 +90,7 @@ test('Esc on a tile move leaves the tile in its cell and writes nothing', async 
   expect(tileAt(snap, 'text', cx - 2, cy), 'nothing landed at the drop cell').toBeFalsy();
   await expect.poll(() => ghostActive(window), 'the ghost snapped back and went').toBe(false);
   expect(writes(), 'no write left the client').toEqual([]);
+  expect(await notices(window), 'a cancel says nothing').toEqual([]);
 });
 
 for (const link of [false, true]) {

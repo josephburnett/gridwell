@@ -851,8 +851,9 @@ func (a *App) thMenu(js.Value, []js.Value) any {
 // tiles it hides, the facts the tile loop reads at its hide check, every
 // tile it draws, and those flying home alone.
 func (a *App) thGhost(js.Value, []js.Value) any {
-	carried, returning := []any{}, []any{}
+	carried, returning, why := []any{}, []any{}, ""
 	if a.ghost != nil {
+		why = a.ghost.why
 		for i, n := range a.ghost.carried {
 			carried = append(carried, n.Id)
 			if _, back := a.ghost.Returning(i); back {
@@ -867,6 +868,7 @@ func (a *App) thGhost(js.Value, []js.Value) any {
 		"hiddenPaneID": a.ghostHiddenPane(),
 		"carried":      carried,
 		"returning":    returning,
+		"why":          why,
 	}
 }
 

@@ -264,7 +264,10 @@ type DropInput struct {
 	TileID     string // "" for a pan or empty-space drag
 	OverDelete bool
 	HasTarget  bool
-	Forbidden  bool
+	// OverContent is a release with no target over a pane descended into a
+	// tile that takes no drop: a live page, a rendered, info or hex text.
+	OverContent bool
+	Forbidden   bool
 	// TargetRefusesTiles is a destination known not to accept tiles
 	// (Grid.accepts_tiles), which rejects an arrival before the RPC. A
 	// left-drag that moves is not creation, and is exempt; Forbidden gates it.
@@ -319,10 +322,17 @@ const PasteNeedsRight = "only a right-drag pastes; a left-drag moves"
 // nothing is deleted from the bar (Joe, 2026-11-19).
 const CrumbNoDelete = "a crumb's drag copies; it does not delete"
 
+// Why a drop is refused, told (Joe, 2026-11-19); the last three, its own
+// cell, no pane and the copy swatch over no tile, are decided silent.
+const (
+	CellTaken, TakesNoTiles    = "that cell is taken", "this grid takes no new tiles"
+	MovesNoTiles, TakesNoDrop  = "this grid does not move tiles", "nothing here takes a drop"
+	sameCell, noTarget, noTile = "same cell", "no target", "no tile"
+)
+
 // Told is the reason a refused drop tells the user, "" when it says nothing.
 func Told(in DropInput) string {
-	switch why := WhyRejected(in); why {
-	case FingerNoFile, EphemeralNoLink, PasteNeedsRight, CrumbNoDelete, in.PasteRefusal:
+	if why := WhyRejected(in); why != sameCell && why != noTarget && why != noTile {
 		return why
 	}
 	return ""
@@ -390,7 +400,7 @@ func decideDrop(in DropInput) (DropAction, string) {
 	case in.CopySwatch && in.OverTile:
 		return DropTemplate, ""
 	case in.CopySwatch:
-		return DropRejected, "no tile"
+		return DropRejected, noTile
 	case in.TileID == "" && !in.FromMenu:
 		return DropPanEnd, ""
 	case in.OverDelete && in.Touch && in.CarriesFile:
@@ -399,8 +409,10 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropRejected, CrumbNoDelete
 	case in.OverDelete:
 		return DropDelete, ""
+	case !in.HasTarget && in.OverContent:
+		return DropRejected, TakesNoDrop
 	case !in.HasTarget:
-		return DropRejected, "no target"
+		return DropRejected, noTarget
 	case in.FromMenu:
 		return DropFromMenu, ""
 	case in.PasteTarget && in.Intent == IntentMove:
@@ -414,13 +426,13 @@ func decideDrop(in DropInput) (DropAction, string) {
 	case in.CarriesEphemeral && (in.Intent == IntentLink || in.Intent == IntentCopy && in.CopiesAsLink):
 		return DropRejected, EphemeralNoLink
 	case in.Forbidden:
-		return DropRejected, "forbidden"
+		return DropRejected, MovesNoTiles
 	case in.TargetRefusesTiles && (in.Intent.Creates() || in.MovesAsLink):
-		return DropRejected, "target refuses tiles"
+		return DropRejected, TakesNoTiles
 	case in.SameCell:
-		return DropRejected, "same cell"
+		return DropRejected, sameCell
 	case in.Occupied:
-		return DropRejected, "occupied"
+		return DropRejected, CellTaken
 	case in.Intent == IntentCopy && !in.CopiesAsLink:
 		return DropCopy, ""
 	case in.Intent != IntentMove || in.MovesAsLink:
@@ -450,8 +462,8 @@ type GhostPlan struct {
 
 // GhostPlanForDrop takes both pane ids and cell sizes because the ghost rests
 // in a different pane per verdict, and in the input the verdict was decided
-// on. SameCell and Occupied get no style: the preview is optimistic and the
-// commit does the authoritative overlap check.
+// on. The preview gathers no placement, so its ghost never wears a taken
+// cell: the commit does the overlap check and tells it.
 func GhostPlanForDrop(action DropAction, in DropInput,
 	originPaneID, targetPaneID string, srcCellSize, targetCellSize float64) GhostPlan {
 	forbidden := NoEntry(in)

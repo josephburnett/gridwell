@@ -84,6 +84,7 @@ test('a tile right-dropped on a raw text pane lands its reference where the poin
   await dropAt(gw, window, s.aId, s.cx + 1, s.cy, at.x, at.y, 'right');
   await gw.waitIdle();
   expect(await getTileContent(origin, s.text.id), 'a rendered pane took nothing').toBe(BODY + ref);
+  await expect.poll(() => notices(window), { message: 'and says why' }).toContain('nothing here takes a drop');
 
   // The reference, clicked in the rendered view, opens the tile it names in
   // the pane below, not a page of the client, and makes no visit.

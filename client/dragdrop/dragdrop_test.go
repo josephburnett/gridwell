@@ -695,11 +695,11 @@ func TestWhyRejectedNamesTheArm(t *testing.T) {
 		in   func(DropInput) DropInput
 		want string
 	}{
-		{func(in DropInput) DropInput { in.HasTarget = false; return in }, "no target"},
-		{func(in DropInput) DropInput { in.Forbidden = true; return in }, "forbidden"},
-		{func(in DropInput) DropInput { in.TargetRefusesTiles, in.MovesAsLink = true, true; return in }, "target refuses tiles"},
-		{func(in DropInput) DropInput { in.SameGrid, in.SameCell = true, true; return in }, "same cell"},
-		{func(in DropInput) DropInput { in.Occupied = true; return in }, "occupied"},
+		{func(in DropInput) DropInput { in.HasTarget = false; return in }, noTarget},
+		{func(in DropInput) DropInput { in.Forbidden = true; return in }, MovesNoTiles},
+		{func(in DropInput) DropInput { in.TargetRefusesTiles, in.MovesAsLink = true, true; return in }, TakesNoTiles},
+		{func(in DropInput) DropInput { in.SameGrid, in.SameCell = true, true; return in }, sameCell},
+		{func(in DropInput) DropInput { in.Occupied = true; return in }, CellTaken},
 		{func(in DropInput) DropInput { return in }, ""},
 	}
 	for _, c := range cases {
@@ -805,7 +805,7 @@ func TestCopySwatchDrop(t *testing.T) {
 	if got := DecideDrop(shell); got != DropTemplate {
 		t.Errorf("over a shell by the trashcan = %v, want DropTemplate: the copy swatch pastes and deletes nothing", got)
 	}
-	if got, why := DecideDrop(DropInput{Started: true, CopySwatch: true}), WhyRejected(DropInput{Started: true, CopySwatch: true}); got != DropRejected || why != "no tile" {
+	if got, why := DecideDrop(DropInput{Started: true, CopySwatch: true}), WhyRejected(DropInput{Started: true, CopySwatch: true}); got != DropRejected || why != noTile {
 		t.Errorf("over no tile = %v %q, want rejected: no tile", got, why)
 	}
 	if got := DecideDrop(DropInput{CopySwatch: true}); got != DropNavigate {
@@ -900,6 +900,56 @@ func TestEveryToldRefusalIsWorn(t *testing.T) {
 		p := GhostPlanForDrop(DecideDrop(in), in, "o", "t", 40, 40)
 		if p.Why != Told(in) || p.Forbidden != NoEntry(in) {
 			t.Errorf("%+v: ghost %+v, want why %q and no entry %v", in, p, Told(in), NoEntry(in))
+		}
+	}
+}
+
+// Every refused drop says why but three, decided silent (Joe, 2026-11-19:
+// "any snap-back that is a denial of my request should say why"): a drop
+// back on its own cell, a release over no pane and the copy swatch released
+// over no tile. The ghost wears each one its input holds; the preview's
+// holds no taken cell, which only the release's placement reads.
+func TestEveryDenialSaysWhy(t *testing.T) {
+	base := DropInput{Started: true, TileID: "7", HasTarget: true}
+	for _, c := range []struct {
+		name string
+		in   func(DropInput) DropInput
+		told string
+		worn bool
+	}{
+		{"a taken cell", func(in DropInput) DropInput { in.Occupied = true; return in }, CellTaken, true},
+		{"a copy onto a taken cell", func(in DropInput) DropInput { in.Intent, in.Occupied = IntentCopy, true; return in }, CellTaken, true},
+		{"a copy onto a grid that takes no new tiles", func(in DropInput) DropInput {
+			in.Intent, in.TargetRefusesTiles = IntentCopy, true
+			return in
+		}, TakesNoTiles, true},
+		{"a link onto a grid that takes no new tiles", func(in DropInput) DropInput {
+			in.MovesAsLink, in.TargetRefusesTiles = true, true
+			return in
+		}, TakesNoTiles, true},
+		{"a move to or from a grid that does not move tiles", func(in DropInput) DropInput { in.Forbidden = true; return in }, MovesNoTiles, true},
+		{"a pane that takes no drop", func(in DropInput) DropInput { in.HasTarget, in.OverContent = false, true; return in }, TakesNoDrop, true},
+		{"a swatch over a pane that takes no drop", func(in DropInput) DropInput {
+			in.TileID, in.FromMenu, in.HasTarget, in.OverContent = "", true, false, true
+			return in
+		}, TakesNoDrop, true},
+		{"its own cell", func(in DropInput) DropInput { in.SameGrid, in.SameCell = true, true; return in }, "", false},
+		{"no pane at all", func(in DropInput) DropInput { in.HasTarget = false; return in }, "", false},
+		{"the copy swatch over no tile", func(in DropInput) DropInput {
+			in.TileID, in.CopySwatch, in.HasTarget = "", true, false
+			return in
+		}, "", false},
+	} {
+		in := c.in(base)
+		if got := DecideDrop(in); got != DropRejected {
+			t.Errorf("%s: %v, want refused", c.name, got)
+		}
+		if Told(in) != c.told || NoEntry(in) != (c.told != "") {
+			t.Errorf("%s: told %q (no entry %v), want %q", c.name, Told(in), NoEntry(in), c.told)
+		}
+		p := GhostPlanForDrop(DropRejected, in, "o", "t", 40, 40)
+		if p.Forbidden != c.worn || p.Why != c.told {
+			t.Errorf("%s: ghost %+v, want badge %v over %q", c.name, p, c.worn, c.told)
 		}
 	}
 }

@@ -143,6 +143,8 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	}
 	t, in.HasTarget = a.dropTargetAt(sx, sy, d.carry())
 	if !in.HasTarget {
+		p, _, over := a.paneAtScreen(sx, sy)
+		in.OverContent = over && p.ContentID() != ""
 		return in, t, 0, 0
 	}
 	// Unknown is not read-only: a drop must not be refused because the

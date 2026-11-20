@@ -953,7 +953,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   layout, one offset for all, and is refused whole when any tile would land
   on a cell the set does not vacate; each tile is its own write with its
   own claim, so a stale one is refused and snaps back alone
-  (2026-10-15, `dragdrop.CarryOf`).
+  (2026-10-15, `dragdrop.CarryOf`). Every refused drop is told with its
+  reason, and written under the ghost's no-entry badge where the preview
+  can know it: a taken cell, a grid that takes no new tiles, a grid that
+  does not move tiles, a pane that takes no drop; only a drop back on its
+  own cell, a release over no pane and the copy swatch released over no
+  tile say nothing (Joe, 2026-11-19: "any snap-back that is a denial of my
+  request should say why"; `dragdrop.Told`).
 - A right-drop onto a shell or a raw text pane pastes (Joe, 2026-11-08,
   2026-11-16): a release of a right-drag or a ctrl + right-drag over a
   shell, its tile on a grid or its live pane, or over a pane descended

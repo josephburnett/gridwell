@@ -123,3 +123,4 @@ low-water | packages | 78
 2026-11-18 | Joe's password message decision, 2026-11-18 (an unauthenticated read gets a plain message, not the login page): passwordRequired and browserNavigation, the one predicate the reference read and the password gate both read | 5
 2026-11-18 | Joe's crumb drag decision, 2026-11-18 (every crumb standing for a tile right-drags as its tile): wsbar.Handle, the row and visit bit of each crumb that drags, and dragdrop.DropInput.FromCrumb, the trashcan no gesture for a crumb that is no visit's | 4
 2026-11-19 | Joe's crumb drag decision, 2026-11-18 (every crumb standing for a tile right-drags as its tile): dragdrop.CrumbNoDelete, the reason a crumb's drag on the trashcan is told | 2
+2026-11-19 | Joe's refusal decision, 2026-11-19 (every refused drop says why): dragdrop's reasons for a taken cell, a grid that takes no new tiles or moves none and a pane that takes no drop, told and worn, and DropInput.OverContent | 16
