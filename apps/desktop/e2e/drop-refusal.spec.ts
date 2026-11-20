@@ -193,6 +193,53 @@ test.describe('a swatch refused for what it is', () => {
     expect(fs.readdirSync(ROOT).sort(), 'nothing on disk').toEqual(before);
   });
 
+  // A directory this user may not make a name in takes Gridwell tiles and no
+  // file: its grid does not offer the file swatch, one dragged in from
+  // another pane says why, and a chmod while it is shown moves the offer
+  // with no gesture.
+  test('a file swatch on a directory that cannot be written is refused and not offered', async ({ gw, window }) => {
+    const { dir } = await homeAndDirectory(gw);
+    const shut = path.join(ROOT, 'shut');
+    fs.mkdirSync(shut);
+    fs.chmodSync(shut, 0o555);
+    try {
+      await expect
+        .poll(async () => ((await gw.getGrid(dir.gridID)).tiles ?? []).some((t) => t.altText === 'shut'))
+        .toBe(true);
+      const door = ((await gw.getGrid(dir.gridID)).tiles ?? []).find((t) => t.altText === 'shut')!;
+      await gw.focusPane(dir);
+      await gw.waitClientTileAt(dir.id, Number(door.x ?? 0), Number(door.y ?? 0), door.id);
+      await gw.descendCell(Number(door.x ?? 0), Number(door.y ?? 0));
+      const inside = await gw.focused();
+      expect(inside.gridID, 'inside the directory').toBe(door.childGridId);
+      await gw.openMenu();
+      expect(await offersFile(gw), 'no file swatch where no name can be made').toBe(false);
+      expect((await gw.menu()).items.some((i) => !i.isSwatch && i.kind === 'markdown'), 'Gridwell tiles still offered').toBe(true);
+      const plus = await gw.menu();
+      await window.mouse.click(plus.plusX, plus.plusY);
+      await expect.poll(async () => (await gw.menu()).open).toBe(false);
+
+      const left = (await gw.panes()).find((p) => p.id !== dir.id)!;
+      await gw.focusPane(left);
+      await gw.enterSource('docs (files)');
+      await gw.openMenu();
+      const at = await gw.cellCenter(dir.id, 2, 0);
+      await gw.dragCreateToScreen('file', at.x, at.y);
+      await expect.poll(() => toldDrop(window)).toEqual([['this directory cannot be written', 1]]);
+      expect(await window.locator('#gw-url-modal.open').count(), 'no name is asked for').toBe(0);
+      expect(fs.readdirSync(shut), 'nothing on disk').toEqual([]);
+
+      await gw.focusPane((await gw.panes()).find((p) => p.id === dir.id)!);
+      await gw.openMenu();
+      fs.chmodSync(shut, 0o755);
+      await expect.poll(() => offersFile(gw), 'offered once it can be written').toBe(true);
+      fs.chmodSync(shut, 0o555);
+      await expect.poll(() => offersFile(gw), 'withdrawn once it cannot').toBe(false);
+    } finally {
+      fs.chmodSync(shut, 0o755);
+    }
+  });
+
   // An open grid shows what its source knows: a directory that goes while a
   // pane shows it takes the file swatch away, with no gesture.
   test('a shown directory that goes stops offering the file swatch', async ({ gw }) => {

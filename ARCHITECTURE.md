@@ -133,9 +133,11 @@ disk retires an unfrozen screenshot (`files.pagePreviewStale`).
 `Grid.scratch_grid_id` and `source_grids` come from the router's `GetGrid`
 (or `TransitQualifyGrid` for transit), which fails the read when the
 owner's `Info` does not answer. `Grid.accepts_tiles` (the + menu, a drop,
-a url's address), `Grid.writable` (its bodies take edits) and `Grid.moves`
-are the owning namespace's stamp on its own grid — home's `GetGrid` and
-the files' (`files.Source.synthesize`: writable, takes tiles, moves) —
+a url's address), `Grid.writable` (its bodies take edits), `Grid.moves`
+and `Grid.accepts_files` (a name can be made there on disk, the file and
+directory swatches) are the owning namespace's stamp on its own grid —
+home's `GetGrid` and the files' (`files.Source.synthesize`: writable, takes
+tiles, moves, and takes files while this user may make a name there) —
 carried verbatim in transit, where `TransitQualifyGrid` reads an older
 node's one bit for both. `Tile.read_only` (this one body takes none, and
 why) is the files' for a file the node cannot write, or the router's for a

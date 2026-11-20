@@ -71,8 +71,8 @@ message Grid {
   // accepts_tiles: this grid takes new tiles (CreateTile), so the + menu
   // offers its primitives and a swatch drops into it, and its url rows'
   // titles and trails are the node's to write. The owning namespace stamps it on
-  // every grid it serves, true for the home and false for the files, which
-  // create nothing; transit carries it verbatim. It is absent only from a
+  // every grid it serves, true for the home and the files; transit carries
+  // it verbatim. It is absent only from a
   // node built before it split from writable, whose one bit said both, and
   // rpc.TransitQualifyGrid reads that bit for it. Wire-only.
   optional bool accepts_tiles = 16;
@@ -88,6 +88,13 @@ message Grid {
   // the home and the files; transit carries it verbatim.
   // Wire-only.
   optional bool moves = 18;
+  // accepts_files: a file or a directory can be made on disk in this grid
+  // (CreateTileRequest.file), so the + menu offers their swatches. It is the
+  // disk's side of a directory's grid, beside accepts_tiles, which is
+  // Gridwell's: true on a directory this user may make a name in, and false
+  // on a gone one and on every grid that is no directory. The files stamp
+  // it; transit carries it verbatim. Wire-only.
+  bool accepts_files = 19;
 }
 
 // SourceGrid is one (+) menu row: a door onto one grid a source offers, such

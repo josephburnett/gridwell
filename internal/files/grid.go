@@ -189,7 +189,7 @@ func (s *Source) read(dir string, speaks bool) (*listing, error) {
 		return nil, err
 	}
 	l.grid = &pb.Grid{Id: idOf(dir), AcceptsTiles: proto.Bool(true), Writable: !l.gone, Moves: proto.Bool(true),
-		Glyph: rpc.GlyphFolder, Selection: sel}
+		AcceptsFiles: !l.gone && writeAccess(dir) == nil, Glyph: rpc.GlyphFolder, Selection: sel}
 	if l.tiles, err = s.buildTiles(dir, l.rows, l.entries); err != nil {
 		return nil, err
 	}

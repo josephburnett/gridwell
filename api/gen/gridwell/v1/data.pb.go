@@ -122,8 +122,8 @@ type Grid struct {
 	// accepts_tiles: this grid takes new tiles (CreateTile), so the + menu
 	// offers its primitives and a swatch drops into it, and its url rows'
 	// titles and trails are the node's to write. The owning namespace stamps it on
-	// every grid it serves, true for the home and false for the files, which
-	// create nothing; transit carries it verbatim. It is absent only from a
+	// every grid it serves, true for the home and the files; transit carries
+	// it verbatim. It is absent only from a
 	// node built before it split from writable, whose one bit said both, and
 	// rpc.TransitQualifyGrid reads that bit for it. Wire-only.
 	AcceptsTiles *bool `protobuf:"varint,16,opt,name=accepts_tiles,json=acceptsTiles,proto3,oneof" json:"accepts_tiles,omitempty"`
@@ -138,7 +138,14 @@ type Grid struct {
 	// move. The owning namespace stamps it on every grid it serves, true for
 	// the home and the files; transit carries it verbatim.
 	// Wire-only.
-	Moves         *bool `protobuf:"varint,18,opt,name=moves,proto3,oneof" json:"moves,omitempty"`
+	Moves *bool `protobuf:"varint,18,opt,name=moves,proto3,oneof" json:"moves,omitempty"`
+	// accepts_files: a file or a directory can be made on disk in this grid
+	// (CreateTileRequest.file), so the + menu offers their swatches. It is the
+	// disk's side of a directory's grid, beside accepts_tiles, which is
+	// Gridwell's: true on a directory this user may make a name in, and false
+	// on a gone one and on every grid that is no directory. The files stamp
+	// it; transit carries it verbatim. Wire-only.
+	AcceptsFiles  bool `protobuf:"varint,19,opt,name=accepts_files,json=acceptsFiles,proto3" json:"accepts_files,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -239,6 +246,13 @@ func (x *Grid) GetSelection() []string {
 func (x *Grid) GetMoves() bool {
 	if x != nil && x.Moves != nil {
 		return *x.Moves
+	}
+	return false
+}
+
+func (x *Grid) GetAcceptsFiles() bool {
+	if x != nil {
+		return x.AcceptsFiles
 	}
 	return false
 }
@@ -4968,7 +4982,7 @@ var File_gridwell_v1_data_proto protoreflect.FileDescriptor
 
 const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
-	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\x1a\x19google/protobuf/any.proto\"\x8e\x03\n" +
+	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\x1a\x19google/protobuf/any.proto\"\xb3\x03\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1a\n" +
@@ -4980,7 +4994,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x05glyph\x18\x0e \x01(\tR\x05glyph\x12(\n" +
 	"\raccepts_tiles\x18\x10 \x01(\bH\x00R\facceptsTiles\x88\x01\x01\x12\x1c\n" +
 	"\tselection\x18\x11 \x03(\tR\tselection\x12\x19\n" +
-	"\x05moves\x18\x12 \x01(\bH\x01R\x05moves\x88\x01\x01B\x10\n" +
+	"\x05moves\x18\x12 \x01(\bH\x01R\x05moves\x88\x01\x01\x12#\n" +
+	"\raccepts_files\x18\x13 \x01(\bR\facceptsFilesB\x10\n" +
 	"\x0e_accepts_tilesB\b\n" +
 	"\x06_movesJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0f\x10\x10\"\xc2\x01\n" +

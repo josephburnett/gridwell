@@ -18,8 +18,8 @@ type Offer struct {
 	// ShellsDisabled is the context node's disable_shells.
 	ShellsDisabled bool
 	// Directory is the grid's id naming a directory (rpc.IsFilesID), and
-	// Writable its Grid.writable: the disk side's accepts fact.
-	Directory, Writable bool
+	// AcceptsFiles its Grid.accepts_files: the disk side's accepts fact.
+	Directory, AcceptsFiles bool
 }
 
 // Primitives reports whether the primitive row is offered at all.
@@ -30,7 +30,7 @@ func (o Offer) Shell() bool { return o.AcceptsTiles && !o.ShellsDisabled }
 
 // Disk reports whether the file and directory swatches are among them: only
 // on a directory's grid, and only while the disk takes a new name there.
-func (o Offer) Disk() bool { return o.Directory && o.Writable }
+func (o Offer) Disk() bool { return o.Directory && o.AcceptsFiles }
 
 // DiskCreate is the create a file or directory swatch asks for once its name
 // is typed: on the disk side of grid (CreateTileRequest.file), a directory for

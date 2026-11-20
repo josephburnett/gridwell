@@ -18,9 +18,9 @@ func TestOffer(t *testing.T) {
 		{"read-only grid on a shell-less node", Offer{ShellsDisabled: true}, false, false, false},
 		// A directory is a place for Gridwell tiles (2026-11-08): every
 		// primitive, and a file and a directory while the disk is writable.
-		{"a writable directory", Offer{AcceptsTiles: true, Directory: true, Writable: true}, true, true, true},
+		{"a writable directory", Offer{AcceptsTiles: true, Directory: true, AcceptsFiles: true}, true, true, true},
 		{"a read-only directory takes Gridwell tiles, not files", Offer{AcceptsTiles: true, Directory: true}, true, true, false},
-		{"a writable home grid makes no file", Offer{AcceptsTiles: true, Writable: true}, true, true, false},
+		{"a writable home grid makes no file", Offer{AcceptsTiles: true, AcceptsFiles: true}, true, true, false},
 	}
 	for _, c := range cases {
 		if got := c.in.Primitives(); got != c.primitives {

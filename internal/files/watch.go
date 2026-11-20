@@ -513,7 +513,8 @@ func (w *watcher) run(fsw *fsnotify.Watcher) {
 // moved, or whose mode changed (an image's mtime is its picture's stamp),
 // touches its directory's listing; bytes written, or a file created over its
 // name as an editor's save does, touch that file. A watched directory that
-// vanished or appeared touches its own listing.
+// vanished, appeared or, shown, changed mode (Grid.accepts_files) touches
+// its own listing.
 func (w *watcher) event(fsw *fsnotify.Watcher, ev fsnotify.Event) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -536,6 +537,9 @@ func (w *watcher) event(fsw *fsnotify.Watcher, ev fsnotify.Event) {
 	}
 	if ev.Has(fsnotify.Chmod) && w.s.noteRefusal(path, nil) && w.scope[path] {
 		w.s.emitGridChanged(path)
+	}
+	if ev.Has(fsnotify.Chmod) && w.scope[path] {
+		w.touch(path, true, "")
 	}
 	parent := filepath.Dir(path)
 	if !w.watched[parent] || !w.scope[parent] {

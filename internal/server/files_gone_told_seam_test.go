@@ -34,8 +34,8 @@ func TestAShownDirectoryThatGoesIsTold(t *testing.T) {
 		await(t, events, "k's change", func(ev *gridwellv1.Event) bool {
 			return ev.GetGridChanged().GetGridId() == fileID(k)
 		})
-		if n.grid(fileID(k)).Grid.Writable {
-			t.Errorf("withFile %v: the gone k still answers writable", withFile)
+		if g := n.grid(fileID(k)).Grid; g.Writable || g.AcceptsFiles {
+			t.Errorf("withFile %v: the gone k still answers writable=%v accepts_files=%v", withFile, g.Writable, g.AcceptsFiles)
 		}
 	}
 }

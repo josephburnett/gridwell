@@ -349,7 +349,7 @@ func (a *App) menuGroups(p *pane.Pane) (templates, sources, primitives []menuIte
 // the context node's, which the caller adds.
 func (a *App) offerOn(gid string) menu.Offer {
 	g, _ := a.gridMeta(gid)
-	return menu.Offer{AcceptsTiles: g.GetAcceptsTiles(), Directory: rpc.IsFilesID(gid), Writable: g.GetWritable()}
+	return menu.Offer{AcceptsTiles: g.GetAcceptsTiles(), Directory: rpc.IsFilesID(gid), AcceptsFiles: g.GetAcceptsFiles()}
 }
 
 // menuSections counts the strip's sections in the item list, in order:
