@@ -236,7 +236,7 @@ test('Esc on a swatch drag-create makes nothing', async ({ gw, window }) => {
 // The press, the move, Esc and the release in one synchronous turn, as in
 // visit-crumb-drag.spec.ts: arming the drag parks the live view, and the layer
 // change under the real cursor would otherwise read as a lost release.
-test('Esc on a visit crumb\'s right-drag copies nothing', async ({ electronApp, window, gw }) => {
+test('Esc on a visit crumb\'s right-drag moves nothing', async ({ electronApp, window, gw }) => {
   await gw.enterSource('home');
   const home = await gw.focused();
   await gw.splitFocusedPaneVertical();
@@ -281,7 +281,7 @@ test('Esc on a visit crumb\'s right-drag copies nothing', async ({ electronApp, 
   await gw.waitIdle();
 
   const urls = ((await gw.getGrid(home.gridID)).tiles ?? []).filter((t) => t.kind === 'url');
-  expect(urls, 'no url tile was copied onto the grid').toEqual([]);
+  expect(urls, 'no url tile landed on the grid').toEqual([]);
   expect((await gw.focused()).textFocus, 'the pane is still on its visit').toBe(visiting.textFocus);
   expect(writes(), 'no write left the client').toEqual([]);
 });

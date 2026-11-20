@@ -141,3 +141,20 @@ func TestLevelsParked(t *testing.T) {
 		t.Fatal("Parked handed out the live stack, not a copy")
 	}
 }
+
+// A workspace tile moved while the window is inside it carries every level
+// open on it to its new grid: the close-all landing and the root crumb's
+// glyph follow the row (Joe, 2026-11-11).
+func TestLevelsMoved(t *testing.T) {
+	var s Levels
+	s.Push(Level{TileID: "u/9", GridID: "g/scratch"})
+	s.Push(Level{TileID: "u/4", GridID: "g/2"})
+	s.Moved("u/9", "g/1")
+	if s.At(1).GridID != "g/1" || s.At(2).GridID != "g/2" {
+		t.Fatalf("levels after the move = %+v, %+v, want only u/9 on g/1", *s.At(1), *s.At(2))
+	}
+	chain := s.NavChain(nil)
+	if chain[0].Crumb.Anchor != "g/1" || chain[1].GridID != "g/1" {
+		t.Fatalf("chain after the move = %+v, want the root and the boundary on g/1", chain[:2])
+	}
+}

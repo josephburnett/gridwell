@@ -106,6 +106,7 @@ func TestEveryGestureIsNamed(t *testing.T) {
 		{nav.Gesture{Kind: nav.GestureAscend, PaneID: "p1", N: 2}, "pop", "ascend 2"},
 		{nav.Gesture{Kind: nav.GestureRestore, Raw: "/a"}, "restore", "restore /a"},
 		{nav.Gesture{Kind: nav.GestureRestoreFromHistory, Raw: "/b"}, "restore", "restore session /b"},
+		{nav.Gesture{Kind: nav.GestureVisitMoved, Door: &pb.Tile{Id: "e7abcde"}}, "push", "follow a moved visit"},
 		{nav.Gesture{Kind: nav.GestureEnterLevel, Door: &pb.Tile{Id: "w7abcde"}}, "push", "enter workspace tile"},
 		{nav.Gesture{Kind: nav.GestureLeaveLevels, Count: 3}, "pop", "leave 3 levels"},
 		{nav.Gesture{Kind: nav.GestureLandLevel, TileID: "t7abcde"}, "pop", "land level"},

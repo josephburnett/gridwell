@@ -16,8 +16,13 @@ const (
 	// focused pane), Raw, Reset.
 	GestureRestore
 	GestureRestoreFromHistory // installs a whole session place: Raw
-	GestureEnterLevel         // descends the window into a workspace tile: PaneID, Door
-	GestureLeaveLevels        // Count
+	// GestureVisitMoved re-roots a pane whose place holds a visit's row, or
+	// moves the open level whose workspace tile it is, once the row's move
+	// landed: PaneID, DestPaneID, Door (the row as it landed), TileID (the
+	// open door of DestPaneID's grid the drop went through, "" for none).
+	GestureVisitMoved
+	GestureEnterLevel  // descends the window into a workspace tile: PaneID, Door
+	GestureLeaveLevels // Count
 	// GestureLandLevel finishes one leave hop against the tree the pop
 	// installed: PaneID, TileID, Outer, Animate, Count.
 	GestureLandLevel
@@ -53,10 +58,11 @@ type Gesture struct {
 	// Reset asks a restore for the popstate half: the per-pane teardown a
 	// reload would do, and the address handed back to the browser. A boot
 	// restore lands over whatever the pane already shows.
-	Reset  bool
-	TileID string
-	GridID string
-	Count  int
+	Reset      bool
+	DestPaneID string
+	TileID     string
+	GridID     string
+	Count      int
 	// Outer says the level just popped had parked a tree, so its landing is
 	// the return animation rather than the post-reload re-centre. Read at pop
 	// time, since by landing time the level is gone.

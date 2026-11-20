@@ -29,6 +29,9 @@ const (
 	// EffPopLevel leaves one workspace level, restoring the tree it parked or
 	// a fresh pane at GridID: GridID.
 	EffPopLevel
+	// EffLevelMoved carries the levels open on TileID to GridID, where the
+	// workspace tile's move landed it (pane.Levels.Moved).
+	EffLevelMoved
 
 	// EffFlushFraming persists every pane's settled grid framing now.
 	EffFlushFraming

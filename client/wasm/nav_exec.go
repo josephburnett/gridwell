@@ -55,6 +55,8 @@ func (a *App) runNavEffect(e nav.Effect) {
 		a.navReplaceLevel(e)
 	case nav.EffPopLevel:
 		a.navPopLevel(e)
+	case nav.EffLevelMoved:
+		a.ws.Moved(e.TileID, e.GridID)
 	case nav.EffFlushLayout:
 		a.flushWorkspaceSave(nil)
 	case nav.EffHandBackSurfaces:

@@ -524,7 +524,8 @@ click is the ascent gesture; middle-click is the in-pane shortcut. Which
 crumbs drag, and with which button, is one table (`wsbar.RouteClick`):
 every crumb standing for a tile right-drags as it, a visit's and every
 level's band the same, no crumb left-drags, and the drag is the tile's own
-(`startCrumbDrag`).
+(`startCrumbDrag`); a visit's onto a grid moves its row (`dragdrop.KeepsVisit`)
+and the pane follows it (`nav.visitMoved`).
 
 **Clicks** land on what they hit, in any pane, and pane focus follows in the
 same press (`focusToPane`, the one owner). A surface that lives only over the

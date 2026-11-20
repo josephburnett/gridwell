@@ -12,6 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/paste"
 	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/traceevent"
@@ -242,6 +243,16 @@ func (a *App) commitMove(d *dragState, t *dropTarget, dropX, dropY int64) {
 			H:      row.H,
 			Claim:  rpc.PlacementOf(row),
 		}, snapBack))
+	}
+	if d.crumb != nil {
+		// Only a visit's crumb moves (dragdrop.KeepsVisit); its pane follows
+		// the row once it lands.
+		landed := ws[0].then
+		ws[0].then = func() {
+			landed()
+			a.runGesture(nav.Gesture{Kind: nav.GestureVisitMoved, PaneID: d.originPaneID,
+				DestPaneID: t.pane.ID, Door: a.cachedTileByID(d.tileID), TileID: t.door})
+		}
 	}
 	a.postInOrder(ws)
 }

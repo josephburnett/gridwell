@@ -372,19 +372,25 @@ func (a *App) commitTileCenter(sx, sy float64) {
 	a.commitRightCopy(d, sx, sy)
 }
 
-// commitRightCopy deletes, copies, links, or snaps the ghost back.
+// commitRightCopy deletes, copies, links, moves a visit, or snaps the ghost
+// back.
 func (a *App) commitRightCopy(d *dragState, sx, sy float64) {
 	// The same gatherer as the left-drag commit, so preview and commit share
 	// one decision off d.intent.
 	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, true /* placement */)
 
-	if a.commitShared(a.commitVerdict(in, d, t, dropX, dropY), d, t, dropX, dropY) {
+	verdict := a.commitVerdict(in, d, t, dropX, dropY)
+	if a.commitShared(verdict, d, t, dropX, dropY) {
+		return
+	}
+	a.landGhostAtCell(t, dropX, dropY)
+	if verdict == dragdrop.DropMove {
+		a.commitMove(d, t, dropX, dropY)
 		return
 	}
 
 	// DropCopy: one CopyTile per carried tile at its offset; a refused one
 	// flies home alone, as in commitMove.
-	a.landGhostAtCell(t, dropX, dropY)
 	gh := a.ghost
 	to := d.carry().At(dropX, dropY)
 	for i, row := range d.carried {

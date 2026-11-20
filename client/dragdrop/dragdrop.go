@@ -296,7 +296,8 @@ type DropInput struct {
 	// a move to another grid and a delete (FingerNoFile).
 	Touch, CarriesFile bool
 	// CarriesEphemeral is a carried row on the scratch grid (rpc.Ephemeral):
-	// a visit's crumb, which links nowhere (EphemeralNoLink).
+	// a visit's crumb, which links nowhere (EphemeralNoLink) and whose
+	// right-drag moves it (KeepsVisit).
 	CarriesEphemeral bool
 	// FromCrumb is a drag from a crumb (wsbar.ActionCrumbDrag), whose
 	// trashcan is refused (CrumbNoDelete).
@@ -312,6 +313,11 @@ const FingerNoFile = "a finger does not move or delete a file; use a mouse"
 // EphemeralNoLink is why a drop that would link to an ephemeral visit is
 // refused: no link holds a visit, so the link would read dead once it ends.
 const EphemeralNoLink = "a link to an ephemeral visit would die with it"
+
+// EphemeralNoFarMove is why a visit's crumb dropped on a far node's grid is
+// refused: the drop is the visit's move (KeepsVisit), and nothing moves
+// across a connection.
+const EphemeralNoFarMove = "an ephemeral visit does not move across a connection"
 
 // PasteNeedsRight is why a left-drop onto a paste target is refused: a
 // paste leaves the tile where it is, as a copy does, and a left-drag moves
@@ -375,6 +381,18 @@ func CarryMovesAsLink(rows []*gridwellv1.Tile, dest string) bool {
 	return false
 }
 
+// KeepsVisit is a visit's crumb right-dragged to a release that is no paste:
+// the drop moves the visit's row, so what was ephemeral is kept, where any
+// other crumb's right-drag copies (Joe, 2026-11-19). A move is no creation,
+// so its world-reads are a move's (Forbidden, a vacated cell).
+func KeepsVisit(in DropInput) bool {
+	return in.CarriesEphemeral && in.FromCrumb && in.Intent == IntentCopy && !in.PasteTarget
+}
+
+// Moves is whether the drop would move the rows it carries rather than make
+// new ones: a left-drag, or a visit kept (KeepsVisit).
+func Moves(in DropInput) bool { return !in.Intent.Creates() || KeepsVisit(in) }
+
 // DecideDrop's branch order is the decision: an earlier arm wins. HasTarget
 // sits above every arm that lands something in a grid, so none commits against
 // a destination the target resolution refused; only the pan and the trashcan,
@@ -423,16 +441,20 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropPaste, ""
 	case in.Touch && in.CarriesFile && in.Intent == IntentMove && !in.SameGrid && !in.MovesAsLink:
 		return DropRejected, FingerNoFile
+	case KeepsVisit(in) && in.MovesAsLink:
+		return DropRejected, EphemeralNoFarMove
 	case in.CarriesEphemeral && (in.Intent == IntentLink || in.Intent == IntentCopy && in.CopiesAsLink):
 		return DropRejected, EphemeralNoLink
 	case in.Forbidden:
 		return DropRejected, MovesNoTiles
-	case in.TargetRefusesTiles && (in.Intent.Creates() || in.MovesAsLink):
+	case in.TargetRefusesTiles && (!Moves(in) || in.MovesAsLink):
 		return DropRejected, TakesNoTiles
 	case in.SameCell:
 		return DropRejected, sameCell
 	case in.Occupied:
 		return DropRejected, CellTaken
+	case KeepsVisit(in):
+		return DropMove, ""
 	case in.Intent == IntentCopy && !in.CopiesAsLink:
 		return DropCopy, ""
 	case in.Intent != IntentMove || in.MovesAsLink:

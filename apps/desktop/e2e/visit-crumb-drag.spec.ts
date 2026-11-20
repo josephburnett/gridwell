@@ -3,10 +3,12 @@ import { test, expect } from './fixtures';
 import type { GridwellDriver, PaneInfo } from './driver';
 import { createText, getTile, handshake } from './oracle';
 
-// An ephemeral visit's crumb is its tile as every crumb is (Joe, 2026-11-19:
-// "Right button only, all crumbs"): a right-drag copies it onto a grid and
-// the visit stays as it was, a link to it is refused, and a left-drag or the
-// trashcan moves and deletes nothing, the trashcan saying why.
+// An ephemeral visit's crumb right-dragged onto a grid moves the visit's row
+// there (Joe, 2026-11-19: "what was ephemeral is now persistent. And the pane
+// stay as-is and I don't lose changes"): one row, the same id, the pane on it
+// as it was and no longer grey. A link to it is refused, a move across a
+// connection is refused, and a left-drag or the trashcan moves and deletes
+// nothing, the trashcan saying why.
 
 type Button = 'left' | 'right';
 
@@ -102,13 +104,36 @@ const notices = async (window: Page): Promise<string[]> =>
   ((await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? []).map((n: any) => String(n.message));
 
 // The visit as it stands: on the scratch grid, the focused pane on it, grey.
-async function stillAVisit(gw: GridwellDriver, scratch: string, visit: string, field: 'textFocus' | 'gridID' = 'textFocus', want = visit) {
+async function stillAVisit(gw: GridwellDriver, scratch: string, visit: string) {
   expect(await onGrid(gw, scratch, visit), 'the visit is still on the scratch grid').toBeTruthy();
-  expect((await gw.focused())[field], 'the pane is still on the visit').toBe(want);
+  expect((await gw.focused()).textFocus, 'the pane is still on the visit').toBe(visit);
   await expect.poll(async () => (await gw.barName()).label).toMatch(/ — ephemeral$/);
 }
 
-test('a url visit right-dragged off its crumb is copied, and a left-drag moves nothing', async ({ electronApp, window, gw }) => {
+// Typing goes to owner once the drop's landing has settled: until then the
+// keyboard is the canvas's (gesture.Keyboard), for any drop.
+async function typesInto(window: Page, owner: string) {
+  await expect
+    .poll(() => window.evaluate(() => {
+      const k = (window as any).__gridwellTest.keyboard();
+      return k.settled && k.holds ? k.owner : '';
+    }))
+    .toBe(owner);
+}
+
+// The visit kept: its one row on grid at (x, y), none left on the scratch
+// grid, no second row made, and the bar no longer grey.
+async function kept(gw: GridwellDriver, scratch: string, grid: string, id: string, x: number, y: number, n: number) {
+  await expect.poll(async () => (await onGrid(gw, grid, id))?.id, { timeout: 15_000 }).toBe(id);
+  const row = (await onGrid(gw, grid, id))!;
+  expect([Number(row.x ?? 0), Number(row.y ?? 0)], 'it landed on the cell the drop resolved').toEqual([x, y]);
+  expect(await onGrid(gw, scratch, id), 'it left the scratch grid').toBeUndefined();
+  expect(((await gw.getGrid(grid)).tiles ?? []).length, 'one row, no copy').toBe(n + 1);
+  await expect.poll(async () => (await gw.barName()).label).not.toMatch(/ — ephemeral$/);
+  return row;
+}
+
+test('a url visit right-dragged off its crumb is kept: its id, its address, its live page', async ({ electronApp, window, gw }) => {
   const { home, dest } = await twoPanes(gw);
   const scratch = await gw.scratchGridID('home');
   const visit = await visitURL(electronApp, window, gw, `${gw.origin}/wasm_exec.js?keep=1`);
@@ -127,17 +152,81 @@ test('a url visit right-dragged off its crumb is copied, and a left-drag moves n
   await stillAVisit(gw, scratch, visit);
 
   await dragCrumb(window, gw, visit, at, 'right');
-  const landed = async () => ((await gw.getGrid(home.gridID)).tiles ?? []).find((t) => Number(t.x ?? 0) === dropX && Number(t.y ?? 0) === dropY);
-  await expect.poll(async () => (await landed())?.kind, { timeout: 15_000 }).toBe('url');
-  const copy = (await landed())!;
-  expect(copy.id, 'a copy, not the visit').not.toBe(visit);
-  expect(String(copy.urlString ?? ''), 'its address came with it').toContain('wasm_exec.js?keep=1');
-  await stillAVisit(gw, scratch, visit);
+  const row = await kept(gw, scratch, home.gridID, visit, dropX, dropY, n);
+  expect(String(row.urlString ?? ''), 'its address came with it').toContain('wasm_exec.js?keep=1');
+  const f = await gw.focused();
+  expect([f.textFocus, f.gridID], 'the pane is still on the row, on its grid').toEqual([visit, home.gridID]);
   expect(await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length), 'the page stayed live').toBe(live);
   expect(await notices(window), 'nothing went wrong').toEqual([]);
 });
 
-test('a door visit right-dragged onto a grid is copied with what is on it, and the pane stays inside the visit', async ({ window, gw }) => {
+test('a text visit right-dragged off its crumb is kept with what was typed before and after', async ({ window, gw }) => {
+  const origin = new URL(window.url()).origin;
+  const tg = await templatesGrid(window);
+  const tpl = await createText(origin, tg, 0, 0, 'a text to visit');
+  const { home, dest } = await twoPanes(gw);
+  const scratch = await gw.scratchGridID('home');
+  const cx = Math.round(dest.cx);
+  const cy = Math.round(dest.cy);
+
+  await visitTemplate(window, gw, tpl.id);
+  await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
+  const visit = (await gw.focused()).textFocus;
+  expect(await onGrid(gw, scratch, visit), 'the visit is on the scratch grid').toBeTruthy();
+  if ((await gw.textareaInfo())?.tileID !== visit) await gw.toggleTextMode();
+  await expect.poll(async () => (await gw.textareaInfo())?.tileID).toBe(visit);
+
+  // A link would die with the visit, so ctrl + right-drag is refused.
+  const n = ((await gw.getGrid(home.gridID)).tiles ?? []).length;
+  await dragCrumb(window, gw, visit, await gw.cellCenter(dest.id, cx - 2, cy), 'right', true);
+  await expect.poll(() => notices(window)).toContain('a link to an ephemeral visit would die with it');
+  expect(((await gw.getGrid(home.gridID)).tiles ?? []).length, 'no link was made').toBe(n);
+  await stillAVisit(gw, scratch, visit);
+
+  // Typed and not yet saved when the drop lands: the save is debounced, and
+  // it is the row's by id, which the move keeps.
+  await window.keyboard.press('End');
+  await window.keyboard.type(' before');
+  await dragCrumb(window, gw, visit, await gw.cellCenter(dest.id, cx + 2, cy), 'right');
+  await kept(gw, scratch, home.gridID, visit, cx + 2, cy, n);
+  const f = await gw.focused();
+  expect([f.textFocus, f.gridID], 'the pane is still on the row, on its grid').toEqual([visit, home.gridID]);
+  expect((await gw.textareaInfo())?.tileID, 'the raw editor is still on it').toBe(visit);
+  await typesInto(window, 'editor');
+  await window.keyboard.type(' after');
+  await expect
+    .poll(() => gw.getTileContent(visit), { timeout: 10_000 })
+    .toBe('a text to visit before after');
+  expect(await gw.textareaValue(), 'the editor shows it').toBe('a text to visit before after');
+});
+
+test('a shell visit right-dragged off its crumb is kept on its tmux', async ({ window, gw }) => {
+  const { home, dest } = await twoPanes(gw);
+  const scratch = await gw.scratchGridID('home');
+  await gw.clickMenuSwatch('shell');
+  await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
+  const visit = (await gw.focused()).textFocus;
+  await gw.shellAttached();
+  await window.keyboard.type('GW_KEPT=kept-on-its-tmux');
+  await window.keyboard.press('Enter');
+  const n = ((await gw.getGrid(home.gridID)).tiles ?? []).length;
+
+  const dropX = Math.round(dest.cx) + 1;
+  const dropY = Math.round(dest.cy) - 1;
+  await dragCrumb(window, gw, visit, await gw.cellCenter(dest.id, dropX, dropY), 'right');
+  await kept(gw, scratch, home.gridID, visit, dropX, dropY, n);
+  const f = await gw.focused();
+  expect([f.textFocus, f.gridID], 'the pane is still on the row, on its grid').toEqual([visit, home.gridID]);
+
+  // The same shell: what it was told before the drop it still knows.
+  await typesInto(window, 'terminal');
+  await window.keyboard.type(`printf '%s\\n' "$GW_KEPT"`);
+  await window.keyboard.press('Enter');
+  await gw.waitShellLine('kept-on-its-tmux');
+  expect(await notices(window), 'nothing went wrong').toEqual([]);
+});
+
+test('a door visit right-dragged onto a grid is kept with its grid and what is on it, and the pane stays inside', async ({ window, gw }) => {
   const origin = new URL(window.url()).origin;
   const tg = await templatesGrid(window);
   const res = await fetch(`${origin}/gridwell.v1.Gridwell/CreateTile`, {
@@ -157,67 +246,24 @@ test('a door visit right-dragged onto a grid is copied with what is on it, and t
   const inside = await createText(origin, visit.childGridId!, 1, 1, 'put inside the visit');
   const before = await gw.focused();
   await gw.waitClientTileAt(before.id, 1, 1, inside.id);
+  const n = ((await gw.getGrid(home.gridID)).tiles ?? []).length;
 
   const dropX = Math.round(dest.cx) - 1;
   const dropY = Math.round(dest.cy);
-  const at = await gw.cellCenter(dest.id, dropX, dropY);
-  await dragCrumb(window, gw, visit.id, at, 'left', false, visit.childGridId);
-  expect(await onGrid(gw, home.gridID, visit.id), 'a left-drag moved nothing').toBeUndefined();
-
-  await dragCrumb(window, gw, visit.id, at, 'right', false, visit.childGridId);
-  const landed = async () => ((await gw.getGrid(home.gridID)).tiles ?? []).find((t) => Number(t.x ?? 0) === dropX && Number(t.y ?? 0) === dropY);
-  await expect.poll(async () => (await landed())?.kind, { timeout: 15_000 }).toBe('door');
-  const copy = (await landed())!;
-  expect(copy.id, 'a copy, not the visit').not.toBe(visit.id);
-  expect(copy.childGridId, 'a grid of its own').not.toBe(visit.childGridId);
-  await expect
-    .poll(async () => ((await gw.getGrid(copy.childGridId!)).tiles ?? []).some((t) => t.kind === 'text'), { timeout: 10_000 })
-    .toBe(true);
-  expect(await onGrid(gw, visit.childGridId!, inside.id), 'the visit still holds what was put inside it').toBeTruthy();
+  await dragCrumb(window, gw, visit.id, await gw.cellCenter(dest.id, dropX, dropY), 'right', false, visit.childGridId);
+  const row = await kept(gw, scratch, home.gridID, visit.id, dropX, dropY, n);
+  expect(row.childGridId, 'its own grid').toBe(visit.childGridId);
+  expect(await onGrid(gw, visit.childGridId!, inside.id), 'what was put inside it is still there').toBeTruthy();
   const f = await gw.focused();
-  expect([f.id, f.gridID], 'the same pane, still inside the visit').toEqual([before.id, visit.childGridId]);
+  expect([f.id, f.gridID], 'the same pane, still inside the door').toEqual([before.id, visit.childGridId]);
   expect([f.cx, f.cy, f.zoom], 'at the framing it had').toEqual([before.cx, before.cy, before.zoom]);
-  expect(await onGrid(gw, scratch, visit.id), 'the visit is still on the scratch grid').toBeTruthy();
-  await expect.poll(async () => (await gw.barName()).label).toMatch(/ — ephemeral$/);
+
+  // It is a tile like any other now: leaving retires nothing.
+  await gw.ascendViaCrumb();
+  await expect.poll(async () => (await gw.focused()).gridID).toBe(home.gridID);
+  await gw.waitIdle();
+  expect((await onGrid(gw, home.gridID, visit.id))?.id, 'the ascent kept it').toBe(visit.id);
   expect(await notices(window), 'nothing went wrong').toEqual([]);
-});
-
-test('a text visit from a template is copied by a right-drag, and ctrl + right-drag and a left-drag are not', async ({ window, gw }) => {
-  const origin = new URL(window.url()).origin;
-  const tg = await templatesGrid(window);
-  const tpl = await createText(origin, tg, 0, 0, 'a text to visit');
-  const { home, dest } = await twoPanes(gw);
-  const scratch = await gw.scratchGridID('home');
-  const cx = Math.round(dest.cx);
-  const cy = Math.round(dest.cy);
-
-  await visitTemplate(window, gw, tpl.id);
-  await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
-  const visit = (await gw.focused()).textFocus;
-  expect(await onGrid(gw, scratch, visit), 'the visit is on the scratch grid').toBeTruthy();
-  const before = await getTile(origin, visit);
-
-  // A right-drag copies the row and leaves the visit as it was.
-  await dragCrumb(window, gw, visit, await gw.cellCenter(dest.id, cx + 2, cy), 'right');
-  await expect
-    .poll(async () => ((await gw.getGrid(home.gridID)).tiles ?? []).find((t) => Number(t.x ?? 0) === cx + 2 && Number(t.y ?? 0) === cy)?.kind, { timeout: 15_000 })
-    .toBe('text');
-  const copied = ((await gw.getGrid(home.gridID)).tiles ?? []).find((t) => Number(t.x ?? 0) === cx + 2 && Number(t.y ?? 0) === cy)!;
-  expect(copied.id, 'a copy, not the visit').not.toBe(visit);
-  await stillAVisit(gw, scratch, visit);
-
-  // A link would die with the visit, so ctrl + right-drag is refused.
-  const n = ((await gw.getGrid(home.gridID)).tiles ?? []).length;
-  await dragCrumb(window, gw, visit, await gw.cellCenter(dest.id, cx - 2, cy), 'right', true);
-  await expect.poll(() => notices(window)).toContain('a link to an ephemeral visit would die with it');
-  expect(((await gw.getGrid(home.gridID)).tiles ?? []).length, 'no link was made').toBe(n);
-  await stillAVisit(gw, scratch, visit);
-
-  // A left-drag is the crumb's click: nothing moves.
-  await dragCrumb(window, gw, visit, await gw.cellCenter(dest.id, cx, cy + 2));
-  expect(((await gw.getGrid(home.gridID)).tiles ?? []).length, 'nothing landed').toBe(n);
-  expect((await getTile(origin, visit)).version, 'the visit is as it was').toBe(before.version);
-  await stillAVisit(gw, scratch, visit);
 });
 
 test('a visit dragged onto the trashcan stays, and says why', async ({ window, gw }) => {
@@ -240,10 +286,10 @@ test('a visit dragged onto the trashcan stays, and says why', async ({ window, g
   expect(await onGrid(gw, tg, tpl.id), 'the template stayed').toBeTruthy();
 });
 
-// A workspace tile's visit drags from its boundary band as any crumb does:
-// a right-drag onto a grid one of its panes shows copies it, layout and all,
-// and the window stays inside the visit.
-test('a workspace visit right-dragged off its boundary crumb is copied with its layout', async ({ window, gw }) => {
+// A workspace tile's visit drags from its boundary band: its panes are its
+// own, so the only grids to drop it on are the ones they show; the level
+// follows the row and leaving lands where it did.
+test('a workspace visit right-dragged off its boundary crumb is kept with its layout', async ({ window, gw }) => {
   const origin = new URL(window.url()).origin;
   const tg = await templatesGrid(window);
   const res = await fetch(`${origin}/gridwell.v1.Gridwell/CreateTile`, {
@@ -274,6 +320,7 @@ test('a workspace visit right-dragged off its boundary crumb is copied with its 
   const dest = (await gw.panes()).find((p) => p.id !== inner.id)!;
   expect(dest.gridID, 'the other pane shows home').toBe(home.gridID);
   const before = await getTile(origin, ws.id);
+  const n = ((await gw.getGrid(home.gridID)).tiles ?? []).length;
 
   const dropX = Math.round(dest.cx) + 1;
   const dropY = Math.round(dest.cy) + 1;
@@ -283,26 +330,53 @@ test('a workspace visit right-dragged off its boundary crumb is copied with its 
   expect(await depth(), 'and left nothing').toBe(1);
 
   await dragCrumb(window, gw, ws.id, at, 'right');
-  const landed = async () => ((await gw.getGrid(home.gridID)).tiles ?? []).find((t) => Number(t.x ?? 0) === dropX && Number(t.y ?? 0) === dropY);
-  await expect.poll(async () => (await landed())?.kind, { timeout: 15_000 }).toBe('workspace');
-  const copy = (await landed())!;
-  expect(copy.id, 'a copy, not the visit').not.toBe(ws.id);
-  expect(await gw.getTileContent(copy.id), 'the copy holds the layout').toContain(text.id);
-  expect(await onGrid(gw, scratch, ws.id), 'the visit is still on the scratch grid').toBeTruthy();
-  expect((await getTile(origin, ws.id)).version, 'the visit is as it was').toBe(before.version);
+  await kept(gw, scratch, home.gridID, ws.id, dropX, dropY, n);
+  expect((await getTile(origin, ws.id)).version, 'a move changes no layout').toBe(before.version);
+  expect(await gw.getTileContent(ws.id), 'the layout still holds the text').toContain(text.id);
   expect(await depth(), 'still inside').toBe(1);
   expect((await gw.focused()).textFocus, 'the panes are as they were').toBe(text.id);
 
-  // Over the trashcan the band snaps back and says why.
-  expect(await notices(window), 'nothing went wrong').toEqual([]);
-  await dragCrumb(window, gw, ws.id, await gw.circleCenter(), 'right');
-  await expect.poll(() => notices(window)).toEqual(["a crumb's drag copies; it does not delete"]);
-  expect(await depth(), 'still inside').toBe(1);
-  expect(await onGrid(gw, scratch, ws.id), 'the visit is still on the scratch grid').toBeTruthy();
-
-  // Leaving retires the visit and keeps the copy.
+  // Leaving lands where it did, and retires nothing.
   await gw.leaveWorkspace();
   await expect.poll(depth).toBe(0);
-  await expect.poll(async () => await onGrid(gw, scratch, ws.id), { timeout: 10_000 }).toBeUndefined();
-  expect((await onGrid(gw, home.gridID, copy.id))?.id, 'the copy stayed').toBe(copy.id);
+  const back = await gw.focused();
+  expect([back.id, back.gridID], 'back on the pane it was entered from').toEqual([home.id, home.gridID]);
+  await gw.waitIdle();
+  expect((await onGrid(gw, home.gridID, ws.id))?.id, 'the leave kept it').toBe(ws.id);
+  expect((await gw.getGrid(scratch)).tiles ?? [], 'the scratch grid is empty').toEqual([]);
+  expect(await notices(window), 'nothing went wrong').toEqual([]);
+});
+
+test.describe('across a connection', () => {
+  test.use({ extraNodes: ['second'] });
+
+  // There is no move across a connection, so a visit's crumb dropped on a
+  // far grid is refused and says so, as information (Joe, 2026-11-19).
+  test('a right-drag of a visit onto a far grid is refused as the move it is', async ({ window, gw }) => {
+    const origin = new URL(window.url()).origin;
+    const tg = await templatesGrid(window);
+    const tpl = await createText(origin, tg, 0, 0, 'a text that stays home');
+    const { home, dest } = await twoPanes(gw);
+    const visitor = await gw.focused();
+    await gw.clickScreen(dest.x + 20, dest.y + 20);
+    await gw.enterSource('second');
+    const far = (await gw.panes()).find((p) => p.id === dest.id)!;
+    expect(far.gridID, 'the other pane is on the far home').not.toBe(home.gridID);
+    await gw.clickScreen(visitor.x + 20, visitor.y + 20);
+    const scratch = await gw.scratchGridID('home');
+
+    await visitTemplate(window, gw, tpl.id);
+    await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
+    const visit = (await gw.focused()).textFocus;
+    const n = ((await gw.getGrid(far.gridID)).tiles ?? []).length;
+
+    await dragCrumb(window, gw, visit, await gw.cellCenter(far.id, Math.round(far.cx), Math.round(far.cy)), 'right');
+    const told = async () =>
+      ((await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? []).find(
+        (x: any) => x.message === 'an ephemeral visit does not move across a connection',
+      )?.severity ?? null;
+    await expect.poll(told).toBe('info');
+    expect(((await gw.getGrid(far.gridID)).tiles ?? []).length, 'nothing landed on the far grid').toBe(n);
+    await stillAVisit(gw, scratch, visit);
+  });
 });

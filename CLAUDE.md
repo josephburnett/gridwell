@@ -882,24 +882,44 @@ These were decided deliberately. Do not reverse one without a new decision.
   too. Tiles are tile. Yes, any snap-back that is a denial of my request
   should say why. ... Consistency consistency consistency.", and of a
   visit's crumb, "Right button only, all
-  crumbs"). Every crumb in the bar standing for a tile
+  crumbs"; Joe, 2026-11-19, of a visit kept: "The user experience should be
+  that what was ephemeral is now persistent. And the pane stay as-is and I
+  don't lose changes"). Every crumb in the bar standing for a tile
   (`pane.NavCrumb.SelectTarget`), a door's, a link's, a content tile's, an
   ephemeral visit's the same as any other, the current one included,
   wherever it sits in the place, and every level's boundary band, an outer
   level's too, since a copy, a link or a paste reads the row and not the
   parked tree, right-drags as the tile it is, from the grid it sits on,
   through the one drag and its verdicts (`dragdrop.DecideDrop`,
-  `wsbar.RouteClick`): onto a grid it copies, deep as any copy, with ctrl
-  it links, onto a shell or a raw text it pastes its reference, and the
-  pane keeps showing it. Nothing is moved or
-  deleted from the bar: no crumb left-drags, the + stays a + while a crumb
-  is dragged rather than turning into the trashcan (Joe, 2026-11-19: "Do
-  not show it"; `barslot.ModeTrashcan`), and a crumb's drag released over
-  it is refused with "a crumb's drag copies; it does not delete",
+  `wsbar.RouteClick`): onto a grid it copies, deep as any copy, a visit's
+  aside, with ctrl it links, onto a shell or a raw text it pastes its
+  reference, and the pane keeps showing it. Nothing is deleted from the
+  bar and no crumb left-drags: a left press is the crumb's click, the +
+  stays a + while a crumb is dragged rather than turning into the trashcan
+  (Joe, 2026-11-19: "Do not show it"; `barslot.ModeTrashcan`), and a
+  crumb's drag released over it is refused with "a crumb's drag copies; it
+  does not delete",
   told as information and written under the no-entry badge, as every told
-  refusal is (`dragdrop.CrumbNoDelete`, `dragdrop.Told`). A visit is kept by
-  copying it: a right-drag onto a grid copies the row, and the visit stays
-  as it was, grey, retired when it is left. A drop that would link to a
+  refusal is (`dragdrop.CrumbNoDelete`, `dragdrop.Told`). A visit's crumb
+  right-dragged onto a grid moves the visit's row there, so what was
+  ephemeral is persistent (`dragdrop.KeepsVisit`): the move claims the
+  placement as every move does, and the row keeps its id, its content,
+  preview, framing and tmux, a door its grid with everything on it and a
+  workspace tile its layout, so nothing unsaved is lost, since the row's
+  save chain is by its id. Once the move lands the visiting pane's place is
+  re-rooted under the destination pane's, the frames from the row's up as
+  they were and a live surface kept, so the pane shows what it showed, and
+  the grey border goes because the row's grid is no longer the scratch grid
+  (`nav.visitMoved`, `pane.Stack.RelocatedOnto`). A workspace tile's visit
+  is an open level, whose panes stay as they are: the level follows the row
+  to its grid, where a close-all ascent re-anchors and whose glyph the root
+  crumb wears (`pane.Levels.Moved`), and leaving lands where it did.
+  Nothing is retired: a sibling pane on the row keeps its place, and its
+  ascent or leave retires nothing. Dropped on a far node's grid it is
+  refused with "an ephemeral visit does not move across a connection",
+  told as information (Joe, 2026-11-19; `dragdrop.EphemeralNoFarMove`).
+  A right-drop of it onto a shell or a raw text pastes its reference and
+  it stays a visit. A drop that would link to a
   visit, a ctrl + right-drag or a copy that lands as a link, is refused
   with "a link to an ephemeral visit would die with it", since no link
   holds a visit (`dragdrop.EphemeralNoLink`), and wears the no-entry
@@ -937,7 +957,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   Gridwell tile moves, since the Gridwell layer is one space (2026-11-08).
   Over a shell or a raw text the right button pastes and the left is
   refused (2026-11-16). A crumb in the bar standing for a tile right-drags
-  as that tile and never left-drags (Joe, 2026-11-18, 2026-11-19). A right-drag of a directory's door links, because a directory never
+  as that tile, a visit's moving the visit onto a grid, and never left-drags (Joe, 2026-11-18, 2026-11-19). A right-drag of a directory's door links, because a directory never
   copies (2026-10-20), and so does any file's onto a Gridwell grid, because
   nothing is converted between the disk and Gridwell (2026-11-08). Dashed means link; deleting a link
   unlinks. Ctrl or cmd + left-click descends in a new pane split below —

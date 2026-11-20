@@ -36,6 +36,8 @@ type dropTarget struct {
 	into paste.Into
 	// atX, atY is the release a paste into a text lands at.
 	atX, atY float64
+	// door is the open door the cursor went through to gridID, "" for none.
+	door string
 }
 
 // pans is a drag that carries nothing and is no menu item's: it pans.
@@ -97,8 +99,8 @@ func (a *App) commitVerdict(in dragdrop.DropInput, d *dragState, t *dropTarget, 
 // dropInputAt gathers every world-read a drop decision needs. The left
 // commit, the right commit and the ghost preview all read it, so the three
 // cannot disagree about the world they decide on. The flavor is d.intent, set
-// by the press: Forbidden is move-only, because no creation is forbidden, and
-// a move vacates the carried tiles' cells while a creation vacates none. The
+// by the press: Forbidden is move-only (dragdrop.Moves), because no creation
+// is forbidden, and a move vacates the carried tiles' cells while a creation vacates none. The
 // grabbed tile's cell decides for the whole carry.
 //
 // placement asks for the drop cell too. The preview passes false, so it shows
@@ -155,7 +157,7 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	in.MovesAsLink = dragdrop.CarryMovesAsLink(d.carried, t.gridID)
 	srcAccepts, srcKnown := a.gridAcceptsTiles(d.srcGridID)
 	in.CopiesAsLink = dragdrop.CarryCopiesAsLink(d.carried, t.gridID, srcAccepts, srcKnown)
-	if !d.intent.Creates() {
+	if dragdrop.Moves(in) {
 		in.Forbidden = a.dropForbiddenForMove(d, t, in.MovesAsLink)
 	}
 	if !placement {
@@ -163,7 +165,7 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	}
 	dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
 	in.SameCell = in.SameGrid && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
-	in.Occupied = a.occupiedForDrop(t.gridID, d.carry(), dropX, dropY, !d.intent.Creates())
+	in.Occupied = a.occupiedForDrop(t.gridID, d.carry(), dropX, dropY, dragdrop.Moves(in))
 	return in, t, dropX, dropY
 }
 
@@ -233,6 +235,7 @@ func (a *App) dropTargetAt(sx, sy float64, carried dragdrop.Carry) (*dropTarget,
 			cellSize: cp.CellPx,
 			originX:  cp.OriginX,
 			originY:  cp.OriginY,
+			door:     n.Id,
 		}, true
 	}
 
