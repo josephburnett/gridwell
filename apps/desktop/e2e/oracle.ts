@@ -373,6 +373,29 @@ export async function handshake(origin: string): Promise<{ homeGridId?: string; 
   return (await res.json()) as { homeGridId?: string; templatesGridId?: string };
 }
 
+// The row id where home's trash keeps it, undefined while it is anywhere
+// else: a deleted tile, a closed visit's included, lands on a month door's
+// grid of the trash grid the handshake declares.
+export async function trashed(origin: string, tileId: string): Promise<Tile | undefined> {
+  const res = await fetch(`${origin}/${SERVICE}/Handshake`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: '{}',
+  });
+  if (!res.ok) throw new Error(`Handshake failed: ${res.status} ${await res.text()}`);
+  const hs = (await res.json()) as { sources?: { sourceGrids?: { label?: string; gridId?: string }[] }[] };
+  const trash = (hs.sources ?? []).flatMap((s) => s.sourceGrids ?? []).find((g) => g.label === 'trash')?.gridId;
+  if (!trash) throw new Error('the handshake declares no trash grid');
+  const months = ((await getGrid(origin, trash)).tiles ?? []).filter((t) => t.kind === 'door').map((t) => t.childGridId);
+  let row: Tile;
+  try {
+    row = await getTile(origin, tileId);
+  } catch {
+    return undefined;
+  }
+  return months.includes(String(row.gridId)) ? row : undefined;
+}
+
 // A text tile with body, made as an agent makes one: the create, then the
 // write that claims the version it answered.
 export async function createText(origin: string, gridId: string, x: number, y: number, body: string): Promise<Tile> {

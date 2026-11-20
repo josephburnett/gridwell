@@ -137,12 +137,12 @@ func (a *App) enteredVisit(p *pane.Pane) *gridwellv1.Tile {
 	return nil
 }
 
-// deleteEphemeralTile removes an ended ephemeral visit, and for a
-// shell the source kills its tmux too. Unlike the trashcan delete it
-// parks, because an ephemeral row is off-grid and a lost cleanup is invisible
-// until the startup sweep. A visit writes its address like any url view, which
-// bumps the version, so the delete rides the row's chain behind the closing
-// view's writes and claims the row as they left it, seen when it is not cached.
+// deleteEphemeralTile sends an ended ephemeral visit to the trash, a shell's
+// tmux running. Unlike the trashcan delete it parks, because an ephemeral row
+// is off-grid and a lost close is invisible until the startup sweep. A visit
+// writes its address like any url view, which bumps the version, so the
+// delete rides the row's chain behind the closing view's writes and claims the
+// row as they left it, seen when it is not cached.
 func (a *App) deleteEphemeralTile(seen *gridwellv1.Tile) {
 	gridID, tileID := seen.GridId, seen.Id
 	req := func() *gridwellv1.DeleteTileRequest {
@@ -151,10 +151,8 @@ func (a *App) deleteEphemeralTile(seen *gridwellv1.Tile) {
 		}
 		return rpc.DeleteOf(seen)
 	}
-	// The row is going, and so is the tmux behind it.
-	a.forgetShellAlive(tileID)
 	// No refetch: nothing renders the scratch grid, and the event stream
-	// carries the removal into the cache.
+	// carries the move into the cache.
 	a.post(write{
 		label: "DeleteTile", gid: gridID, id: tileID, chain: tileID, afterHolds: true,
 		source: "ephemeral", failText: "ephemeral tile cleanup failed",
@@ -163,8 +161,8 @@ func (a *App) deleteEphemeralTile(seen *gridwellv1.Tile) {
 	})
 }
 
-// visitEphemeralShell has the opposite exit contract to the url visit: ascent
-// deletes the tile and its tmux, which the gray border warns about.
+// visitEphemeralShell is the shell visit: ascent sends the tile to the trash,
+// its tmux running, which the gray border warns about.
 func (a *App) visitEphemeralShell(p *pane.Pane) {
 	a.visitEphemeral(p, "CreateShell",
 		&gridwellv1.Tile{Kind: rpc.KindShell, X: 0, Y: 0, W: 1, H: 1})

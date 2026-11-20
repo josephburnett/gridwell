@@ -97,8 +97,8 @@ type Palette struct {
 	// Workspace tiles: teal, a hue no other kind uses.
 	WorkspaceFill   string
 	WorkspaceBorder string
-	// EphemeralBorder overrides the kind color, because ascending deletes the
-	// tile, a shell's tmux included, and the border is the warning.
+	// EphemeralBorder overrides the kind color, because ascending sends the
+	// tile to the trash, and the border is the warning.
 	EphemeralBorder      string
 	EphemeralBorderFaded string
 	// SourceLabelBg is opaque enough that a label reads over any preview.
@@ -204,7 +204,7 @@ const (
 	FamilyShell
 	FamilyDirectory // a directory, its door and every file in it
 	FamilyWorkspace
-	// FamilyEphemeral beats the kind's, because ascending deletes the tile.
+	// FamilyEphemeral beats the kind's, because ascending trashes the tile.
 	FamilyEphemeral
 	FamilyMuted // a kind with no colour of its own
 )

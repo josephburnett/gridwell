@@ -138,7 +138,8 @@ func TestWorkspaceCopySharesBlobThenDiverges(t *testing.T) {
 
 // An ephemeral visit lives while a workspace tile's layout names it, whichever
 // pane ends it, so a delete of one a layout holds keeps the row and a delete
-// once none does deletes it; a layout that will not read could name any. The
+// once none does sends it to the trash; a layout that will not read could
+// name any. The
 // node is a config id other than the minted one, which the layout speaks.
 func TestDeleteKeepsAVisitALayoutHolds(t *testing.T) {
 	s := newTestStore(t)
@@ -157,8 +158,11 @@ func TestDeleteKeepsAVisitALayoutHolds(t *testing.T) {
 		return v
 	}
 	gone := func(v *gridwellv1.Tile) bool {
-		_, err := s.GetTile(ctx, v.Id)
-		return errors.Is(err, ErrNotFound)
+		got, err := s.GetTile(ctx, v.Id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.GridId != scratch
 	}
 	held, loose := visit(0), visit(1)
 	ws, err := s.CreateWorkspace(ctx, root, 0, 0, 1, 1, "ws", false, nil)
@@ -177,7 +181,7 @@ func TestDeleteKeepsAVisitALayoutHolds(t *testing.T) {
 		t.Fatalf("delete of a visit a layout names = %v, gone %v; want kept", err, gone(held))
 	}
 	if err := s.DeleteTile(ctx, rpc.DeleteOf(loose)); err != nil || !gone(loose) {
-		t.Fatalf("delete of a visit no layout names = %v, gone %v; want deleted", err, gone(loose))
+		t.Fatalf("delete of a visit no layout names = %v, gone %v; want trashed", err, gone(loose))
 	}
 
 	if n, err = s.WriteContent(ctx, ws.Id, n.Version, []byte("{not a layout")); err != nil {
@@ -191,6 +195,6 @@ func TestDeleteKeepsAVisitALayoutHolds(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.DeleteTile(ctx, rpc.DeleteOf(held)); err != nil || !gone(held) {
-		t.Fatalf("delete once no layout names it = %v, gone %v; want deleted", err, gone(held))
+		t.Fatalf("delete once no layout names it = %v, gone %v; want trashed", err, gone(held))
 	}
 }

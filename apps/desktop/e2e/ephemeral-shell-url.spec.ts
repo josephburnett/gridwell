@@ -1,9 +1,10 @@
 import { test, expect } from './fixtures';
+import { trashed } from './oracle';
 
 // A url activated in a live shell behaves like a link a live url view pops: the
 // pane splits and the url opens as an ephemeral visit, off-grid in the scratch
 // grid, in the lower half. The shell stays live above, and ascending the lower
-// pane deletes the visit. Descending in place would stack the shell on the
+// pane sends the visit to the trash. Descending in place would stack the shell on the
 // session-only ascent stash, which any place-restore drops.
 //
 // The terminal-cell link click cannot be hit-tested from the canvas, so this
@@ -58,7 +59,7 @@ test('clicking a url in a shell opens an ephemeral visit in a split below (#207)
     homeWithShell,
   );
 
-  // Ascending the lower pane deletes its ephemeral visit. A click during the
+  // Ascending the lower pane sends its ephemeral visit to the trash. A click during the
   // descent transition is deliberately swallowed, so the middle-click retries.
   await gw.waitIdle();
   const m = window.mouse;
@@ -85,6 +86,12 @@ test('clicking a url in a shell opens an ephemeral visit in a split below (#207)
         .length;
     }, { timeout: 10_000 })
     .toBe(0);
+  await expect
+    .poll(async () => String((await trashed(gw.origin, lower.textFocus))?.urlString ?? ''), {
+      message: 'the closed visit is in the trash with its address',
+      timeout: 10_000,
+    })
+    .toContain('visited=shx');
 
   // Delete the shell tile at the end so its tmux is killed and teardown
   // does not hang on a live PTY.

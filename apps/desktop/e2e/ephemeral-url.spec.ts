@@ -1,10 +1,11 @@
 import { test, expect } from './fixtures';
+import { trashed } from './oracle';
 
 // Clicking the url swatch rather than dragging it opens the url modal, and
 // submitting descends into a live url tile created in the off-grid scratch
 // grid. The visit places no tile on the visible home grid, goes live as a
-// native WebContentsView, and leaves nothing behind: the ascent deletes the
-// scratch tile, with no history record and no error surfaced.
+// native WebContentsView, and leaves nothing on the scratch grid: the ascent
+// sends the visit to the trash, its address kept, with no error surfaced.
 test('clicking the menu url swatch descends into an off-grid ephemeral visit', async ({ electronApp, window, gw }) => {
   // An empty grid comes back with no tiles field, since proto3 omits an empty
   // repeated field.
@@ -42,6 +43,13 @@ test('clicking the menu url swatch descends into an off-grid ephemeral visit', a
   await gw.middleClickCell(0, 0);
   const back = await gw.focused();
   expect(back.gridID, 'still on the home grid after ascent').toBe(home.gridID);
+  const origin = new URL(window.url()).origin;
+  await expect
+    .poll(async () => String((await trashed(origin, scratchURLs[0].id))?.urlString ?? ''), {
+      message: 'the closed visit is in the trash with its address',
+      timeout: 10_000,
+    })
+    .toContain('example.com/ephemeral');
   const homeFinal = await gw.getGrid(home.gridID);
   expect(tileCount(homeFinal), 'ascent leaves the home grid unchanged').toBe(tileCount(homeBefore));
   await expect

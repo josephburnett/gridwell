@@ -864,11 +864,18 @@ These were decided deliberately. Do not reverse one without a new decision.
   (`urlview.WriteAddress`, `urlview.Writeback`, `contentzoom.Decide`,
   `barslot.Decide`, `bartitle.Decide`, none of which decides a write from
   whether a row is ephemeral). Ephemeral means retirement only, which the grey border and
-  the title's "— ephemeral" say. The row is deleted when the visit ends and
-  nothing holds it, no other pane, on screen or parked, and no workspace
-  tile's layout, which the node checks (`store.DeleteTile`); the
-  delete rides the row's save chain behind every write on the row and
-  claims the row as they left it (`outbox.SaveQueue.EnqueueAfterHolds`).
+  the title's "— ephemeral" say, and retirement is the trash (Joe,
+  2026-11-20: "Can you [move] it to the trash can so I can get back
+  there?"; chose every closed visit, shells included, the tmux running
+  until the tile is destroyed from the trash). The row is deleted when the
+  visit ends and nothing holds it, no other pane, on screen or parked, and
+  no workspace tile's layout, which the node checks (`store.DeleteTile`),
+  and a delete of a visit is any delete: the row moves into the trash's
+  month grid with its id, version and content, a door with its grid, where
+  it is an ordinary tile, whoever closes it, the client, the boot sweep or
+  the reap of a destroyed workspace tile's visits. The delete rides the
+  row's save chain behind every write on the row and claims the row as
+  they left it (`outbox.SaveQueue.EnqueueAfterHolds`).
   A new workspace tile's capture keeps a pane on a visit as it is, so the
   workspace shows exactly what the window showed (Joe, 2026-11-18: "They
   should be captured too. Everything should look exactly the same.").

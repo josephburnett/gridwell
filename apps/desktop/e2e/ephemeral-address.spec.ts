@@ -1,11 +1,11 @@
 import { test, expect } from './fixtures';
-import { tileAt } from './oracle';
+import { tileAt, trashed } from './oracle';
 
 // An ephemeral url visit is a url tile with no home: it writes the address
 // it lands on, like any url tile, and the only thing ephemeral means is that
-// the row is deleted when the visit ends and nothing holds it. Inside a
+// the row goes to the trash when the visit ends and nothing holds it. Inside a
 // workspace tile the layout holds it, so it reopens where it was left; outside
-// one the ascent deletes it, after the address write it caused.
+// one the ascent sends it to the trash, after the address write it caused.
 
 async function workspaceDepth(window: any): Promise<number> {
   return (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth;
@@ -93,7 +93,7 @@ test('an ephemeral url visit inside a workspace tile reopens where it was left',
   expect(e.notices, 'no notices from the round trip').toHaveLength(0);
 });
 
-test('an ephemeral url visit that wrote its address is still deleted on ascent', async ({ electronApp, window, gw }) => {
+test('an ephemeral url visit that wrote its address still goes to the trash on ascent', async ({ electronApp, window, gw }) => {
   const c = await gw.cadences();
   await gw.enterSource('home');
   const scratchGridID = await gw.scratchGridID('home');
@@ -124,10 +124,16 @@ test('an ephemeral url visit that wrote its address is still deleted on ascent',
 
   await expect
     .poll(async () => (await row()) === undefined, {
-      message: 'the ascent deletes the visit, whatever it wrote',
+      message: 'the ascent takes the visit off the scratch grid, whatever it wrote',
       timeout: 10_000,
     })
     .toBe(true);
+  await expect
+    .poll(async () => String((await trashed(gw.origin, visit))?.urlString ?? ''), {
+      message: 'the trash keeps the visit with the address the close wrote',
+      timeout: 10_000,
+    })
+    .toContain('gone=3');
   await gw.waitIdle();
   const e = await window.evaluate(() => (window as any).__gridwellTest.errors());
   expect(e.notices, 'no refused delete or failed write surfaced').toHaveLength(0);
@@ -199,7 +205,7 @@ test('an ephemeral url visit freezes like a placed tile, and stays frozen in its
   expect(e.notices, 'no notices from the freeze').toHaveLength(0);
 });
 
-test('a frozen ephemeral url visit is still deleted on ascent', async ({ electronApp, window, gw }) => {
+test('a frozen ephemeral url visit still goes to the trash on ascent', async ({ electronApp, window, gw }) => {
   await gw.enterSource('home');
   const scratchGridID = await gw.scratchGridID('home');
   const visit = await openVisit(window, gw, `${gw.origin}/wasm_exec.js?frzgone=1`);
@@ -212,7 +218,10 @@ test('a frozen ephemeral url visit is still deleted on ascent', async ({ electro
   await expect.poll(async () => Boolean((await row())?.urlFrozen), { timeout: 10_000 }).toBe(true);
   await gw.middleClickCell(0, 0);
   await expect
-    .poll(async () => (await row()) === undefined, { message: 'the ascent deletes the frozen visit', timeout: 10_000 })
+    .poll(async () => (await row()) === undefined, { message: 'the ascent takes the frozen visit off the scratch grid', timeout: 10_000 })
+    .toBe(true);
+  await expect
+    .poll(async () => Boolean((await trashed(gw.origin, visit))?.urlFrozen), { message: 'the trash keeps it frozen', timeout: 10_000 })
     .toBe(true);
   await gw.waitIdle();
   const e = await window.evaluate(() => (window as any).__gridwellTest.errors());

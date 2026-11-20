@@ -413,9 +413,9 @@ func TestInfoRootFramingSeedAndWriteback(t *testing.T) {
 
 }
 
-// TestCleanupScratchSweepsEphemeralTiles: the startup sweep deletes every
-// scratch-grid tile, so an ascent that never ran — a crash, a hard kill —
-// does not leak ephemeral visits.
+// TestCleanupScratchSweepsEphemeralTiles: the startup sweep sends every
+// scratch-grid tile to the trash, so a visit whose close never ran — a crash,
+// a hard kill — is closed as any visit is.
 func TestCleanupScratchSweepsEphemeralTiles(t *testing.T) {
 	p := openHome(t)
 	ctx := context.Background()
@@ -431,12 +431,12 @@ func TestCleanupScratchSweepsEphemeralTiles(t *testing.T) {
 			t.Fatalf("create scratch %s: %v", tile.Kind, err)
 		}
 	}
-	g, err := p.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: scratch})
+	g0, err := p.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: scratch})
 	if err != nil {
 		t.Fatalf("GetGrid(scratch): %v", err)
 	}
-	if len(g.Tiles) != 2 {
-		t.Fatalf("scratch has %d tiles, want 2", len(g.Tiles))
+	if len(g0.Tiles) != 2 {
+		t.Fatalf("scratch has %d tiles, want 2", len(g0.Tiles))
 	}
 
 	swept, err := p.CleanupScratch(ctx)
@@ -446,12 +446,17 @@ func TestCleanupScratchSweepsEphemeralTiles(t *testing.T) {
 	if swept != 2 {
 		t.Errorf("swept = %d, want 2", swept)
 	}
-	g, err = p.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: scratch})
+	g, err := p.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: scratch})
 	if err != nil {
 		t.Fatalf("GetGrid(scratch) after sweep: %v", err)
 	}
 	if len(g.Tiles) != 0 {
 		t.Errorf("scratch still has %d tiles after the sweep", len(g.Tiles))
+	}
+	for _, v := range g0.Tiles {
+		if !trashed(t, p, scratch, v.Id) {
+			t.Errorf("the swept %s visit is not in the trash", v.Kind)
+		}
 	}
 	// Idempotent: a clean scratch sweeps zero.
 	if swept, err := p.CleanupScratch(ctx); err != nil || swept != 0 {
@@ -460,9 +465,9 @@ func TestCleanupScratchSweepsEphemeralTiles(t *testing.T) {
 }
 
 // A scratch tile referenced by a workspace tile's layout blob is part of a durable
-// arrangement, so the boot sweep must not reap it. An unreferenced one still
-// sweeps, and once the workspace tile is deleted the reference dies with the blob
-// and the next sweep reclaims it.
+// arrangement, so the boot sweep must not close it. An unreferenced one still
+// goes to the trash, and once the workspace tile is destroyed the reference
+// dies with the blob and the next sweep sends it there too.
 func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 	p := openHome(t)
 	ctx := context.Background()
@@ -507,11 +512,11 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 	if swept != 1 {
 		t.Errorf("swept = %d, want 1 (only the leaked tile)", swept)
 	}
-	if _, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: owned.Tile.Id}); err != nil {
+	if r, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: owned.Tile.Id}); err != nil || r.Tile.GridId != scratch {
 		t.Errorf("workspace-owned ephemeral was swept at boot: %v", err)
 	}
-	if _, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: leaked.Tile.Id}); err == nil {
-		t.Error("crash-leaked scratch tile survived the sweep")
+	if !trashed(t, p, scratch, leaked.Tile.Id) {
+		t.Error("the crash-leaked scratch tile is not in the trash")
 	}
 
 	// The first delete parks the workspace tile in the trash, and its layout
@@ -534,6 +539,14 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 	if swept, err := p.CleanupScratch(ctx); err != nil || swept != 1 {
 		t.Errorf("post-destroy sweep = (%d, %v), want (1, nil) — the reference must die with the blob", swept, err)
 	}
+}
+
+// trashed reports that the row id survives off the scratch grid, where the
+// trash keeps a closed visit.
+func trashed(t *testing.T, p *local.Home, scratch, id string) bool {
+	t.Helper()
+	r, err := p.GetTile(context.Background(), &gridwellv1.GetTileRequest{TileId: id})
+	return err == nil && r.GetTile().GetGridId() != scratch
 }
 
 // scratchGrid returns home's scratch grid id from Info.
@@ -585,7 +598,8 @@ func TestTheTrashcanEntryKeepsItsFraming(t *testing.T) {
 }
 
 // A layout holds every row of a pane's path: a scratch door the pane
-// descended through survives the boot sweep, and one no layout names goes.
+// descended through stays through the boot sweep, and one no layout names
+// goes to the trash.
 func TestCleanupScratchSparesADoorOnAPanesPath(t *testing.T) {
 	p := openHome(t)
 	ctx := context.Background()
@@ -618,10 +632,10 @@ func TestCleanupScratchSparesADoorOnAPanesPath(t *testing.T) {
 	if swept, err := p.CleanupScratch(ctx); err != nil || swept != 1 {
 		t.Errorf("CleanupScratch = (%d, %v), want (1, nil): the loose door alone", swept, err)
 	}
-	if _, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: held}); err != nil {
+	if r, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: held}); err != nil || r.Tile.GridId != scratch {
 		t.Errorf("the door on the pane's path was swept: %v", err)
 	}
-	if _, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: loose}); err == nil {
-		t.Error("the door no layout names survived the sweep")
+	if !trashed(t, p, scratch, loose) {
+		t.Error("the door no layout names is not in the trash")
 	}
 }

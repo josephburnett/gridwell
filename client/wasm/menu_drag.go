@@ -191,8 +191,8 @@ func (a *App) visitURLFromMenu(p *pane.Pane) {
 		}, nil)
 }
 
-// visitShellFromMenu is the shell swatch's click. Ascent deletes the tile and
-// its tmux, which the gray border warns about; a drag places a
+// visitShellFromMenu is the shell swatch's click. Ascent sends the tile to the
+// trash, its tmux running, which the gray border warns about; a drag places a
 // persistent tile.
 func (a *App) visitShellFromMenu(p *pane.Pane) {
 	a.menu.Close()

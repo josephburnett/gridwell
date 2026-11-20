@@ -1,11 +1,11 @@
 import { test, expect } from './fixtures';
-import { tileAt } from './oracle';
+import { tileAt, trashed } from './oracle';
 
 // A workspace tile workspace owns its ephemeral leaves. An ephemeral shell opened
 // inside the workspace survives ascent, because the boundary detaches and never
 // kills, and it reattaches live on re-descent, so the arrangement stays as it
-// was left. It dies when the workspace tile is deleted, the way closing a pane
-// terminates what it owns.
+// was left. When the workspace tile is destroyed it is closed into the trash,
+// the way closing a pane closes what it shows.
 
 async function workspaceState(window: any): Promise<{ depth: number }> {
   return window.evaluate(() => (window as any).__gridwellTest.workspace());
@@ -15,7 +15,7 @@ async function barAscend(gw: any): Promise<void> {
   await gw.leaveWorkspace();
 }
 
-test('workspace ephemeral shell: survives ascent, reattaches on descent, dies with the workspace tile', async ({
+test('workspace ephemeral shell: survives ascent, reattaches on descent, goes to the trash with the workspace tile', async ({
   gw,
   window,
 }) => {
@@ -100,13 +100,16 @@ test('workspace ephemeral shell: survives ascent, reattaches on descent, dies wi
     'a trashed workspace keeps its ephemeral shell',
   ).toBe(1);
 
-  // Destroying it in the trash terminates what it owns: the scratch tile, and
-  // with it the tmux, which also leaves teardown clean.
+  // Destroying it in the trash closes what it held: the shell visit lands
+  // beside it in the trash.
   await gw.deleteTileCell(Number(parked!.x ?? 0), Number(parked!.y ?? 0));
   await expect
     .poll(async () => {
       const g = await gw.getGrid(scratchGridID);
       return (g.tiles ?? []).length;
-    }, { message: 'destroying the workspace tile must reap its ephemeral shell', timeout: 10_000 })
+    }, { message: 'destroying the workspace tile must close its ephemeral shell', timeout: 10_000 })
     .toBe(0);
+  await expect
+    .poll(async () => (await trashed(gw.origin, shellTile))?.gridId, { message: 'the shell visit is in the trash', timeout: 10_000 })
+    .toBe(monthGridID);
 });

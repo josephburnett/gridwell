@@ -30,12 +30,12 @@ func newHome(st *store.Store, id, shell string) *local.Home {
 	} else {
 		p = local.New(st, shellsvc.NewManager(shellsvc.NewLive(ctrl)))
 	}
-	// Scratch tiles are deleted on ascent; this sweep is the crash net. Before
-	// the orphan sweep, so a swept shell's tmux reads as orphaned there.
+	// A visit is closed into the trash when its pane leaves it; this sweep is
+	// the crash net.
 	if swept, err := p.CleanupScratch(context.Background()); err != nil {
 		log.Printf("gridwell: home: scratch cleanup: %v", err)
 	} else if swept > 0 {
-		log.Printf("gridwell: home: scratch cleanup removed %d ephemeral tile(s)", swept)
+		log.Printf("gridwell: home: scratch cleanup moved %d ephemeral tile(s) to the trash", swept)
 	}
 	if killed, err := p.CleanupOrphanedShells(context.Background()); err != nil {
 		log.Printf("gridwell: home: orphan cleanup: %v", err)

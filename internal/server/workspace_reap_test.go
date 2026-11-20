@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -16,12 +15,10 @@ import (
 
 // TestDeleteWorkspaceReapsItsEphemerals: a workspace tile's layout
 // blob is the ONLY record of the workspace's ephemeral leaves (scratch-grid
-// tiles). Deleting the workspace tile deletes only the arrangement — but must
-// terminate what the arrangement owns, exactly like closing a pane does:
-// each referenced SCRATCH tile is deleted (which kills its tmux via
-// the existing DeleteTile→shell.Kill chain). Linkd NON-scratch tiles
-// are content the workspace merely VIEWS and must survive — deleting a
-// workspace never deletes data.
+// tiles). Destroying the workspace tile closes what the arrangement held,
+// exactly like closing a pane does: each referenced SCRATCH tile goes to the
+// trash. NON-scratch tiles are content the workspace merely VIEWS and are
+// not touched.
 func TestDeleteWorkspaceReapsItsEphemerals(t *testing.T) {
 	ctx := context.Background()
 	reg := &Sources{}
@@ -85,8 +82,8 @@ func TestDeleteWorkspaceReapsItsEphemerals(t *testing.T) {
 	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: pt.Id})); err != nil {
 		t.Fatalf("DeleteTile(workspace, in trash): %v", err)
 	}
-	if _, err := cl.GetTile(ctx, eph.Id); err == nil {
-		t.Error("ephemeral scratch tile survived the workspace tile destroy — its shell would leak until the boot sweep")
+	if !trashedVisit(t, cl, scratch, eph.Id) {
+		t.Error("the ephemeral shell was not closed into the trash with the workspace tile's destroy")
 	}
 	if _, err := cl.GetTile(ctx, txt.Id); err != nil {
 		t.Errorf("viewed content was deleted with the workspace: %v", err)
@@ -114,21 +111,23 @@ func TestDeleteWorkspaceReapsItsEphemerals(t *testing.T) {
 	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: pt2.Id})); err != nil {
 		t.Fatalf("DeleteTile(workspace, unreadable blob, in trash): %v", err)
 	}
-	if _, err := cl.GetTile(ctx, eph2.Id); err != nil {
-		t.Errorf("unreadable blob must reap NOTHING (never guess), but the scratch tile is gone: %v", err)
+	if got, err := cl.GetTile(ctx, eph2.Id); err != nil || got.GridId != scratch {
+		t.Errorf("unreadable blob must reap NOTHING (never guess), but the scratch tile moved: %+v, %v", got, err)
 	}
 }
 
-// A workspace tile's destroy that reaps an ephemeral shell whose tmux will not
-// stop says so on its answer, as a destroyed shell row's own delete does.
-func TestAReapThatLeavesATmuxRunningSaysSo(t *testing.T) {
+// A workspace tile's destroy closes an ephemeral shell it held into the trash
+// with its tmux running, as any deleted shell keeps its tmux; destroying the
+// shell from the trash ends it.
+func TestAReapedShellKeepsItsTmuxInTheTrash(t *testing.T) {
 	ctx := context.Background()
 	f := newShellAPIFixture(t, Config{ID: "lnode1"})
 	g, err := f.cl.GetGrid(ctx, f.root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	eph, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: g.Grid.ScratchGridId,
+	scratch := g.Grid.ScratchGridId
+	eph, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: scratch,
 		Tile: &gridwellv1.Tile{Kind: rpc.KindShell, X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
@@ -143,15 +142,17 @@ func TestAReapThatLeavesATmuxRunningSaysSo(t *testing.T) {
 	if _, err := f.cl.WriteContent(ctx, pt.Id, rpc.ContentBasis{Version: pt.Version}, []byte(layout)); err != nil {
 		t.Fatal(err)
 	}
-	f.fake.KillErr = fmt.Errorf("tmux: server exited unexpectedly")
-	if _, err := f.cl.DeleteTile(ctx, claimtest.Claimed(t, f.cl, &gridwellv1.DeleteTileRequest{TileId: pt.Id})); err != nil {
+	destroyWorkspace(t, f.cl, pt.Id)
+	if !trashedVisit(t, f.cl, scratch, eph.Id) {
+		t.Fatal("the reaped shell is not in the trash")
+	}
+	if k := f.fake.Killed(); len(k) != 0 {
+		t.Fatalf("killed %v, want the trashed shell's tmux running", k)
+	}
+	if _, err := f.cl.DeleteTile(ctx, claimtest.Claimed(t, f.cl, &gridwellv1.DeleteTileRequest{TileId: eph.Id})); err != nil {
 		t.Fatal(err)
 	}
-	resp, err := f.cl.DeleteTile(ctx, claimtest.Claimed(t, f.cl, &gridwellv1.DeleteTileRequest{TileId: pt.Id}))
-	if err != nil {
-		t.Fatalf("destroy = %v, want it to land", err)
-	}
-	if !strings.Contains(resp.TmuxLeft, "server exited unexpectedly") {
-		t.Fatalf("tmux_left = %q, want the reaped shell's reason", resp.TmuxLeft)
+	if k := f.fake.Killed(); len(k) != 1 {
+		t.Fatalf("killed %v after the destroy from the trash, want its tmux", k)
 	}
 }

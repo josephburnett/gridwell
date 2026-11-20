@@ -341,11 +341,11 @@ func (s *Store) SetTextScroll(ctx context.Context, tileIDStr string, textX, text
 	})
 }
 
-// DeleteTile is the user's discard gesture, in two stages. A tile on an
-// ordinary grid moves into the trashcan's current-month subgrid, same id and
-// same row, so links keep resolving; a second delete, on a tile already in the
-// trash tree, destroys it and releases its blobs and its interior child grid.
-// A scratch-grid tile deletes for real, but one a workspace tile's layout
+// DeleteTile is the user's discard gesture, in two stages. A tile outside the
+// trash tree, an ended visit's included, moves into the trashcan's
+// current-month subgrid, same id and same row, so links keep resolving; a
+// second delete, on a tile already in the trash tree, destroys it and releases
+// its blobs and its interior child grid. A visit a workspace tile's layout
 // holds stays for it and the delete answers done: a visit lives while a pane
 // or a layout holds it, and the pane that ends it cannot see every layout.
 // What a destroy releases is tileRefs's to say.
@@ -366,15 +366,15 @@ func (s *Store) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReques
 		if err != nil {
 			return fmt.Errorf("tile %d: bad grid_id %q: %w", tileID, t.GridId, err)
 		}
-		bypass, err := s.deleteBypassesTrash(ctx, tx, srcGrid)
+		if held, err := s.heldByLayout(ctx, tx, srcGrid, tileID); err != nil || held {
+			return err
+		}
+		destroy, err := s.inTrash(ctx, tx, srcGrid)
 		if err != nil {
 			return err
 		}
-		if !bypass {
+		if !destroy {
 			return s.moveTileToTrash(ctx, tx, events, t)
-		}
-		if held, err := s.heldByLayout(ctx, tx, srcGrid, tileID); err != nil || held {
-			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID); err != nil {
 			return err

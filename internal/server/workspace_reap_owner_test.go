@@ -52,12 +52,20 @@ func destroyWorkspace(t *testing.T, cl *rpc.Client, tileID string) {
 	}
 }
 
+// trashedVisit reports that the visit id is off the scratch grid and still
+// reads: a closed visit goes to the trash.
+func trashedVisit(t *testing.T, cl *rpc.Client, scratch, id string) bool {
+	t.Helper()
+	got, err := cl.GetTile(context.Background(), id)
+	return err == nil && got != nil && got.GridId != scratch
+}
+
 // What a layout holds has one owner, api/panelayout.HeldIDs, which the boot
 // sweep's protection set and the delete-time reap both read. The blob here
 // is one no encoder writes: a `place` frame stack whose top frame is a
 // content descent, with `text_focus` omitted. Its frames are held, so the
-// reap takes the visit with the workspace tile, as the sweep spared it
-// while the tile stood.
+// reap closes the visit with the workspace tile, into the trash, as the
+// sweep spared it while the tile stood.
 func TestReapTakesWhatTheLayoutHeld(t *testing.T) {
 	ctx := context.Background()
 	cl, root, scratch := reapFixture(t)
@@ -79,15 +87,15 @@ func TestReapTakesWhatTheLayoutHeld(t *testing.T) {
 
 	destroyWorkspace(t, cl, pt.Id)
 
-	if _, err := cl.GetTile(ctx, eph.Id); err == nil {
-		t.Error("the visit a destroyed layout held by its place outlived it")
+	if !trashedVisit(t, cl, scratch, eph.Id) {
+		t.Error("the visit a destroyed layout held by its place was not closed into the trash")
 	}
 }
 
 // TestReapFindsEncoderWrittenLinks: the other half — a blob written by
 // the real client encoder, for a place deep enough that the encoder writes
 // BOTH the full `place` stack and the `text_focus` projection. The reap still
-// finds exactly the referenced scratch tile, and leaves viewed content alone.
+// closes exactly the referenced scratch tile, and leaves viewed content alone.
 // This is the seam: bytes written by client/pane, read by the server.
 func TestReapFindsEncoderWrittenLinks(t *testing.T) {
 	ctx := context.Background()
@@ -135,8 +143,8 @@ func TestReapFindsEncoderWrittenLinks(t *testing.T) {
 
 	destroyWorkspace(t, cl, pt.Id)
 
-	if _, err := cl.GetTile(ctx, eph.Id); err == nil {
-		t.Error("ephemeral scratch tile survived the destroy — its shell would leak until the boot sweep")
+	if !trashedVisit(t, cl, scratch, eph.Id) {
+		t.Error("the ephemeral shell was not closed into the trash with the destroy")
 	}
 	if _, err := cl.GetTile(ctx, txt.Id); err != nil {
 		t.Errorf("viewed content was reaped with the workspace: %v", err)

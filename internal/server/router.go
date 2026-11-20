@@ -519,8 +519,8 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 		return nil, err
 	}
 	if len(candidates) > 0 {
-		// Reap only on an explicit NotFound: a missed reap is reclaimed by the
-		// boot sweep, a wrong one by nothing.
+		// Reap only on an explicit NotFound: a missed reap is closed by the
+		// boot sweep, and a wrong one leaves a visit in the trash.
 		if _, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local}); status.Code(err) == gcodes.NotFound {
 			left := append([]string{resp.GetTmuxLeft()}, rt.reapWorkspaceEphemerals(ctx, candidates, qualifiedID)...)
 			resp = &pb.DeleteTileResponse{TmuxLeft: strings.Join(slices.DeleteFunc(left, func(s string) bool { return s == "" }), "; ")}
@@ -551,9 +551,10 @@ func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namesp
 	return ids
 }
 
-// reapWorkspaceEphemerals deletes the scratch-grid tiles among a destroyed workspace
-// tile's captured leaves, best-effort: it must not block the user's delete. It
-// answers why each shell's tmux it should have ended is still running.
+// reapWorkspaceEphemerals closes the scratch-grid tiles among a destroyed
+// workspace tile's captured leaves, into the trash as every closed visit goes,
+// best-effort: it must not block the user's delete. It answers why each
+// shell it could not close was left.
 func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []string, qualifiedID string) (left []string) {
 	scratch, err := rt.srv.homeScratch(ctx)
 	if err != nil {

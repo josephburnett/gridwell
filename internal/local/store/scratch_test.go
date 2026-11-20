@@ -85,7 +85,7 @@ func TestScratchGridHoldsEphemeralURL(t *testing.T) {
 // A scratch-grid tile is off-grid, so no descent path can reach it and
 // checkPathLeaf must treat the scratch grid as its own leaf. Otherwise every
 // mutation on an ephemeral tile fails "descent path is invalid" and
-// delete-on-ascent is impossible.
+// closing a visit is impossible.
 func TestScratchTileMutationsNeedNoPath(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -102,8 +102,8 @@ func TestScratchTileMutationsNeedNoPath(t *testing.T) {
 	if err := s.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tile.Id}); err != nil {
 		t.Fatalf("DeleteTile on a scratch tile: %v", err)
 	}
-	if _, err := s.GetTile(ctx, tile.Id); err == nil {
-		t.Fatal("scratch tile still readable after delete")
+	if got, err := s.GetTile(ctx, tile.Id); err != nil || got.GridId == tile.GridId {
+		t.Fatalf("a deleted scratch tile = %+v, %v; want it in the trash", got, err)
 	}
 }
 

@@ -21,7 +21,7 @@ type BorderInput struct {
 	// (cache.Grid.Directory).
 	InDirectory bool
 	// Ephemeral is the tile the pane stands in, descended into or entered as
-	// a door, living in the scratch grid, so it is deleted on ascent.
+	// a door, living in the scratch grid, so ascent sends it to the trash.
 	Ephemeral bool
 }
 

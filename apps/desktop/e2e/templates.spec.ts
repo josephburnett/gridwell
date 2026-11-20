@@ -5,7 +5,7 @@ import { test, expect } from './fixtures';
 import type { GridwellDriver, MenuItem } from './driver';
 import { spawnSync } from 'node:child_process';
 import { homeEnv, makeRunDir } from './homes';
-import { createText, getTile, handshake, tileAt } from './oracle';
+import { createText, getTile, getTileContent, handshake, tileAt, trashed } from './oracle';
 
 // The templates (Joe, 2026-11-09): the + menu's strip holds the copy swatch
 // and the tiles of home's templates grid above the swatches, each section
@@ -115,7 +115,7 @@ test('the strip: templates then swatches, five to a row, three rows shown, the r
   expect((await gw.focused()).gridID, 'the wheel over the menu zoomed nothing behind it').toBeTruthy();
 });
 
-test('the copy swatch on a text makes a template; a click visits an ephemeral copy and leaves it as it was', async ({ gw, window }) => {
+test('the copy swatch on a text makes a template; a click visits an ephemeral copy, closed into the trash, and leaves it as it was', async ({ gw, window }) => {
   const origin = new URL(window.url()).origin;
   const tg = await templatesGrid(window);
   await gw.enterSource('home');
@@ -151,6 +151,29 @@ test('the copy swatch on a text makes a template; a click visits an ephemeral co
     .poll(async () => ((await gw.getGrid(scratch)).tiles ?? []).some((t) => t.id === visit), { timeout: 10_000 })
     .toBe(false);
   expect(await getTile(origin, tpl.id), 'the template is byte for byte as it was, its preview included').toEqual(before);
+
+  // The closed visit is in the trash, the same row with its body, and
+  // reopens from there as an ordinary tile.
+  let row: Awaited<ReturnType<typeof trashed>>;
+  await expect
+    .poll(async () => !!(row = await trashed(origin, visit)), { message: 'the closed visit is in the trash', timeout: 10_000 })
+    .toBe(true);
+  expect(await getTileContent(origin, visit), 'its body').toBe('a note to copy');
+  await gw.clickSwatch('trash (home)');
+  const month = ((await gw.getGrid((await gw.focused()).gridID)).tiles ?? []).find((t) => t.kind === 'door')!;
+  await gw.descendCell(Number(month.x ?? 0), Number(month.y ?? 0));
+  await expect
+    .poll(async () => ((await window.evaluate(() => (window as any).__gridwellTest.paintedText()))[row!.id] ?? '') as string, {
+      message: 'the month grid paints the body',
+      timeout: 10_000,
+    })
+    .toContain('a note to copy');
+  await gw.descendCell(Number(row!.x ?? 0), Number(row!.y ?? 0));
+  await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).toBe(visit);
+  await expect.poll(async () => (await gw.barName()).label, { message: 'in the trash it is no visit' }).toBe('a note to copy');
+  await gw.ascendViaCrumb();
+  await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
+  expect(await trashed(origin, visit), 'leaving it in the trash retires nothing').toBeTruthy();
   const e = await window.evaluate(() => (window as any).__gridwellTest.errors());
   expect(e.notices, 'no notice from the round trip').toHaveLength(0);
 });
@@ -227,7 +250,7 @@ test('the copy swatch on a shell copies it in; a template dropped on a shell pas
     .toBe(true);
 });
 
-test('a click on a door template enters an ephemeral copy of it; leaving retires the copy', async ({ gw, window }) => {
+test('a click on a door template enters an ephemeral copy of it; leaving retires the copy to the trash', async ({ gw, window }) => {
   const origin = new URL(window.url()).origin;
   const tg = await templatesGrid(window);
   const res = await fetch(`${origin}/gridwell.v1.Gridwell/CreateTile`, {
@@ -254,5 +277,8 @@ test('a click on a door template enters an ephemeral copy of it; leaving retires
   await expect
     .poll(async () => ((await gw.getGrid(scratch)).tiles ?? []).some((t) => t.id === copy!.id), { message: 'leaving retired the copy', timeout: 10_000 })
     .toBe(false);
+  await expect
+    .poll(async () => (await trashed(origin, copy!.id))?.childGridId, { message: 'the retired copy is in the trash with its grid', timeout: 10_000 })
+    .toBe(copy!.childGridId);
   expect(((await gw.getGrid(tg)).tiles ?? []).map((t) => t.id), 'the template stayed').toEqual([door.id]);
 });

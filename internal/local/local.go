@@ -53,10 +53,9 @@ func (p *Home) CleanupOrphanedShells(ctx context.Context) (int, error) {
 	})
 }
 
-// CleanupScratch deletes every tile in the scratch grid at startup that no
-// workspace tile's layout holds, through the delete that keeps those
-// (store.DeleteTile), answering how many went. Runs before
-// CleanupOrphanedShells.
+// CleanupScratch closes every visit on the scratch grid at startup that no
+// workspace tile's layout holds, through the delete that keeps those and sends
+// the rest to the trash (store.DeleteTile), answering how many went.
 func (p *Home) CleanupScratch(ctx context.Context) (int, error) {
 	scratch, err := p.st.ScratchGridID(ctx)
 	if err != nil {

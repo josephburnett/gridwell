@@ -1,13 +1,12 @@
 package store
 
 // Home's trashcan, built entirely from facts the store already owns. DeleteTile
-// on an ordinary grid moves the tile into a per-month subgrid of the trash
-// grid, so ids and versions continue and links keep resolving; on a tile
-// already inside the trash tree it destroys for real, through the ordinary
-// cascade. The trash grid is a system-keyed singleton like the scratch grid,
-// surfaced as a declared root declared grid, so nothing special-cases it. Scratch
-// tiles bypass the trash: they are system-made ephemerals, while the trash is
-// a net for what the user placed in space and asked to remove.
+// on any grid outside the trash tree, the scratch grid's visits included,
+// moves the tile into a per-month subgrid of the trash grid, so ids and
+// versions continue and links keep resolving; on a tile already inside the
+// trash tree it destroys for real, through the ordinary cascade. The trash
+// grid is a system-keyed singleton like the scratch grid, surfaced as a
+// declared root, so nothing special-cases it.
 
 import (
 	"context"
@@ -27,12 +26,8 @@ func (s *Store) TrashGridID(ctx context.Context) (string, error) {
 	return s.singletonID(ctx, systemKeyTrashGridID)
 }
 
-// deleteBypassesTrash reports a real delete: the tile is in the scratch grid,
-// or already inside the trash tree.
-func (s *Store) deleteBypassesTrash(ctx context.Context, tx *sql.Tx, srcGrid int64) (bool, error) {
-	if eph, err := ephemeralGrid(ctx, tx, srcGrid); err != nil || eph {
-		return eph, err
-	}
+// inTrash reports a real delete: the tile is already inside the trash tree.
+func (s *Store) inTrash(ctx context.Context, tx *sql.Tx, srcGrid int64) (bool, error) {
 	trash, err := singletonGrid(ctx, tx, systemKeyTrashGridID)
 	if err != nil {
 		return false, err

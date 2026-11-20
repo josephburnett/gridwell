@@ -289,7 +289,7 @@ func analyze(ctx context.Context, q gridReader, node string) (Analysis, cleanPla
 	// A visit a reached layout names is held, and its door reaches its grid,
 	// whose workspace tiles may hold more. A layout that will not read could
 	// name any visit, so then every one is held, as the boot sweep then
-	// reaps none; so does every layout when node is unknown.
+	// closes none; so does every layout when node is unknown.
 	held, named, scanned, unreadable := map[int64]bool{}, map[int64]bool{}, map[int64]bool{}, node == ""
 	for progress := true; progress; {
 		progress = false

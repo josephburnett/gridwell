@@ -1,12 +1,13 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import type { GridwellDriver, PaneInfo } from './driver';
-import { createText, createTile, handshake, tileAt } from './oracle';
+import { createText, createTile, handshake, tileAt, trashed } from './oracle';
 
 // A new workspace tile's capture is the whole view, ephemeral visits included
 // (Joe, 2026-11-18: "They should be captured too. Everything should look
 // exactly the same."). A visit lives while a pane, on screen or parked, or a
-// workspace tile's layout holds it, and goes when the last of them lets go.
+// workspace tile's layout holds it, and goes to the trash when the last of
+// them lets go.
 
 const depth = (window: Page): Promise<number> =>
   window.evaluate(() => (window as any).__gridwellTest.workspace().depth);
@@ -152,11 +153,13 @@ test('a new workspace tile captures every pane on a visit as it is, and the visi
     expect(await scratchIDs(gw, scratch), `leaving kept ${id}`).toContain(id);
   }
 
-  // The outer shell pane was its last holder, so its ascent retires it.
+  // The outer shell pane was its last holder, so its ascent retires it to
+  // the trash.
   await ascendPane(window, gw, (await gw.panes()).find((p) => p.textFocus === shellVisit)!);
   await expect
     .poll(async () => (await scratchIDs(gw, scratch)).includes(shellVisit), { timeout: 10_000 })
     .toBe(false);
+  await expect.poll(async () => !!(await trashed(origin, shellVisit)), { message: 'the shell visit is in the trash', timeout: 10_000 }).toBe(true);
 
   // The workspace's layout still holds the url visit when the outer pane
   // leaves it, and the ascent inside the workspace, its last holder, retires it.
@@ -171,6 +174,7 @@ test('a new workspace tile captures every pane on a visit as it is, and the visi
   await expect
     .poll(async () => (await scratchIDs(gw, scratch)).includes(urlVisit), { timeout: 10_000 })
     .toBe(false);
+  await expect.poll(async () => !!(await trashed(origin, urlVisit)), { message: 'the url visit is in the trash', timeout: 10_000 }).toBe(true);
 
   const e = await window.evaluate(() => (window as any).__gridwellTest.errors());
   expect(e.notices, 'nothing went wrong').toEqual([]);
