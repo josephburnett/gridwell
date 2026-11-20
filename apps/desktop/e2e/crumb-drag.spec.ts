@@ -224,3 +224,61 @@ test("an outer level's band right-dropped on a shell pastes its reference, and o
   expect(await depth(), 'still two levels deep').toBe(2);
   expect(await notices(window), 'nothing went wrong').toEqual([]);
 });
+
+// The + stays a + while a crumb is dragged, since nothing is deleted from the
+// bar, and a release there is refused with the reason (Joe, 2026-11-19); a
+// grid tile's drag still turns it into the trashcan.
+test("a crumb's drag keeps the + a +, and a release there deletes nothing", async ({ gw, window }) => {
+  const origin = new URL(window.url()).origin;
+  await gw.enterSource('home');
+  const f = await gw.focused();
+  const grid = f.gridID;
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  const door = await createTile(origin, grid, 'door', cx, cy);
+  await gw.waitClientTileAt(f.id, cx, cy, door.id);
+  await gw.descendCell(cx, cy);
+  await expect.poll(async () => (await gw.focused()).gridID, { timeout: 15_000 }).toBe(door.childGridId);
+  const inner = await gw.focused();
+  const ix = Math.round(inner.cx);
+  const iy = Math.round(inner.cy);
+  const text = await createText(origin, door.childGridId!, ix, iy, 'inside');
+  await gw.waitClientTileAt(inner.id, ix, iy, text.id);
+  const slot = (): Promise<string> => window.evaluate(() => (window as any).__gridwellTest.barSlot());
+  const plus = await gw.circleCenter();
+  const fire = (type: string, x: number, y: number, buttons: number, button: number) =>
+    window.evaluate(
+      ([t, px, py, bs, b]: [string, number, number, number, number]) =>
+        document.querySelector('canvas')!.dispatchEvent(
+          new MouseEvent(t, { clientX: px, clientY: py, buttons: bs, button: b, bubbles: true }),
+        ),
+      [type, x, y, buttons, button] as [string, number, number, number, number],
+    );
+
+  // A grid tile's drag: the + is the trashcan; Esc lets it go.
+  const from = await gw.cellCenter(inner.id, ix, iy);
+  await window.mouse.move(from.x, from.y);
+  await window.mouse.down();
+  await window.mouse.move(from.x + 8, from.y + 8);
+  await window.mouse.move(plus.x, plus.y - 40, { steps: 6 });
+  expect(await slot(), "a tile's drag shows the trashcan").toBe('trashcan');
+  await window.keyboard.press('Escape');
+  await window.mouse.up();
+  await gw.waitIdle();
+  expect(await slot(), 'the + again').toBe('plus');
+
+  // The door's crumb right-dragged over the +: still a +, and the release is refused.
+  const bar = await gw.bar();
+  const crumb = bar.segments.find((s) => s.tileID === door.id)!;
+  expect(crumb, "the bar has the door's crumb").toBeTruthy();
+  const at = { x: crumb.x + crumb.w / 2, y: bar.top + bar.height / 2 };
+  await fire('mousedown', at.x, at.y, 2, 2);
+  await fire('mousemove', (at.x + plus.x) / 2, at.y - 20, 2, 2);
+  await fire('mousemove', plus.x, plus.y, 2, 2);
+  expect(await slot(), "a crumb's drag keeps the +").toBe('plus');
+  await fire('mouseup', plus.x, plus.y, 0, 2);
+  await gw.waitIdle();
+  await expect.poll(() => notices(window)).toEqual(["a crumb's drag copies; it does not delete"]);
+  expect(tileAt(await gw.getGrid(grid), 'door', cx, cy)?.id, 'the door is still there').toBe(door.id);
+  expect(tileAt(await gw.getGrid(door.childGridId!), 'text', ix, iy)?.id, 'and what it holds').toBe(text.id);
+});

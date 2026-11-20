@@ -714,12 +714,6 @@ func paneRectFor(a *App, p *pane.Pane) pane.Rect {
 	return pane.Rect{}
 }
 
-// tileDragInFlight is the state in which the source pane's + button turns into
-// the trashcan delete target.
-func (a *App) tileDragInFlight() bool {
-	return a.dragging != nil && a.dragging.started && a.dragging.tileID != ""
-}
-
 // overDeleteButton takes the drag explicitly, because the commit path clears
 // a.dragging before deciding what the drop means. Reading the field would say
 // false at release, and the tile would land under the trashcan.

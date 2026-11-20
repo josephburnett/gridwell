@@ -222,6 +222,9 @@ func (a *App) barSlotMode(p *pane.Pane) barslot.Mode {
 		ShellLive:  a.hasShellStream(p.ID),
 		CanLiveURL: a.caps.LiveURL,
 	}
+	if d := a.dragging; d != nil {
+		in.TileDrag, in.FromCrumb = d.started && d.tileID != "", d.crumb != nil
+	}
 	if in.Content == rpc.DescentURL && !in.CanLiveURL {
 		t, _ := a.descendedTile(p)
 		_, s := a.askContentRow(t)
@@ -242,7 +245,7 @@ func (a *App) drawBarSlot() {
 	if p == nil {
 		return
 	}
-	switch a.barSlotMode(p) {
+	switch m := a.barSlotMode(p); m {
 	case barslot.ModeURLBack:
 		a.drawURLBackButton()
 	case barslot.ModeGoLive:
@@ -251,8 +254,8 @@ func (a *App) drawBarSlot() {
 		a.drawURLOpenTabButton()
 	case barslot.ModeFreeze:
 		a.drawFreezeButton()
-	case barslot.ModePlus:
-		a.drawPlusButton(p)
+	case barslot.ModePlus, barslot.ModeTrashcan:
+		a.drawPlusButton(p, m == barslot.ModeTrashcan)
 	}
 }
 

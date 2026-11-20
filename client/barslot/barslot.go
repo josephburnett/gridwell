@@ -27,9 +27,13 @@ const (
 	// live url's slot is its back button, so that freeze rides the view's own
 	// context menu instead.
 	ModeFreeze
-	// ModePlus is the + menu toggle. The drawer swaps in the trashcan while a
-	// tile drag is in flight.
+	// ModePlus is the + menu toggle.
 	ModePlus
+	// ModeTrashcan is the + while a tile's drag is in flight: a release over
+	// it deletes. A crumb's drag keeps the +, since nothing is deleted from
+	// the bar (Joe, 2026-11-19); its release there is still refused
+	// (dragdrop.CrumbNoDelete).
+	ModeTrashcan
 )
 
 // Input is the world state the slot's mode reads. The caller resolves every
@@ -50,10 +54,13 @@ type Input struct {
 	// ShellRefreshVisible is shellconn.DecideShellRefreshVisible's Show. The
 	// caller must resolve it lazily: resolving it kicks a liveness probe.
 	ShellRefreshVisible bool
+	// TileDrag is a started drag carrying a tile, FromCrumb one from a
+	// crumb in the bar.
+	TileDrag, FromCrumb bool
 }
 
 var modeNames = [...]string{ModeNothing: "nothing", ModeURLBack: "back", ModeGoLive: "golive",
-	ModeURLOpenTab: "opentab", ModeFreeze: "freeze", ModePlus: "plus"}
+	ModeURLOpenTab: "opentab", ModeFreeze: "freeze", ModePlus: "plus", ModeTrashcan: "trashcan"}
 
 // String is the mode's name, the one spelling of it outside this package.
 func (m Mode) String() string {
@@ -65,6 +72,9 @@ func (m Mode) String() string {
 
 // Decide is the slot's one verdict.
 func Decide(in Input) Mode {
+	if !in.Descent && in.TileDrag && !in.FromCrumb {
+		return ModeTrashcan
+	}
 	if !in.Descent {
 		return ModePlus
 	}

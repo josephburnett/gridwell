@@ -61,12 +61,11 @@ func (a *App) pointInPlus(x, y float64) bool {
 	return dx*dx+dy*dy <= rr*rr
 }
 
-// drawPlusButton paints the circular + button, which during a tile drag
-// becomes the delete target. The round chrome is identical either way, so the
+// drawPlusButton paints the circular + button, or the trashcan while deleting
+// (barslot.ModeTrashcan). The round chrome is identical either way, so the
 // position stays muscle memory.
-func (a *App) drawPlusButton(p *pane.Pane) {
+func (a *App) drawPlusButton(p *pane.Pane, deleting bool) {
 	cx, cy := a.plusButtonCenter()
-	deleting := a.tileDragInFlight()
 	hot := deleting && a.pointInPlus(a.dragging.curScreenX, a.dragging.curScreenY)
 	// The button wears the pane's family hue. The hot trashcan goes
 	// danger-red; an open menu gets a brighter ring.

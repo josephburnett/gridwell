@@ -120,7 +120,7 @@ func TestDecideGridIgnoresDescentFacts(t *testing.T) {
 // read there as another mode's affordance.
 func TestModeNames(t *testing.T) {
 	seen := map[string]bool{}
-	for m := ModeNothing; m <= ModePlus; m++ {
+	for m := ModeNothing; m <= ModeTrashcan; m++ {
 		name := m.String()
 		if name == "" || (name == "nothing" && m != ModeNothing) {
 			t.Errorf("mode %d has no name of its own (%q)", int(m), name)
@@ -129,5 +129,25 @@ func TestModeNames(t *testing.T) {
 			t.Errorf("mode %d repeats the name %q", int(m), name)
 		}
 		seen[name] = true
+	}
+}
+
+// A tile's drag turns a grid's + into the trashcan; a crumb's does not, since
+// nothing is deleted from the bar (Joe, 2026-11-19), and a content descent's
+// slot is its own affordance whatever is dragged.
+func TestDecideTrashcan(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		in   Input
+		want Mode
+	}{
+		{"a tile's drag over a grid", Input{TileDrag: true}, ModeTrashcan},
+		{"a crumb's drag over a grid", Input{TileDrag: true, FromCrumb: true}, ModePlus},
+		{"no drag", Input{}, ModePlus},
+		{"a tile's drag in a live url descent", Input{TileDrag: true, Descent: true, Content: rpc.DescentURL, URLLive: true}, ModeURLBack},
+	} {
+		if got := Decide(c.in); got != c.want {
+			t.Errorf("%s: Decide = %v, want %v", c.name, got, c.want)
+		}
 	}
 }

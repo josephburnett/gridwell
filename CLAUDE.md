@@ -892,8 +892,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   `wsbar.RouteClick`): onto a grid it copies, deep as any copy, with ctrl
   it links, onto a shell or a raw text it pastes its reference, and the
   pane keeps showing it. Nothing is moved or
-  deleted from the bar: no crumb left-drags, and a crumb's drag over the
-  trashcan is refused with "a crumb's drag copies; it does not delete",
+  deleted from the bar: no crumb left-drags, the + stays a + while a crumb
+  is dragged rather than turning into the trashcan (Joe, 2026-11-19: "Do
+  not show it"; `barslot.ModeTrashcan`), and a crumb's drag released over
+  it is refused with "a crumb's drag copies; it does not delete",
   told as information and written under the no-entry badge, as every told
   refusal is (`dragdrop.CrumbNoDelete`, `dragdrop.Told`). A visit is kept by
   copying it: a right-drag onto a grid copies the row, and the visit stays
