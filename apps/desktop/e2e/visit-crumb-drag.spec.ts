@@ -1,7 +1,7 @@
 import type { ElectronApplication, Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import type { GridwellDriver, PaneInfo } from './driver';
-import { createText, getTile, handshake } from './oracle';
+import { createLeafLink, createText, getTile, handshake } from './oracle';
 
 // An ephemeral visit's crumb right-dragged onto a grid moves the visit's row
 // there (Joe, 2026-11-19: "what was ephemeral is now persistent. And the pane
@@ -263,6 +263,37 @@ test('a door visit right-dragged onto a grid is kept with its grid and what is o
   await expect.poll(async () => (await gw.focused()).gridID).toBe(home.gridID);
   await gw.waitIdle();
   expect((await onGrid(gw, home.gridID, visit.id))?.id, 'the ascent kept it').toBe(visit.id);
+  expect(await notices(window), 'nothing went wrong').toEqual([]);
+});
+
+// A move reads the row, never what a copy of it would become, so a visit
+// whose copy would be a link moves as its left-drag from a grid would (Joe,
+// 2026-11-20: "If I drag from a grid, from the menu, or from the nav, the
+// answer should be the same.").
+test('a link visit right-dragged off its crumb is kept: the same link, not refused', async ({ window, gw }) => {
+  const origin = new URL(window.url()).origin;
+  const tg = await templatesGrid(window);
+  const { home, dest } = await twoPanes(gw);
+  const cx = Math.round(dest.cx);
+  const cy = Math.round(dest.cy);
+  const target = await createText(origin, home.gridID, cx - 3, cy, 'what the link shows');
+  const tpl = await createLeafLink(origin, tg, target.id, 'a link to visit', 0, 0);
+  const scratch = await gw.scratchGridID('home');
+
+  await visitTemplate(window, gw, tpl.id);
+  await expect.poll(async () => ((await gw.getGrid(scratch)).tiles ?? []).length, { timeout: 15_000 }).toBe(1);
+  const visit = ((await gw.getGrid(scratch)).tiles ?? [])[0];
+  expect(visit.linkTargetId, 'the visit is a link to the text').toBe(target.id);
+  await expect.poll(async () => (await gw.barName()).label).toMatch(/ — ephemeral$/);
+  const before = await gw.focused();
+  const n = ((await gw.getGrid(home.gridID)).tiles ?? []).length;
+
+  await dragCrumb(window, gw, visit.id, await gw.cellCenter(dest.id, cx + 2, cy), 'right');
+  const row = await kept(gw, scratch, home.gridID, visit.id, cx + 2, cy, n);
+  expect(row.linkTargetId, 'the same link').toBe(target.id);
+  const f = await gw.focused();
+  expect([f.id, f.textFocus, f.gridID], 'the pane is still on it, on its grid').toEqual([before.id, before.textFocus, home.gridID]);
+  expect(await getTile(origin, target.id).then((t) => t.gridId), 'the text it shows stayed').toBe(home.gridID);
   expect(await notices(window), 'nothing went wrong').toEqual([]);
 });
 

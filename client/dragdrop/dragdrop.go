@@ -387,7 +387,7 @@ func CarryMovesAsLink(rows []*gridwellv1.Tile, dest string) bool {
 // KeepsVisit is a visit's crumb right-dragged to a release that is no paste:
 // the drop moves the visit's row, so what was ephemeral is kept, where any
 // other crumb's right-drag copies (Joe, 2026-11-19). A move is no creation,
-// so its world-reads are a move's (Forbidden, a vacated cell).
+// so its world-reads are a move's (Forbidden, a vacated cell), not a copy's.
 func KeepsVisit(in DropInput) bool {
 	return in.CarriesEphemeral && in.FromCrumb && in.Intent == IntentCopy && !in.PasteTarget
 }
@@ -448,7 +448,7 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropRejected, FingerNoFile
 	case KeepsVisit(in) && in.MovesAsLink:
 		return DropRejected, EphemeralNoFarMove
-	case in.CarriesEphemeral && (in.Intent == IntentLink || in.Intent == IntentCopy && in.CopiesAsLink):
+	case in.CarriesEphemeral && (in.Intent == IntentLink || in.Intent == IntentCopy && in.CopiesAsLink && !KeepsVisit(in)):
 		return DropRejected, EphemeralNoLink
 	case in.Forbidden:
 		return DropRejected, MovesNoTiles

@@ -919,11 +919,15 @@ These were decided deliberately. Do not reverse one without a new decision.
   refused with "an ephemeral visit does not move across a connection",
   told as information (Joe, 2026-11-19; `dragdrop.EphemeralNoFarMove`).
   A right-drop of it onto a shell or a raw text pastes its reference and
-  it stays a visit. A drop that would link to a
-  visit, a ctrl + right-drag or a copy that lands as a link, is refused
-  with "a link to an ephemeral visit would die with it", since no link
-  holds a visit (`dragdrop.EphemeralNoLink`), and wears the no-entry
-  badge with the reason under it. A press that never becomes a drag is the crumb's click
+  it stays a visit. The move reads the row, never what a copy of it would
+  become, so a visit whose copy would land as a link, a link's, a door's
+  onto a directory, a door's whose grid takes no tiles, moves as that row's
+  left-drag from a grid moves (Joe, 2026-11-20: "If I drag from a grid,
+  from the menu, or from the nav, the answer should be the same."). A
+  ctrl + right-drag of a visit, which would link to it, is refused with "a
+  link to an ephemeral visit would die with it", since no link holds a
+  visit (`dragdrop.EphemeralNoLink`), and wears the no-entry badge with the
+  reason under it. A press that never becomes a drag is the crumb's click
   (`wsbar.Hit.Bare`): on the current crumb nothing, on any other an ascent
   to it, and on a level's band its own, left leaving to that level and
   right renaming it.

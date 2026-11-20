@@ -820,8 +820,8 @@ func TestCopySwatchDrop(t *testing.T) {
 
 // An ephemeral visit's crumb right-dragged onto a grid moves the visit's row
 // there, where any other crumb copies (Joe, 2026-11-19); across a connection
-// the move is refused, and a drop that would link to it is refused, each with
-// its reason.
+// the move is refused, and a ctrl + right-drag that would link to it is
+// refused, each with its reason.
 func TestAVisitCrumbMoves(t *testing.T) {
 	base := DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, FromCrumb: true}
 	cases := []struct {
@@ -836,7 +836,7 @@ func TestAVisitCrumbMoves(t *testing.T) {
 		{"a right-drag onto an occupied cell", func(in *DropInput) { in.Occupied = true }, DropRejected, DropRejected, CellTaken, CellTaken},
 		{"a right-drag across a connection", func(in *DropInput) { in.MovesAsLink = true }, DropCopy, DropRejected, EphemeralNoFarMove, ""},
 		{"a right-drag across a connection that copies as a link", func(in *DropInput) { in.MovesAsLink, in.CopiesAsLink = true, true }, DropLink, DropRejected, EphemeralNoFarMove, ""},
-		{"a right-drag that copies as a link", func(in *DropInput) { in.CopiesAsLink = true }, DropLink, DropRejected, EphemeralNoLink, ""},
+		{"a right-drag that copies as a link", func(in *DropInput) { in.CopiesAsLink = true }, DropLink, DropMove, "", ""},
 		{"a ctrl + right-drag", func(in *DropInput) { in.Intent = IntentLink }, DropLink, DropRejected, EphemeralNoLink, ""},
 		{"a ctrl + right-drag across a connection", func(in *DropInput) { in.Intent, in.MovesAsLink, in.CopiesAsLink = IntentLink, true, true }, DropLink, DropRejected, EphemeralNoLink, ""},
 		{"a drop on a shell", func(in *DropInput) { in.PasteTarget, in.Intent = true, IntentLink }, DropPaste, DropPaste, "", ""},
@@ -872,6 +872,56 @@ func TestAVisitCrumbMoves(t *testing.T) {
 	visit.FromCrumb = false
 	if got := DecideDrop(visit); got != DropCopy {
 		t.Errorf("a scratch row's right-drag off a grid = %v, want a copy: only a crumb keeps a visit", got)
+	}
+}
+
+// A visit's crumb right-dragged moves it, and a move reads the row, never
+// what a copy of it would become: the verdict is a left-drag's of the same
+// row from a grid, whatever the row and wherever it lands (Joe, 2026-11-20:
+// "If I drag from a grid, from the menu, or from the nav, the answer should
+// be the same."). The one named exception: across a connection a left-drag
+// links and a visit's move is refused, since no link holds a visit.
+func TestAVisitMovesAsALeftDragDoes(t *testing.T) {
+	const home, dir, far = "abcdefg/3", "abcdefg/~L3RtcA", "abcdefg/hijklmn/5"
+	rows := []struct {
+		name    string
+		row     *gridwellv1.Tile
+		accepts bool
+	}{
+		{"a text", &gridwellv1.Tile{Id: "abcdefg/12", Kind: rpc.KindText}, true},
+		{"a link", &gridwellv1.Tile{Id: "abcdefg/12", Kind: rpc.KindText, LinkTargetId: "abcdefg/40"}, true},
+		{"a door onto a directory", &gridwellv1.Tile{Id: "abcdefg/12", Kind: rpc.KindDoor, Link: true, ChildGridId: dir}, true},
+		{"a door whose grid takes no tiles", &gridwellv1.Tile{Id: "abcdefg/12", Kind: rpc.KindDoor, ChildGridId: "abcdefg/41"}, false},
+	}
+	worlds := []struct {
+		name string
+		set  func(*DropInput)
+	}{
+		{"", func(*DropInput) {}},
+		{", a taken cell", func(in *DropInput) { in.Occupied = true }},
+		{", grids that do not move tiles", func(in *DropInput) { in.Forbidden = true }},
+		{", a grid that takes no new tiles", func(in *DropInput) { in.TargetRefusesTiles = true }},
+	}
+	for _, r := range rows {
+		for _, dest := range []string{home, dir, far} {
+			for _, w := range worlds {
+				carried := []*gridwellv1.Tile{r.row}
+				in := DropInput{Started: true, TileID: r.row.Id, HasTarget: true, CarriesEphemeral: true,
+					MovesAsLink: CarryMovesAsLink(carried, dest), CopiesAsLink: CarryCopiesAsLink(carried, dest, r.accepts, true)}
+				w.set(&in)
+				grid, crumb := in, in
+				grid.Intent = IntentMove
+				crumb.Intent, crumb.FromCrumb = IntentCopy, true
+				want, told := DecideDrop(grid), Told(grid)
+				if dest == far {
+					want, told = DropRejected, EphemeralNoFarMove
+				}
+				if got := DecideDrop(crumb); got != want || Told(crumb) != told {
+					t.Errorf("%s onto %s%s: a visit's crumb = %v %q, want %v %q as a left-drag from a grid",
+						r.name, dest, w.name, got, Told(crumb), want, told)
+				}
+			}
+		}
 	}
 }
 
