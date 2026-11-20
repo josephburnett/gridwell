@@ -931,10 +931,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   onto a directory, a door's whose grid takes no tiles, moves as that row's
   left-drag from a grid moves (Joe, 2026-11-20: "If I drag from a grid,
   from the menu, or from the nav, the answer should be the same."). A
-  ctrl + right-drag of a visit, which would link to it, is refused with "a
-  link to an ephemeral visit would die with it", since no link holds a
-  visit (`dragdrop.EphemeralNoLink`), and wears the no-entry badge with the
-  reason under it. A press that never becomes a drag is the crumb's click
+  ctrl + right-drag of a visit links to it as any tile's does, and once the
+  visit closes the link leads to the tile in the trash (Joe, 2026-11-20:
+  chose to allow the link, since a closed visit goes to the trash). A
+  press that never becomes a drag is the crumb's click
   (`wsbar.Hit.Bare`): on the current crumb nothing, on any other an ascent
   to it, and on a level's band its own, left leaving to that level and
   right renaming it.

@@ -1,14 +1,14 @@
 import type { ElectronApplication, Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import type { GridwellDriver, PaneInfo } from './driver';
-import { createLeafLink, createText, getTile, handshake } from './oracle';
+import { createLeafLink, createText, getTile, handshake, trashed } from './oracle';
 
 // An ephemeral visit's crumb right-dragged onto a grid moves the visit's row
 // there (Joe, 2026-11-19: "what was ephemeral is now persistent. And the pane
 // stay as-is and I don't lose changes"): one row, the same id, the pane on it
-// as it was and no longer grey. A link to it is refused, a move across a
-// connection is refused, and a left-drag or the trashcan moves and deletes
-// nothing, the trashcan saying why.
+// as it was and no longer grey. A ctrl + right-drag links to it as to any
+// tile, a move across a connection is refused, and a left-drag or the
+// trashcan moves and deletes nothing, the trashcan saying why.
 
 type Button = 'left' | 'right';
 
@@ -176,12 +176,7 @@ test('a text visit right-dragged off its crumb is kept with what was typed befor
   if ((await gw.textareaInfo())?.tileID !== visit) await gw.toggleTextMode();
   await expect.poll(async () => (await gw.textareaInfo())?.tileID).toBe(visit);
 
-  // A link would die with the visit, so ctrl + right-drag is refused.
   const n = ((await gw.getGrid(home.gridID)).tiles ?? []).length;
-  await dragCrumb(window, gw, visit, await gw.cellCenter(dest.id, cx - 2, cy), 'right', true);
-  await expect.poll(() => notices(window)).toContain('a link to an ephemeral visit would die with it');
-  expect(((await gw.getGrid(home.gridID)).tiles ?? []).length, 'no link was made').toBe(n);
-  await stillAVisit(gw, scratch, visit);
 
   // Typed and not yet saved when the drop lands: the save is debounced, and
   // it is the row's by id, which the move keeps.
@@ -198,6 +193,46 @@ test('a text visit right-dragged off its crumb is kept with what was typed befor
     .poll(() => gw.getTileContent(visit), { timeout: 10_000 })
     .toBe('a text to visit before after');
   expect(await gw.textareaValue(), 'the editor shows it').toBe('a text to visit before after');
+});
+
+// A ctrl + right-drag of a visit's crumb links to it as to any tile (Joe,
+// 2026-11-20: chose to allow the link, since a closed visit goes to the
+// trash): the visit stays a visit, and once it closes the link leads to the
+// same row in the trash.
+test('a visit ctrl + right-dragged off its crumb is linked, and the link follows it to the trash', async ({ window, gw }) => {
+  const origin = new URL(window.url()).origin;
+  const tg = await templatesGrid(window);
+  const tpl = await createText(origin, tg, 0, 0, 'a text to link');
+  const { home, dest } = await twoPanes(gw);
+  const scratch = await gw.scratchGridID('home');
+  const cx = Math.round(dest.cx);
+  const cy = Math.round(dest.cy);
+
+  await visitTemplate(window, gw, tpl.id);
+  await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
+  const visit = (await gw.focused()).textFocus;
+  expect(await onGrid(gw, scratch, visit), 'the visit is on the scratch grid').toBeTruthy();
+  const n = ((await gw.getGrid(home.gridID)).tiles ?? []).length;
+
+  await dragCrumb(window, gw, visit, await gw.cellCenter(dest.id, cx - 2, cy), 'right', true);
+  await expect.poll(async () => ((await gw.getGrid(home.gridID)).tiles ?? []).length, { timeout: 15_000 }).toBe(n + 1);
+  const link = ((await gw.getGrid(home.gridID)).tiles ?? []).find((t) => t.linkTargetId === visit)!;
+  expect(link, 'the drop made a link to the visit').toBeTruthy();
+  expect([Number(link.x ?? 0), Number(link.y ?? 0)], 'on the cell the drop resolved').toEqual([cx - 2, cy]);
+  await stillAVisit(gw, scratch, visit);
+  expect(await notices(window), 'nothing went wrong').toEqual([]);
+
+  // Closing the visit sends its row to the trash, where the link still leads.
+  await gw.ascendViaCrumb();
+  await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
+  await expect
+    .poll(async () => (await trashed(origin, visit))?.id, { message: 'the closed visit is in the trash', timeout: 10_000 })
+    .toBe(visit);
+  expect((await onGrid(gw, home.gridID, link.id))?.linkTargetId, 'the link still names the same row').toBe(visit);
+  await gw.waitIdle();
+  const dead = await window.evaluate((gid: string) => (window as any).__gridwellTest.deadLinks(gid), home.gridID);
+  expect(dead, 'the link is not dead').not.toContain(link.id);
+  expect(await notices(window), 'nothing went wrong').toEqual([]);
 });
 
 test('a shell visit right-dragged off its crumb is kept on its tmux', async ({ window, gw }) => {

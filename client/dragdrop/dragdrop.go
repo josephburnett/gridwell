@@ -295,8 +295,7 @@ type DropInput struct {
 	// a move to another grid and a delete (FingerNoFile).
 	Touch, CarriesFile bool
 	// CarriesEphemeral is a carried row on the scratch grid (rpc.Ephemeral):
-	// a visit's crumb, which links nowhere (EphemeralNoLink) and whose
-	// right-drag moves it (KeepsVisit).
+	// a visit's crumb, whose right-drag moves it (KeepsVisit).
 	CarriesEphemeral bool
 	// FromCrumb is a drag from a crumb (wsbar.ActionCrumbDrag), whose
 	// trashcan is refused (CrumbNoDelete).
@@ -311,10 +310,6 @@ type DropInput struct {
 // destructive gestures, a mouse's alone. Placing a file within its grid,
 // copying it and every gesture on a Gridwell tile stay a finger's too.
 const FingerNoFile = "a finger does not move or delete a file; use a mouse"
-
-// EphemeralNoLink is why a drop that would link to an ephemeral visit is
-// refused: no link holds a visit, so the link would read dead once it ends.
-const EphemeralNoLink = "a link to an ephemeral visit would die with it"
 
 // EphemeralNoFarMove is why a visit's crumb dropped on a far node's grid is
 // refused: the drop is the visit's move (KeepsVisit), and nothing moves
@@ -447,8 +442,6 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropRejected, FingerNoFile
 	case KeepsVisit(in) && in.MovesAsLink:
 		return DropRejected, EphemeralNoFarMove
-	case in.CarriesEphemeral && (in.Intent == IntentLink || in.Intent == IntentCopy && in.CopiesAsLink && !KeepsVisit(in)):
-		return DropRejected, EphemeralNoLink
 	case in.Forbidden:
 		return DropRejected, MovesNoTiles
 	case in.TargetRefusesTiles && (!Moves(in) || in.MovesAsLink):

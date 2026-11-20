@@ -814,9 +814,9 @@ func TestCopySwatchDrop(t *testing.T) {
 }
 
 // An ephemeral visit's crumb right-dragged onto a grid moves the visit's row
-// there, where any other crumb copies (Joe, 2026-11-19); across a connection
-// the move is refused, and a ctrl + right-drag that would link to it is
-// refused, each with its reason.
+// there, where any other crumb copies (Joe, 2026-11-19), and across a
+// connection the move is refused with its reason; a ctrl + right-drag links
+// to it as to any tile (Joe, 2026-11-20).
 func TestAVisitCrumbMoves(t *testing.T) {
 	base := DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, FromCrumb: true}
 	cases := []struct {
@@ -832,8 +832,8 @@ func TestAVisitCrumbMoves(t *testing.T) {
 		{"a right-drag across a connection", func(in *DropInput) { in.MovesAsLink = true }, DropCopy, DropRejected, EphemeralNoFarMove, ""},
 		{"a right-drag across a connection that copies as a link", func(in *DropInput) { in.MovesAsLink, in.CopiesAsLink = true, true }, DropLink, DropRejected, EphemeralNoFarMove, ""},
 		{"a right-drag that copies as a link", func(in *DropInput) { in.CopiesAsLink = true }, DropLink, DropMove, "", ""},
-		{"a ctrl + right-drag", func(in *DropInput) { in.Intent = IntentLink }, DropLink, DropRejected, EphemeralNoLink, ""},
-		{"a ctrl + right-drag across a connection", func(in *DropInput) { in.Intent, in.MovesAsLink, in.CopiesAsLink = IntentLink, true, true }, DropLink, DropRejected, EphemeralNoLink, ""},
+		{"a ctrl + right-drag", func(in *DropInput) { in.Intent = IntentLink }, DropLink, DropLink, "", ""},
+		{"a ctrl + right-drag across a connection", func(in *DropInput) { in.Intent, in.MovesAsLink, in.CopiesAsLink = IntentLink, true, true }, DropLink, DropLink, "", ""},
 		{"a drop on a shell", func(in *DropInput) { in.PasteTarget, in.Intent = true, IntentLink }, DropPaste, DropPaste, "", ""},
 		{"a right-drop on a shell", func(in *DropInput) { in.PasteTarget = true }, DropPaste, DropPaste, "", ""},
 	}
@@ -875,7 +875,7 @@ func TestAVisitCrumbMoves(t *testing.T) {
 // row from a grid, whatever the row and wherever it lands (Joe, 2026-11-20:
 // "If I drag from a grid, from the menu, or from the nav, the answer should
 // be the same."). The one named exception: across a connection a left-drag
-// links and a visit's move is refused, since no link holds a visit.
+// links and a visit's move is refused, since nothing moves across one.
 func TestAVisitMovesAsALeftDragDoes(t *testing.T) {
 	const home, dir, far = "abcdefg/3", "abcdefg/~L3RtcA", "abcdefg/hijklmn/5"
 	rows := []struct {
@@ -920,6 +920,62 @@ func TestAVisitMovesAsALeftDragDoes(t *testing.T) {
 	}
 }
 
+// A visit links as the same row does from a grid (Joe, 2026-11-20: chose to
+// allow the link, since a closed visit goes to the trash): a ctrl +
+// right-drag of its crumb, and any right-drag of it off a grid, answer what
+// that drag of a row that is no visit answers, whatever the row and wherever
+// it lands. Only a crumb's plain right-drag keeps the visit (KeepsVisit).
+func TestAVisitLinksAsAnyTileDoes(t *testing.T) {
+	const home, dir, far = "abcdefg/3", "abcdefg/~L3RtcA", "abcdefg/hijklmn/5"
+	rows := []struct {
+		name    string
+		row     *gridwellv1.Tile
+		accepts bool
+	}{
+		{"a text", &gridwellv1.Tile{Id: "abcdefg/12", Kind: rpc.KindText}, true},
+		{"a shell", &gridwellv1.Tile{Id: "abcdefg/12", Kind: rpc.KindShell}, true},
+		{"a link", &gridwellv1.Tile{Id: "abcdefg/12", Kind: rpc.KindText, LinkTargetId: "abcdefg/40"}, true},
+		{"a door", &gridwellv1.Tile{Id: "abcdefg/12", Kind: rpc.KindDoor, ChildGridId: "abcdefg/41"}, true},
+		{"a door whose grid takes no tiles", &gridwellv1.Tile{Id: "abcdefg/12", Kind: rpc.KindDoor, ChildGridId: "abcdefg/41"}, false},
+	}
+	worlds := []struct {
+		name string
+		set  func(*DropInput)
+	}{
+		{"", func(*DropInput) {}},
+		{", a taken cell", func(in *DropInput) { in.Occupied = true }},
+		{", a grid that takes no new tiles", func(in *DropInput) { in.TargetRefusesTiles = true }},
+		{", a shell", func(in *DropInput) { in.PasteTarget = true }},
+	}
+	drags := []struct {
+		name   string
+		intent Intent
+		crumb  bool
+	}{
+		{"a crumb's ctrl + right-drag", IntentLink, true},
+		{"a ctrl + right-drag off a grid", IntentLink, false},
+		{"a right-drag off a grid", IntentCopy, false},
+	}
+	for _, r := range rows {
+		for _, dest := range []string{home, dir, far} {
+			for _, w := range worlds {
+				for _, d := range drags {
+					carried := []*gridwellv1.Tile{r.row}
+					row := DropInput{Started: true, TileID: r.row.Id, HasTarget: true, Intent: d.intent, FromCrumb: d.crumb,
+						MovesAsLink: CarryMovesAsLink(carried, dest), CopiesAsLink: CarryCopiesAsLink(carried, dest, r.accepts, true)}
+					w.set(&row)
+					visit := row
+					visit.CarriesEphemeral = true
+					if got, want := DecideDrop(visit), DecideDrop(row); got != want || Told(visit) != Told(row) {
+						t.Errorf("%s of %s onto %s%s: a visit = %v %q, want %v %q as the row's",
+							d.name, r.name, dest, w.name, got, Told(visit), want, Told(row))
+					}
+				}
+			}
+		}
+	}
+}
+
 // A crumb's tile drags as any tile does, with one arm of its own: nothing is
 // deleted from the bar (Joe, 2026-11-19), so its trashcan is refused, a
 // visit's as any other's, and the refusal says why: told, and written under
@@ -957,7 +1013,7 @@ func TestACrumbIsNotDeleted(t *testing.T) {
 func TestEveryToldRefusalIsWorn(t *testing.T) {
 	for _, in := range []DropInput{
 		{Started: true, TileID: "7", OverDelete: true, Touch: true, CarriesFile: true},
-		{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, CarriesEphemeral: true},
+		{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, FromCrumb: true, CarriesEphemeral: true, MovesAsLink: true},
 		{Started: true, TileID: "7", HasTarget: true, PasteTarget: true},
 		{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, PasteTarget: true, PasteRefusal: "x takes no edits"},
 		{Started: true, TileID: "7", Intent: IntentCopy, OverDelete: true, FromCrumb: true},
