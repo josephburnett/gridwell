@@ -23,7 +23,11 @@ import (
 // is refused: the row owns no content, and a content operation addresses the
 // target the caller names explicitly.
 func (s *Store) WriteContent(ctx context.Context, tileID string, version int64, data []byte) (*gridwellv1.Tile, error) {
-	t, err := s.GetTile(ctx, tileID)
+	id, err := parseID(tileID)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	t, err := s.loadTile(ctx, s.db, id)
 	if err != nil {
 		return nil, err
 	}
@@ -33,14 +37,10 @@ func (s *Store) WriteContent(ctx context.Context, tileID string, version int64, 
 	}
 	switch rpc.KindOf(t.Kind).Content {
 	case rpc.ContentBody:
-		return s.writeTextContent(ctx, tileID, version, data)
+		return s.writeTextContent(ctx, id, version, data)
 	case rpc.ContentAddress:
-		return s.writeURLContent(ctx, tileID, version, data)
+		return s.writeURLContent(ctx, id, version, data)
 	case rpc.ContentLayout:
-		id, err := parseID(tileID)
-		if err != nil {
-			return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
-		}
 		return s.SetWorkspaceLayout(ctx, id, version, data)
 	default:
 		return nil, fmt.Errorf("%w: a %s tile has no writable content", ErrInvalidArgument, t.Kind)
@@ -52,14 +52,10 @@ func (s *Store) WriteContent(ctx context.Context, tileID string, version int64, 
 // is a content edit. The address must be a real
 // http or https url, an unconfigured tile being made by CreateURL, and a
 // refused write leaves the old address byte-for-byte intact.
-func (s *Store) writeURLContent(ctx context.Context, tileIDStr string, version int64, data []byte) (*gridwellv1.Tile, error) {
+func (s *Store) writeURLContent(ctx context.Context, tileID, version int64, data []byte) (*gridwellv1.Tile, error) {
 	urlString := strings.TrimSpace(string(data))
 	if !rpc.HTTPAddress(urlString) {
 		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
-	}
-	tileID, err := parseID(tileIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	return s.claimContentVersion(ctx, "WriteContent/url", tileID, version, func(tx *sql.Tx, n *gridwellv1.Tile, events *[]*gridwellv1.Event) (*gridwellv1.Tile, error) {
 		if !rpc.WebContent(n) {

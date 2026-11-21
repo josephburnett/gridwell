@@ -59,13 +59,9 @@ func (s *Store) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (
 
 // writeTextContent replaces a text tile's blob with new bytes: the text arm of
 // WriteContent. Text is a content edit, so it bumps.
-func (s *Store) writeTextContent(ctx context.Context, tileIDStr string, version int64, data []byte) (*gridwellv1.Tile, error) {
+func (s *Store) writeTextContent(ctx context.Context, tileID, version int64, data []byte) (*gridwellv1.Tile, error) {
 	if int64(len(data)) > MaxBlobBytes {
 		return nil, fmt.Errorf("%w: text too large", ErrInvalidArgument)
-	}
-	tileID, err := parseID(tileIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	return s.claimContentVersion(ctx, "WriteContent/text", tileID, version, func(tx *sql.Tx, n *gridwellv1.Tile, events *[]*gridwellv1.Event) (*gridwellv1.Tile, error) {
 		if !rpc.TextDocument(n) {

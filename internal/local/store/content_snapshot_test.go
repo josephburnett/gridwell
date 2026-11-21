@@ -65,6 +65,7 @@ func TestReadContentOverlappingWriteReadsOneSnapshot(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	tile := textAt(t, s, root, 0, 0)
+	id := mustParseID(t, tile.Id)
 
 	base, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -72,7 +73,7 @@ func TestReadContentOverlappingWriteReadsOneSnapshot(t *testing.T) {
 	ctx := &writeWhileHeld{Context: base, s: s, done: make(chan struct{}), write: func() {
 		// WriteContent's text arm, the one transaction, so the write is one
 		// acquire of the connection.
-		_, werr = s.writeTextContent(context.Background(), tile.Id, tile.Version, []byte("copied bytes"))
+		_, werr = s.writeTextContent(context.Background(), id, tile.Version, []byte("copied bytes"))
 	}}
 
 	data, _, _, err := s.ReadContent(ctx, tile.Id)
