@@ -423,7 +423,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if mp, _, ok := a.menuPaneForPointer(); ok && args[0].Get("button").Int() == 2 {
 		if t, idx := a.menuTemplateAt(mp, sx, sy); t != nil {
 			args[0].Call("preventDefault")
-			a.setRightDrag(&rightDragState{kind: rightDragCarry, startX: sx, startY: sy, curX: sx, curY: sy})
+			a.setRightDrag((&rightDragState{kind: rightDragCarry}).at(sx, sy))
 			a.startTemplateDrag(mp, idx, t, sx, sy, rightDragIntent(modsOf(args[0]).Ctrl))
 			return nil
 		}
@@ -524,21 +524,17 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 	parentCell := ps.Cell()
-	a.dragging = &dragState{
+	a.dragging = (&dragState{
 		originPaneID: p.ID,
 		splitNav:     gesture.SplitNav(args[0].Get("ctrlKey").Truthy(), args[0].Get("metaKey").Truthy()),
 		touch:        a.fingerPress,
 		tileID:       "",
-		startScreenX: sx,
-		startScreenY: sy,
-		curScreenX:   sx,
-		curScreenY:   sy,
 		// Overridden below if the drag lands on a child preview tile.
 		srcGridID:    a.gridIDForPane(p),
 		srcCellSize:  parentCell,
 		snapshotTile: &gridwellv1.Tile{},
 		pressView:    p.View,
-	}
+	}).at(sx, sy)
 	if n != nil {
 		// Pull out of door: when a child preview tile sits at the cursor, that
 		// is the drag source, not the door.

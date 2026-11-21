@@ -484,20 +484,16 @@ func (a *App) startCrumbDrag(p *pane.Pane, t *gridwellv1.Tile, nc navCrumb, bare
 		ox = float64(t.W) * min(max((sx-bandX)/bandW, 0), 1)
 		oy = float64(t.H) * min(max((sy-top-3)/side, 0), 1)
 	}
-	a.setRightDrag(&rightDragState{kind: rightDragCarry, startX: sx, startY: sy, curX: sx, curY: sy})
-	a.dragging = &dragState{
+	a.setRightDrag((&rightDragState{kind: rightDragCarry}).at(sx, sy))
+	a.dragging = (&dragState{
 		originPaneID: p.ID,
 		crumb:        &nc,
 		crumbBare:    bare,
 		intent:       rightDragIntent(ctrl),
-		startScreenX: sx,
-		startScreenY: sy,
-		curScreenX:   sx,
-		curScreenY:   sy,
 		srcGridID:    t.GridId,
 		srcCellSize:  cell,
 		carried:      []*gridwellv1.Tile{t},
-	}
+	}).at(sx, sy)
 	a.dragging.grabTile(t, float64(t.X)+ox, float64(t.Y)+oy, sx-ox*cell, sy-oy*cell)
 }
 

@@ -76,6 +76,12 @@ type rightDragState struct {
 	tileNewW, tileNewH       int64
 }
 
+// at starts rd at the press point, with the cursor there.
+func (rd *rightDragState) at(sx, sy float64) *rightDragState {
+	rd.startX, rd.startY, rd.curX, rd.curY = sx, sy, sx, sy
+	return rd
+}
+
 // setRightDrag is the one writer of a.rightDrag, so a forwarded drag tells main
 // it ended however it is dropped: released, cancelled or replaced.
 func (a *App) setRightDrag(rd *rightDragState) {
@@ -119,23 +125,15 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64, intent drag
 	case gesture.TileCenter, gesture.TileResize:
 		a.armTileGesture(p, r, tile, sx, sy, intent, splitNav)
 	case gesture.Swap:
-		a.setRightDrag(&rightDragState{
+		a.setRightDrag((&rightDragState{
 			kind:         rightDragSwap,
-			startX:       sx,
-			startY:       sy,
-			curX:         sx,
-			curY:         sy,
 			originPaneID: p.ID,
-		})
+		}).at(sx, sy))
 	case gesture.Split:
-		a.setRightDrag(&rightDragState{
+		a.setRightDrag((&rightDragState{
 			kind:      rightDragSplit,
-			startX:    sx,
-			startY:    sy,
-			curX:      sx,
-			curY:      sy,
 			splitAxis: in.Region.Side().Direction(),
-		})
+		}).at(sx, sy))
 	}
 }
 
@@ -239,16 +237,13 @@ func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, 
 		return
 	}
 	common := rightDragState{
-		startX:     sx,
-		startY:     sy,
-		curX:       sx,
-		curY:       sy,
 		splitNav:   splitNav,
 		tilePaneID: p.ID,
 		tileNode:   n,
 		tilePane:   p,
 		tilePaneR:  r,
 	}
+	common.at(sx, sy)
 	if inTileCenter(n, p, r, sx, sy) {
 		common.kind = rightDragTileCenter
 		common.cursorInCenter = true
@@ -359,17 +354,13 @@ func (a *App) armRightCopy(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, sy
 	}
 	cxF, cyF := ps.ScreenToCell(sx, sy)
 	tlX, tlY := ps.CellToScreen(float64(n.X), float64(n.Y))
-	a.dragging = &dragState{
+	a.dragging = (&dragState{
 		originPaneID: p.ID,
 		intent:       intent,
 		touch:        a.fingerPress,
-		startScreenX: sx,
-		startScreenY: sy,
-		curScreenX:   sx,
-		curScreenY:   sy,
 		srcGridID:    a.gridIDForPane(p),
 		srcCellSize:  ps.Cell(),
-	}
+	}).at(sx, sy)
 	a.dragging.grabTile(n, cxF, cyF, tlX, tlY)
 	a.dragging.carried = a.carryRows(a.dragging.srcGridID, n)
 }

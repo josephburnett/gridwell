@@ -594,6 +594,12 @@ type dragState struct {
 	pressView rpc.View
 }
 
+// at starts d at the press point, with the cursor there.
+func (d *dragState) at(sx, sy float64) *dragState {
+	d.startScreenX, d.startScreenY, d.curScreenX, d.curScreenY = sx, sy, sx, sy
+	return d
+}
+
 // dragThreshold is the single owner of the drag threshold. The native layer
 // keeps two forced copies, RIGHT_DRAG_THRESHOLD in
 // apps/desktop/src/main/viewutil.ts and an inlined one in

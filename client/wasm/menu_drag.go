@@ -38,13 +38,12 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 	}
 	tx, ty, tw, _ := a.menuTileRect(p, idx)
 	if item.copySwatch {
-		a.dragging = &dragState{originPaneID: p.ID, menuPress: true, copySwatch: true, item: item,
-			touch: a.fingerPress, startScreenX: sx, startScreenY: sy, curScreenX: sx, curScreenY: sy,
-			cellOffsetX: 0.5, cellOffsetY: 0.5, snapshotTile: menuItemGhostNode(item),
-			originScreenX: tx, originScreenY: ty, srcCellSize: tw}
+		a.dragging = (&dragState{originPaneID: p.ID, menuPress: true, copySwatch: true, item: item,
+			touch: a.fingerPress, cellOffsetX: 0.5, cellOffsetY: 0.5, snapshotTile: menuItemGhostNode(item),
+			originScreenX: tx, originScreenY: ty, srcCellSize: tw}).at(sx, sy)
 		return
 	}
-	a.dragging = &dragState{
+	a.dragging = (&dragState{
 		originPaneID: p.ID,
 		menuPress:    true,
 		fromMenu:     true,
@@ -52,10 +51,6 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 		// The menu belongs to the pane's node, and the drop rules compare
 		// this against the destination's.
 		menuNS:        a.paneNodeNS(p),
-		startScreenX:  sx,
-		startScreenY:  sy,
-		curScreenX:    sx,
-		curScreenY:    sy,
 		cellOffsetX:   0.5,
 		cellOffsetY:   0.5,
 		snapshotTile:  menuItemGhostNode(item),
@@ -65,7 +60,7 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 		// machinery lerps it to the destination grid's cell size, the same
 		// as dragging a tile across doors.
 		srcCellSize: tw,
-	}
+	}).at(sx, sy)
 }
 
 // startTemplateDrag arms the drag of template n, the menu's i'th item, as
@@ -75,19 +70,15 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 // where the ghost starts.
 func (a *App) startTemplateDrag(p *pane.Pane, i int, n *gridwellv1.Tile, sx, sy float64, intent dragdrop.Intent) {
 	r := a.menuLayoutFor(p).TileRect(i)
-	a.dragging = &dragState{
+	a.dragging = (&dragState{
 		originPaneID: p.ID,
 		menuPress:    true,
 		item:         menuItem{template: n},
 		intent:       intent,
 		touch:        a.fingerPress,
-		startScreenX: sx,
-		startScreenY: sy,
-		curScreenX:   sx,
-		curScreenY:   sy,
 		srcGridID:    a.templates,
 		srcCellSize:  pane.SquareCell(min(r.W, r.H), n),
-	}
+	}).at(sx, sy)
 	a.dragging.grabTile(n, float64(n.X)+(sx-r.X)/r.W*float64(max(n.W, 1)), float64(n.Y)+(sy-r.Y)/r.H*float64(max(n.H, 1)), r.X, r.Y)
 	a.dragging.carried = a.carryRows(a.templates, n)
 }
