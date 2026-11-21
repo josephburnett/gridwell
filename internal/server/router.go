@@ -451,11 +451,8 @@ func (rt *router) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Tile
 	if err := refuseUnclaimed(req); err != nil {
 		return nil, err
 	}
-	c, _, uuid, transit, err := rt.srv.route(req.TileId)
+	c, _, uuid, transit, err := rt.writeRoute(req.TileId)
 	if err != nil {
-		return nil, err
-	}
-	if err := rt.refuseDisabled(req.TileId); err != nil {
 		return nil, err
 	}
 	resp, err := c.SetTile(ctx, rpc.PeelRequest(rt.hop(req.TileId, transit), req))
@@ -467,11 +464,8 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 		return nil, err
 	}
 	qualifiedID := req.TileId
-	c, local, _, transit, err := rt.srv.route(req.TileId)
+	c, local, _, transit, err := rt.writeRoute(req.TileId)
 	if err != nil {
-		return nil, err
-	}
-	if err := rt.refuseDisabled(req.TileId); err != nil {
 		return nil, err
 	}
 	// The layout blob is the only record of a workspace tile's ephemerals: capture
@@ -571,11 +565,8 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 	if root {
 		ref = m.RootGridId
 	}
-	c, _, uuid, transit, err := rt.srv.route(ref)
+	c, _, uuid, transit, err := rt.writeRoute(ref)
 	if err != nil {
-		return nil, err
-	}
-	if err := rt.refuseDisabled(ref); err != nil {
 		return nil, err
 	}
 	out := &pb.SetFramingRequest{Cx: f.Cx(), Cy: f.Cy(), Zoom: f.Zoom()}
@@ -633,11 +624,8 @@ func (rt *router) SetSelection(ctx context.Context, req *pb.SetSelectionRequest)
 	if req.All {
 		return rt.clearAllSelections(ctx, req)
 	}
-	c, _, _, transit, err := rt.srv.route(req.GridId)
+	c, _, _, transit, err := rt.writeRoute(req.GridId)
 	if err != nil {
-		return nil, err
-	}
-	if err := rt.refuseDisabled(req.GridId); err != nil {
 		return nil, err
 	}
 	m := rpc.PeelRequest(rt.hop(req.GridId, transit), req)

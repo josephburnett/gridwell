@@ -127,11 +127,8 @@ func (rt *router) WriteContent(ctx context.Context, recv func() (*pb.WriteConten
 		}
 		return nil, status.Error(gcodes.InvalidArgument, err.Error())
 	}
-	c, local, uuid, transit, err := rt.srv.route(first.TileId)
+	c, local, uuid, transit, err := rt.writeRoute(first.TileId)
 	if err != nil {
-		return nil, err
-	}
-	if err := rt.refuseDisabled(first.TileId); err != nil {
 		return nil, err
 	}
 	bound := proto.CloneOf(first)

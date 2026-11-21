@@ -26,11 +26,8 @@ func (rt *router) PasteShell(ctx context.Context, req *pb.PasteShellRequest) (*p
 	case rt.srv.cfg.DisableShells:
 		return nil, status.Error(gcodes.PermissionDenied, "shell tiles are disabled on this node (server.yaml disable_shells)")
 	}
-	c, local, _, transit, err := rt.srv.route(req.TileId)
+	c, local, _, transit, err := rt.writeRoute(req.TileId)
 	if err != nil {
-		return nil, err
-	}
-	if err := rt.refuseDisabled(req.TileId); err != nil {
 		return nil, err
 	}
 	if transit {

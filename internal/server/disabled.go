@@ -13,6 +13,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
 // disabledReason is the sentence of the switched-off connection owning id,
@@ -65,6 +66,14 @@ func (rt *router) refuseDisabled(ids ...string) error {
 		}
 	}
 	return nil
+}
+
+// writeRoute is route for a write on id, refused as refuseDisabled refuses it.
+func (rt *router) writeRoute(id string) (ns namespace.Namespace, local, uuid string, transit bool, err error) {
+	if ns, local, uuid, transit, err = rt.srv.route(id); err == nil {
+		err = rt.refuseDisabled(id)
+	}
+	return ns, local, uuid, transit, err
 }
 
 // stampDisabled marks a grid answer from a switched-off source as taking no
