@@ -291,19 +291,9 @@ func (s *Store) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRe
 		return fmt.Errorf("%w: %s", ErrInvalidArgument, why)
 	}
 	if req.All {
-		return s.withMutation(ctx, "SetSelection", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-			changed, err := clearAllTx(ctx, tx, home)
-			if err != nil {
-				return err
-			}
-			if len(changed) == 0 {
-				return errUnchanged
-			}
-			for _, g := range changed {
-				*events = append(*events, rpc.SelectionEvent(strconv.FormatInt(g, 10), nil))
-			}
-			return nil
-		})
+		_, err := s.selectWrite(ctx, func(tx *sql.Tx) ([]int64, error) { return clearAllTx(ctx, tx, home) },
+			func(*sql.Tx, int64) ([]string, error) { return nil, nil })
+		return err
 	}
 	gid, err := parseID(req.GridId)
 	if err != nil {
@@ -316,61 +306,59 @@ func (s *Store) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRe
 	if op.Remove, err = parseIDs(req.Remove); err != nil {
 		return err
 	}
-	return s.withMutation(ctx, "SetSelection", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		changed, err := setSelectionTx(ctx, tx, home, gid, op)
-		if err != nil {
+	_, err = s.selectWrite(ctx, func(tx *sql.Tx) ([]int64, error) { return setSelectionTx(ctx, tx, home, gid, op) },
+		func(tx *sql.Tx, g int64) ([]string, error) {
+			stored, err := readSelection(ctx, tx, home, g)
+			return idStrings(stored), err
+		})
+	return err
+}
+
+// selectWrite is the one select through the funnel: sel answers each grid
+// whose set it changed, and a select that changed none writes nothing. tell,
+// nil for the files, which announce their own, answers the set each changed
+// grid's home event carries.
+func (s *Store) selectWrite(ctx context.Context, sel func(*sql.Tx) ([]int64, error),
+	tell func(tx *sql.Tx, grid int64) ([]string, error), rows ...string) (changed []int64, err error) {
+	err = s.withMutation(ctx, "SetSelection", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+		var err error
+		if changed, err = sel(tx); err != nil {
 			return err
 		}
 		if len(changed) == 0 {
 			return errUnchanged
 		}
 		for _, g := range changed {
-			stored, err := readSelection(ctx, tx, home, g)
+			if tell == nil {
+				break
+			}
+			ids, err := tell(tx, g)
 			if err != nil {
 				return err
 			}
-			*events = append(*events, rpc.SelectionEvent(strconv.FormatInt(g, 10), idStrings(stored)))
+			*events = append(*events, rpc.SelectionEvent(strconv.FormatInt(g, 10), ids))
 		}
 		return nil
-	})
+	}, rows...)
+	if err != nil {
+		return nil, err
+	}
+	return changed, nil
 }
 
 // SetSelection is a select of a directory's grid row, the write home's grids
 // take. It answers each grid whose set changed, for the caller to announce.
 func (n *FileRows) SetSelection(gridID int64, op SelectOp) (changed []int64, err error) {
-	err = n.s.withMutation(context.Background(), "SetSelection", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
-		var err error
-		if changed, err = setSelectionTx(context.Background(), tx, files, gridID, op); err != nil {
-			return err
-		}
-		if len(changed) == 0 {
-			return errUnchanged
-		}
-		return nil
-	}, "~:s/"+strconv.FormatInt(gridID, 10))
-	if err != nil {
-		return nil, err
-	}
-	return changed, nil
+	ctx := context.Background()
+	return n.s.selectWrite(ctx, func(tx *sql.Tx) ([]int64, error) { return setSelectionTx(ctx, tx, files, gridID, op) },
+		nil, "~:s/"+strconv.FormatInt(gridID, 10))
 }
 
 // ClearAllSelections empties every grid's set in the namespace, answering
 // each grid whose set changed, for the caller to announce.
 func (n *FileRows) ClearAllSelections() (changed []int64, err error) {
-	err = n.s.withMutation(context.Background(), "SetSelection", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
-		var err error
-		if changed, err = clearAllTx(context.Background(), tx, files); err != nil {
-			return err
-		}
-		if len(changed) == 0 {
-			return errUnchanged
-		}
-		return nil
-	}, "~:s/*")
-	if err != nil {
-		return nil, err
-	}
-	return changed, nil
+	ctx := context.Background()
+	return n.s.selectWrite(ctx, func(tx *sql.Tx) ([]int64, error) { return clearAllTx(ctx, tx, files) }, nil, "~:s/*")
 }
 
 // clearAllTx empties every grid's set in namespace ns.
