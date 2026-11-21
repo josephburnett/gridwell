@@ -122,25 +122,14 @@ func Dividers(t *Tree, root Rect, bandPx float64) []Divider {
 // orientation whose mid-line sits on that edge within half a pixel; a looser
 // match would let a boundary resize grab an unrelated split.
 func DividerOnSide(divs []Divider, paneRect Rect, side Side) int {
-	for i := range divs {
-		d := divs[i]
-		switch side {
-		case SideTop:
-			if d.Dir == Horizontal && nearHalfPx(d.Rect.Y+d.Rect.H/2, paneRect.Y) {
-				return i
-			}
-		case SideBottom:
-			if d.Dir == Horizontal && nearHalfPx(d.Rect.Y+d.Rect.H/2, paneRect.Y+paneRect.H) {
-				return i
-			}
-		case SideLeft:
-			if d.Dir == Vertical && nearHalfPx(d.Rect.X+d.Rect.W/2, paneRect.X) {
-				return i
-			}
-		case SideRight:
-			if d.Dir == Vertical && nearHalfPx(d.Rect.X+d.Rect.W/2, paneRect.X+paneRect.W) {
-				return i
-			}
+	dir := side.Direction()
+	edge, ext := axisSpan(paneRect, dir)
+	if side == SideBottom || side == SideRight {
+		edge += ext
+	}
+	for i, d := range divs {
+		if lo, w := axisSpan(d.Rect, dir); d.Dir == dir && nearHalfPx(lo+w/2, edge) {
+			return i
 		}
 	}
 	return -1
@@ -303,12 +292,8 @@ const MinPanePx = 32.0
 // sub-minimum rule, read by SplitClampedPosition and by programmatic splits
 // alike.
 func CanSplit(side Side, r Rect) bool {
-	switch side {
-	case SideTop, SideBottom:
-		return r.H > 2*MinPanePx
-	default:
-		return r.W > 2*MinPanePx
-	}
+	_, ext := axisSpan(r, side.Direction())
+	return ext > 2*MinPanePx
 }
 
 // SplitClampedPosition projects the cursor onto the split's axis and clamps it
@@ -319,46 +304,27 @@ func SplitClampedPosition(side Side, paneRect Rect, curX, curY float64) (float64
 	if !CanSplit(side, paneRect) {
 		return 0, false
 	}
-	switch side {
-	case SideTop, SideBottom:
-		minY := paneRect.Y + MinPanePx
-		maxY := paneRect.Y + paneRect.H - MinPanePx
-		if curY < minY {
-			return minY, false
-		}
-		if curY > maxY {
-			return maxY, false
-		}
-		return curY, true
-	case SideLeft, SideRight:
-		minX := paneRect.X + MinPanePx
-		maxX := paneRect.X + paneRect.W - MinPanePx
-		if curX < minX {
-			return minX, false
-		}
-		if curX > maxX {
-			return maxX, false
-		}
-		return curX, true
+	cur, _ := axisSpan(Rect{X: curX, Y: curY}, side.Direction())
+	lo, ext := axisSpan(paneRect, side.Direction())
+	minPos, maxPos := lo+MinPanePx, lo+ext-MinPanePx
+	switch {
+	case cur < minPos:
+		return minPos, false
+	case cur > maxPos:
+		return maxPos, false
 	}
-	return 0, false
+	return cur, true
 }
 
 // SplitRatioFromPos is SplitClampedPosition's inverse: the pane fraction the
 // new pane on side occupies. Top and left measure from the near edge, bottom
 // and right from the far one.
 func SplitRatioFromPos(side Side, paneRect Rect, pos float64) float64 {
-	switch side {
-	case SideTop:
-		return (pos - paneRect.Y) / paneRect.H
-	case SideBottom:
-		return ((paneRect.Y + paneRect.H) - pos) / paneRect.H
-	case SideLeft:
-		return (pos - paneRect.X) / paneRect.W
-	case SideRight:
-		return ((paneRect.X + paneRect.W) - pos) / paneRect.W
+	lo, ext := axisSpan(paneRect, side.Direction())
+	if side == SideBottom || side == SideRight {
+		return (lo + ext - pos) / ext
 	}
-	return 0.5
+	return (pos - lo) / ext
 }
 
 func collectDividers(n *TreeNode, r Rect, bandPx float64, out *[]Divider) {
