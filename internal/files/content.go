@@ -25,19 +25,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// sendChunks sends data in chunks, the first carrying first's facts.
-func sendChunks(data []byte, first *pb.ContentChunk, send func(*pb.ContentChunk) error) error {
-	c := first
-	for {
-		n := min(len(data), rpc.ContentChunkBytes)
-		c.Data = data[:n]
-		if err := send(c); err != nil || n == len(data) {
-			return err
-		}
-		data, c = data[n:], &pb.ContentChunk{}
-	}
-}
-
 // ReadContent answers a text file's body with its stamp, taken before the
 // read so bytes written during it read as a stamp they do not match. A page
 // file has no address, so its content is the empty address. An info read
@@ -66,7 +53,7 @@ func (s *Source) ReadContent(_ context.Context, req *pb.ReadContentRequest, send
 	if err != nil {
 		return diskRefusal("read", path, err)
 	}
-	return sendChunks(data, &pb.ContentChunk{MediaType: media, ContentStamp: contentStamp(o.fi.ModTime(), o.fi.Size())}, send)
+	return namespace.SendChunks(data, &pb.ContentChunk{MediaType: media, ContentStamp: contentStamp(o.fi.ModTime(), o.fi.Size())}, send)
 }
 
 // WriteContent replaces a text file's bytes whole, by a temp file in its

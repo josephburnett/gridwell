@@ -215,14 +215,7 @@ func (p *Home) ReadContent(ctx context.Context, req *gridwellv1.ReadContentReque
 	if err != nil {
 		return gwerr.ToStatus(err)
 	}
-	chunk := &gridwellv1.ContentChunk{MediaType: mediaType, Version: version}
-	for off := 0; ; off += rpc.ContentChunkBytes {
-		chunk.Data = data[off:min(off+rpc.ContentChunkBytes, len(data))]
-		if err := send(chunk); err != nil || off+rpc.ContentChunkBytes >= len(data) {
-			return err
-		}
-		chunk = &gridwellv1.ContentChunk{}
-	}
+	return namespace.SendChunks(data, &gridwellv1.ContentChunk{MediaType: mediaType, Version: version}, send)
 }
 
 func (p *Home) ServeContent(context.Context, *gridwellv1.ServeContentRequest, func(*gridwellv1.ServeContentChunk) error) error {
