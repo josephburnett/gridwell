@@ -166,8 +166,13 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		}
 		return rpc.TransitQualifySourceList(hop, resp), nil
 	}
-	var out []*pb.SourceInfo
-	var templates string // home's, from its Info
+	resp := &pb.HandshakeResponse{
+		ShellsDisabled: rt.srv.cfg.DisableShells,
+		// The /content/ API's capability, handed out only here, on the
+		// cookie-authenticated mux.
+		ContentToken: ContentToken(rt.srv.cfg.Password),
+		Build:        rt.srv.build,
+	}
 	for _, n := range rt.srv.namespaces() {
 		if n.Transit {
 			// One row per connection, from the transport's own handshake
@@ -176,32 +181,18 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, rpc.TransitQualifySourceList(n.UUID, tr).Sources...)
+			resp.Sources = append(resp.Sources, rpc.TransitQualifySourceList(n.UUID, tr).Sources...)
 			continue
 		}
 		// A failed Info leaves info nil and the error rides along.
 		info, err := rt.srv.sourceInfo(ctx, n.UUID)
-		out = append(out, buildSourceInfo(n.UUID, n.Label, info, err))
+		row := buildSourceInfo(n.UUID, n.Label, info, err)
+		resp.Sources = append(resp.Sources, row)
 		if n.UUID == rt.srv.cfg.ID {
-			templates = info.GetTemplatesGridId()
+			// Home is the node's own store, where "/" lands.
+			resp.HomeGridId = row.RootGridId
+			resp.TemplatesGridId = rpc.QualifyOptionalID(rt.srv.cfg.ID, info.GetTemplatesGridId())
 		}
-	}
-	resp := &pb.HandshakeResponse{
-		ShellsDisabled: rt.srv.cfg.DisableShells,
-		// The /content/ API's capability, handed out only here, on the
-		// cookie-authenticated mux.
-		ContentToken: ContentToken(rt.srv.cfg.Password),
-		Build:        rt.srv.build,
-		Sources:      out,
-	}
-	// Home is the node's own store, where "/" lands.
-	for _, p := range out {
-		if p.Uuid == rt.srv.cfg.ID && rt.srv.src.Home != nil {
-			resp.HomeGridId = p.RootGridId
-		}
-	}
-	if templates != "" {
-		resp.TemplatesGridId = rpc.QualifyID(rt.srv.cfg.ID, templates)
 	}
 	return resp, nil
 }
