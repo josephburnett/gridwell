@@ -719,11 +719,7 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64, 
 		// Ascent lives on the middle button and the bar's crumb click.
 		return false
 	}
-	cellX, cellY, ok := cellAtScreen(p, r, sx, sy)
-	if !ok {
-		return false
-	}
-	hit := a.tileAtCell(p, cellX, cellY)
+	hit := a.tileAtScreen(p, r, sx, sy)
 	if hit == nil {
 		return false
 	}

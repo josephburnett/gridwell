@@ -77,8 +77,7 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 			a.scheduleURLUpdate()
 			return true
 		}
-		cellX, cellY, shown := cellAtScreen(focused, r, sx, sy)
-		if n := a.tileAtCell(focused, cellX, cellY); shown && n != nil {
+		if n := a.tileAtScreen(focused, r, sx, sy); n != nil {
 			a.local(focused.ID).Selected = n.Id
 		} else {
 			a.clearSelected(focused.ID)
