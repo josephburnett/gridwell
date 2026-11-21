@@ -3,6 +3,7 @@ package inflight
 import (
 	"context"
 	"slices"
+	"sync"
 )
 
 // Verdict is what one read's outcome says about its key's failure latch;
@@ -10,7 +11,7 @@ import (
 type Verdict int
 
 const (
-	// Answered clears both latches.
+	// Answered clears the latch.
 	Answered Verdict = iota
 	// Refused is the server's verdict, the same answer every time it is
 	// asked: it stands until the entity changes, its source's health
@@ -29,20 +30,19 @@ const (
 )
 
 // Reads is one kind of read the renderer asks for on every draw: its claims
-// and its two failure latches in one value, so a failure cannot be left to
-// re-ask on the next draw. A read Settles what it heard; Ask refuses while
-// the key is in flight or latched.
+// and its failure latch in one value, so a failure cannot be left to re-ask
+// on the next draw. A read Settles what it heard; Ask refuses while the key
+// is in flight or latched.
 type Reads struct {
-	claims      *claimSet
-	refused     *latch
-	unreachable *latch
-	// dead marks the refused keys whose verdict was Dead; it is never set
-	// without refused and is cleared with it.
-	dead *latch
+	claims *claimSet
+	mu     sync.Mutex
+	// latched is each failed key's verdict, Refused, Dead or Unreachable,
+	// held until a path that justifies a retry clears it.
+	latched map[string]Verdict
 }
 
 func NewReads() *Reads {
-	return &Reads{claims: newClaimSet(Deadline), refused: newLatch(), unreachable: newLatch(), dead: newLatch()}
+	return &Reads{claims: newClaimSet(Deadline), latched: map[string]Verdict{}}
 }
 
 // Ask claims key for one read (see claimSet.join), refused too while key is
@@ -70,47 +70,61 @@ func (r *Reads) Context() (context.Context, context.CancelFunc) {
 
 // Settle applies one read's verdict to key.
 func (r *Reads) Settle(key string, v Verdict) {
-	if v == Abandoned {
-		return
-	}
-	r.dead.clear(key)
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	switch v {
 	case Answered:
-		r.refused.clear(key)
-		r.unreachable.clear(key)
-	case Refused, Dead:
-		r.unreachable.clear(key)
-		r.refused.set(key)
-		if v == Dead {
-			r.dead.set(key)
-		}
-	case Unreachable:
-		r.refused.clear(key)
-		r.unreachable.set(key)
+		delete(r.latched, key)
+	case Refused, Dead, Unreachable:
+		r.latched[key] = v
 	}
+}
+
+func (r *Reads) verdict(key string) Verdict {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if v, ok := r.latched[key]; ok {
+		return v
+	}
+	return Answered
 }
 
 // Dead reports whether the server's last word on key was the dead verdict.
-func (r *Reads) Dead(key string) bool {
-	return r.dead.has(key)
-}
+func (r *Reads) Dead(key string) bool { return r.verdict(key) == Dead }
 
-// Failed reports whether key is latched either way.
-func (r *Reads) Failed(key string) bool {
-	return r.refused.has(key) || r.unreachable.has(key)
-}
+// Failed reports whether key is latched, by any verdict.
+func (r *Reads) Failed(key string) bool { return r.verdict(key) != Answered }
 
 // Refused reports whether the server's last word on key was a verdict.
 func (r *Reads) Refused(key string) bool {
-	return r.refused.has(key)
+	v := r.verdict(key)
+	return v == Refused || v == Dead
 }
 
 // FailedKeys lists every latched key, sorted.
 func (r *Reads) FailedKeys() []string {
-	return merged(r.refused.keys(), r.unreachable.keys())
+	return r.latchedKeys(func(string, Verdict) bool { return true }, false)
 }
 
-// Change clears key's latches and owes a read in flight a re-ask: the entity
+// latchedKeys lists the latched keys match reports, sorted, and unlatches
+// them when clear says so.
+func (r *Reads) latchedKeys(match func(key string, v Verdict) bool, clear bool) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var keys []string
+	for k, v := range r.latched {
+		if match(k, v) {
+			keys = append(keys, k)
+			if clear {
+				delete(r.latched, k)
+			}
+		}
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+// Change clears key's latch and owes a read in flight a re-ask: the entity
 // changed, so neither the last answer nor the one on the wire is the answer.
 // It is the only thing that owes one.
 func (r *Reads) Change(key string) {
@@ -121,39 +135,22 @@ func (r *Reads) Change(key string) {
 // Backstop clears every Unreachable latch and returns those keys, sorted, so
 // the caller re-asks each once per tick rather than once per draw.
 func (r *Reads) Backstop() []string {
-	keys := r.unreachable.keys()
-	r.unreachable.reset()
-	return keys
+	return r.latchedKeys(func(_ string, v Verdict) bool { return v == Unreachable }, true)
 }
 
-// ClearIf clears both latches for every key match reports and returns those
+// ClearIf clears the latch for every key match reports and returns those
 // keys, sorted: a source whose link came back deserves a fresh attempt.
+// The caller chooses which keys lost a link, because one source going dark
+// says nothing about another's.
 func (r *Reads) ClearIf(match func(key string) bool) []string {
-	var keys []string
-	for _, k := range r.FailedKeys() {
-		if match(k) {
-			keys = append(keys, k)
-		}
-	}
-	r.refused.clearIf(match)
-	r.dead.clearIf(match)
-	r.unreachable.clearIf(match)
-	return keys
+	return r.latchedKeys(func(k string, _ Verdict) bool { return match(k) }, true)
 }
 
 // ReviveIf clears the dead verdict on every key match reports and returns
 // those keys, sorted: the namespace that gave it changed, and a gone key may
-// be back. Every other latch stands.
+// be back. Every other verdict stands.
 func (r *Reads) ReviveIf(match func(key string) bool) []string {
-	var keys []string
-	for _, k := range r.dead.keys() {
-		if match(k) {
-			keys = append(keys, k)
-			r.refused.clear(k)
-			r.dead.clear(k)
-		}
-	}
-	return keys
+	return r.latchedKeys(func(k string, v Verdict) bool { return v == Dead && match(k) }, true)
 }
 
 // CancelIf is claimSet.cancelIf over the claims.
@@ -164,18 +161,10 @@ func (r *Reads) CancelIf(match func(key string) bool) []string {
 // Reset clears every latch, for arriving somewhere new. Claims stay: a read
 // in flight still answers.
 func (r *Reads) Reset() {
-	r.refused.reset()
-	r.dead.reset()
-	r.unreachable.reset()
+	r.latchedKeys(func(string, Verdict) bool { return true }, true)
 }
 
 // InFlight lists the keys with a read in flight, sorted.
 func (r *Reads) InFlight() []string {
 	return r.claims.keys()
-}
-
-func merged(a, b []string) []string {
-	out := append(slices.Clone(a), b...)
-	slices.Sort(out)
-	return slices.Compact(out)
 }
