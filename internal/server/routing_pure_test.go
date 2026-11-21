@@ -103,7 +103,7 @@ func TestQualifyTilesQualifiesAShellTmux(t *testing.T) {
 // content and renders solid, even though its child id contains "/".
 func TestQualifyTilesTransit(t *testing.T) {
 	// A remote home's interior door, as the remote connection API emits it.
-	interior := qualifyTilesTransit("ssh1", []*pb.Tile{{
+	interior := rpc.TransitQualifyTiles("ssh1", []*pb.Tile{{
 		Id: "rp/7", GridId: "rp/1", ChildGridId: "rp/5", Link: false,
 	}})[0]
 	if interior.Id != "ssh1/rp/7" || interior.GridId != "ssh1/rp/1" || interior.ChildGridId != "ssh1/rp/5" {
@@ -115,7 +115,7 @@ func TestQualifyTilesTransit(t *testing.T) {
 
 	// A remote link (door to another namespace) keeps Link true and its target
 	// is prefixed too — the target lives on the remote node.
-	link := qualifyTilesTransit("ssh1", []*pb.Tile{{
+	link := rpc.TransitQualifyTiles("ssh1", []*pb.Tile{{
 		Id: "rp/9", GridId: "rp/1", ChildGridId: "otherrp/3", Link: true,
 	}})[0]
 	if link.ChildGridId != "ssh1/otherrp/3" {
@@ -126,7 +126,7 @@ func TestQualifyTilesTransit(t *testing.T) {
 	}
 
 	// No child → no child, and a leaf tile is untouched beyond id/grid.
-	leaf := qualifyTilesTransit("ssh1", []*pb.Tile{{Id: "rp/2", GridId: "rp/1"}})[0]
+	leaf := rpc.TransitQualifyTiles("ssh1", []*pb.Tile{{Id: "rp/2", GridId: "rp/1"}})[0]
 	if leaf.ChildGridId != "" {
 		t.Errorf("empty child became %q", leaf.ChildGridId)
 	}
@@ -154,7 +154,7 @@ func TestQualifyTilesLeafLink(t *testing.T) {
 	}
 	// Transit hop: the target chains — one prepended segment — and the wire
 	// Link bit rides verbatim.
-	hop := qualifyTilesTransit("ssh1", []*pb.Tile{{
+	hop := rpc.TransitQualifyTiles("ssh1", []*pb.Tile{{
 		Id: "rp/9", GridId: "rp/1", Kind: "url", LinkTargetId: "otherrp/42", Link: true,
 	}})[0]
 	if hop.LinkTargetId != "ssh1/otherrp/42" {
@@ -176,7 +176,7 @@ func TestQualifyTilesLeafLinkWithinOneNamespace(t *testing.T) {
 	if !leaf.Link || leaf.LinkTargetId != "rnode1/"+target {
 		t.Fatalf("leaf = link %v target %q, want a link to rnode1/%s", leaf.Link, leaf.LinkTargetId, target)
 	}
-	far := qualifyTilesTransit("node/conn", []*pb.Tile{leaf})[0]
+	far := rpc.TransitQualifyTiles("node/conn", []*pb.Tile{leaf})[0]
 	if far.LinkTargetId != "node/conn/rnode1/"+target || !far.Link {
 		t.Fatalf("through a connection = link %v target %q", far.Link, far.LinkTargetId)
 	}
@@ -197,10 +197,6 @@ func TestQualifyGrid(t *testing.T) {
 
 // TestQualifyEvent qualifies the ids carried by each of the three event kinds.
 func TestQualifyEvent(t *testing.T) {
-	rt := &router{srv: &Server{}}
-	qualifyEvent := func(uuid string, transit bool, ev *pb.Event) *pb.Event {
-		return rt.qualifyEvent(t.Context(), uuid, transit, ev)
-	}
 	grid := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: "1"}}})
 	if grid.GetGridChanged().GridId != "u/1" {
 		t.Errorf("GridChanged id = %q", grid.GetGridChanged().GridId)

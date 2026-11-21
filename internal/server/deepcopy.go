@@ -83,7 +83,7 @@ func (rt *router) deepCopyDoor(ctx context.Context, src namespace.Namespace, src
 func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, srcTransit bool, srcUUID string, t *pb.Tile, dst copyDst, dstGrid string, x, y int64) (*pb.TileResponse, error) {
 	// The qualification every wire response gets decides whether this tile is
 	// a link, so the copy and a fresh read cannot disagree.
-	q := qualifyTilesFor(srcTransit, srcUUID, []*pb.Tile{t})[0]
+	q := qualifyTileFor(srcTransit, srcUUID, t)
 	// A grid that does not answer says nothing here: the deep arm reads it
 	// again and links if it is dark.
 	accepts := func() bool {

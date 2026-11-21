@@ -50,17 +50,20 @@ func qualifyTiles(uuid string, tiles []*pb.Tile) []*pb.Tile {
 	return out
 }
 
-// qualifyTilesTransit rewrites ids from a transit namespace; the rule lives in
-// api/rpc because the transport applies the same prepend one level down.
-func qualifyTilesTransit(uuid string, tiles []*pb.Tile) []*pb.Tile {
-	return rpc.TransitQualifyTiles(uuid, tiles)
-}
-
 // qualifyTilesFor picks the rule: transit prepends onto chains and trusts the
-// wire Link bit, a leaf qualifies bare ids and derives the bit.
+// wire Link bit (rpc.TransitQualifyTiles, the transport's rule one level
+// down), a leaf qualifies bare ids and derives the bit.
 func qualifyTilesFor(transit bool, uuid string, tiles []*pb.Tile) []*pb.Tile {
 	if transit {
-		return qualifyTilesTransit(uuid, tiles)
+		return rpc.TransitQualifyTiles(uuid, tiles)
 	}
 	return qualifyTiles(uuid, tiles)
+}
+
+// qualifyTileFor is qualifyTilesFor for one row, nil for none.
+func qualifyTileFor(transit bool, uuid string, t *pb.Tile) *pb.Tile {
+	if t == nil {
+		return nil
+	}
+	return qualifyTilesFor(transit, uuid, []*pb.Tile{t})[0]
 }

@@ -65,27 +65,18 @@ func (rt *router) hop(routed string, transit bool) rpc.Hop {
 }
 
 // tileResp applies the transit rule when the owning source is a connection.
-func (rt *router) tileResp(ctx context.Context, uuid string, transit bool, resp *pb.TileResponse, err error) (*pb.TileResponse, error) {
+func tileResp(uuid string, transit bool, resp *pb.TileResponse, err error) (*pb.TileResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	t := resp.GetTile()
-	if t != nil {
-		t = rt.qualifyOut(ctx, transit, uuid, []*pb.Tile{t})[0]
-	}
-	return &pb.TileResponse{Tile: t}, nil
-}
-
-// qualifyOut is qualifyTilesFor for an answer leaving the router.
-func (rt *router) qualifyOut(ctx context.Context, transit bool, uuid string, tiles []*pb.Tile) []*pb.Tile {
-	return qualifyTilesFor(transit, uuid, tiles)
+	return &pb.TileResponse{Tile: qualifyTileFor(transit, uuid, resp.GetTile())}, nil
 }
 
 // qualifyEvent re-applies a source's prefix to a change event's ids, each row
-// as qualifyOut leaves it; the walk is rpc.QualifyEventIDs.
-func (rt *router) qualifyEvent(ctx context.Context, uuid string, transit bool, ev *pb.Event) *pb.Event {
+// as qualifyTilesFor leaves it; the walk is rpc.QualifyEventIDs.
+func qualifyEvent(uuid string, transit bool, ev *pb.Event) *pb.Event {
 	return rpc.QualifyEventIDs(uuid, ev, func(t *pb.Tile) *pb.Tile {
-		return rt.qualifyOut(ctx, transit, uuid, []*pb.Tile{t})[0]
+		return qualifyTilesFor(transit, uuid, []*pb.Tile{t})[0]
 	})
 }
 
@@ -119,7 +110,7 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 			}
 		}
 	}
-	tiles := rt.qualifyOut(ctx, transit, uuid, resp.Tiles)
+	tiles := qualifyTilesFor(transit, uuid, resp.Tiles)
 	rt.srv.stampDisabled(req.GridId, g, tiles)
 	return &pb.GetGridResponse{Grid: g, Tiles: tiles}, nil
 }
@@ -253,7 +244,7 @@ func (rt *router) GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.Tile
 		return nil, err
 	}
 	resp, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local})
-	out, err := rt.tileResp(ctx, uuid, transit, resp, err)
+	out, err := tileResp(uuid, transit, resp, err)
 	if err == nil {
 		rt.srv.stampDisabledTile(out.GetTile())
 	}
@@ -280,14 +271,14 @@ func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindRespon
 		if err != nil {
 			return nil, err
 		}
-		out := rt.qualifyFind(ctx, transit, rpc.OwnerNamespaceOf(scope, rt.srv.cfg.ID), uuid, resp)
+		out := qualifyFind(transit, rpc.OwnerNamespaceOf(scope, rt.srv.cfg.ID), uuid, resp)
 		// A directory's grid holds home's rows beside the files'.
 		if !transit && rpc.IsFilesID(m.GridId) && rt.srv.src.Home != nil {
 			over, err := rt.find(ctx, rt.srv.src.Home, peeled)
 			if err != nil {
 				return nil, err
 			}
-			addFound(out, rt.qualifyFind(ctx, false, rt.srv.cfg.ID, uuid, over))
+			addFound(out, qualifyFind(false, rt.srv.cfg.ID, uuid, over))
 		}
 		return out, nil
 	}
@@ -298,7 +289,7 @@ func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindRespon
 		hop := rpc.Hop{Seg: n.prefix(), Via: n.UUID, Transit: n.Transit}
 		resp, err := rt.find(pctx, n.NS, rpc.PeelRequest(hop, m))
 		cancel()
-		addFound(out, rt.qualifyFind(ctx, n.Transit, n.UUID, n.prefix(), rpc.FindHop(resp, err)))
+		addFound(out, qualifyFind(n.Transit, n.UUID, n.prefix(), rpc.FindHop(resp, err)))
 	}
 	return out, nil
 }
@@ -342,9 +333,9 @@ func (rt *router) find(ctx context.Context, ns namespace.Namespace, req *pb.Find
 	return resp, nil
 }
 
-func (rt *router) qualifyFind(ctx context.Context, transit bool, owner, uuid string, resp *pb.FindResponse) *pb.FindResponse {
+func qualifyFind(transit bool, owner, uuid string, resp *pb.FindResponse) *pb.FindResponse {
 	return rpc.QualifyFindResponse(owner, resp, func(ts []*pb.Tile) []*pb.Tile {
-		return rt.qualifyOut(ctx, transit, uuid, ts)
+		return qualifyTilesFor(transit, uuid, ts)
 	})
 }
 
@@ -372,7 +363,7 @@ func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*p
 		return nil, err
 	}
 	resp, err := c.CreateTile(ctx, rpc.PeelRequest(rt.hop(m.GridId, transit), m))
-	return rt.tileResp(ctx, uuid, transit, resp, err)
+	return tileResp(uuid, transit, resp, err)
 }
 
 // CopyTile runs at the nearest node that sees both ends (rpc.SharedOwner),
@@ -404,7 +395,7 @@ func (rt *router) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.Ti
 			}
 		}
 		resp, err := c.CopyTile(ctx, rpc.PeelRequest(rt.hop(m.TileId, transit), m))
-		return rt.tileResp(ctx, uuid, transit, resp, err)
+		return tileResp(uuid, transit, resp, err)
 	}
 	return rt.copyAcrossSources(ctx, m, c, local, uuid, transit)
 }
@@ -432,7 +423,7 @@ func (rt *router) copyAcrossSources(ctx context.Context, m *pb.CopyTileRequest, 
 		return nil, status.Errorf(gcodes.Aborted,
 			"deep copy incomplete (the partial copy remains, delete it if unwanted): %v", err)
 	}
-	return rt.tileResp(ctx, dstUUID, dstTransit, out, err)
+	return tileResp(dstUUID, dstTransit, out, err)
 }
 
 // placeRoute is the namespace a tile placed on grid is written to: home for a
@@ -490,7 +481,7 @@ func (rt *router) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Tile
 		return nil, err
 	}
 	resp, err := c.SetTile(ctx, rpc.PeelRequest(rt.hop(req.TileId, transit), req))
-	return rt.tileResp(ctx, uuid, transit, resp, err)
+	return tileResp(uuid, transit, resp, err)
 }
 
 func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
@@ -625,11 +616,7 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 	if root {
 		return &pb.SetFramingResponse{}, nil
 	}
-	t := resp.GetTile()
-	if t != nil {
-		t = rt.qualifyOut(ctx, transit, uuid, []*pb.Tile{t})[0]
-	}
-	return &pb.SetFramingResponse{Tile: t}, nil
+	return &pb.SetFramingResponse{Tile: qualifyTileFor(transit, uuid, resp.GetTile())}, nil
 }
 
 // clearAllSelections is the all-clear: every namespace this node declares
@@ -832,7 +819,7 @@ func (rt *router) watchSource(ctx context.Context, n namespaceRow, infoOf func(c
 			}
 			return namespace.Follow(ctx, n.NS, &pb.SubscribeRequest{},
 				func(ev *pb.Event) error {
-					q := rt.qualifyEvent(ctx, n.prefix(), n.Transit, ev)
+					q := qualifyEvent(n.prefix(), n.Transit, ev)
 					// The hubs below key by the namespace's own id; this is
 					// the one record holding both keys.
 					trace.Emit("router", "event", "qualify", map[string]string{
