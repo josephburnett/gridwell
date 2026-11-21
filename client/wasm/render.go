@@ -644,58 +644,36 @@ func (a *App) drawCircleButtonChrome(cx, cy float64) {
 	a.cctx.Call("stroke")
 }
 
-// drawURLBackButton runs history.back() on the descended Chromium tab.
-func (a *App) drawURLBackButton() {
-	cx, cy := a.plusButtonCenter()
-	a.drawCircleButtonChrome(cx, cy)
-
-	band, _ := a.barTheme()
-	beginSlotGlyph(a.cctx, band)
-	a.cctx.Call("beginPath")
-	a.cctx.Call("moveTo", cx+6, cy)
-	a.cctx.Call("lineTo", cx-6, cy)
-	a.cctx.Call("moveTo", cx-2, cy-5)
-	a.cctx.Call("lineTo", cx-6, cy)
-	a.cctx.Call("lineTo", cx-2, cy+5)
-	a.cctx.Call("stroke")
-	endGlyph(a.cctx)
+// drawURLBackGlyph runs history.back() on the descended Chromium tab.
+func drawURLBackGlyph(c js.Value, cx, cy float64, band string) {
+	beginSlotGlyph(c, band)
+	c.Call("beginPath")
+	c.Call("moveTo", cx+6, cy)
+	c.Call("lineTo", cx-6, cy)
+	c.Call("moveTo", cx-2, cy-5)
+	c.Call("lineTo", cx-6, cy)
+	c.Call("lineTo", cx-2, cy+5)
+	c.Call("stroke")
+	endGlyph(c)
 }
 
-// drawURLRefreshButton opens the URL stream on a frozen url descent.
-func (a *App) drawURLRefreshButton() {
-	cx, cy := a.plusButtonCenter()
-	a.drawCircleButtonChrome(cx, cy)
-
-	band, _ := a.barTheme()
-	drawRefreshIcon(a.cctx, cx, cy, 7.0, band)
-}
-
-// drawFreezeButton freezes a live shell descent; once frozen the same circle
+// drawFreezeGlyph freezes a live shell descent; once frozen the same circle
 // carries the reconnect arrow.
-func (a *App) drawFreezeButton() {
-	cx, cy := a.plusButtonCenter()
-	a.drawCircleButtonChrome(cx, cy)
-
-	band, _ := a.barTheme()
-	beginSlotGlyph(a.cctx, band)
-	a.cctx.Call("beginPath")
+func drawFreezeGlyph(c js.Value, cx, cy float64, band string) {
+	beginSlotGlyph(c, band)
+	c.Call("beginPath")
 	const r = 7.0
 	for _, d := range [][2]float64{{0, r}, {r * 0.87, r * 0.5}, {r * 0.87, -r * 0.5}} {
-		a.cctx.Call("moveTo", cx-d[0], cy-d[1])
-		a.cctx.Call("lineTo", cx+d[0], cy+d[1])
+		c.Call("moveTo", cx-d[0], cy-d[1])
+		c.Call("lineTo", cx+d[0], cy+d[1])
 	}
-	a.cctx.Call("stroke")
-	endGlyph(a.cctx)
+	c.Call("stroke")
+	endGlyph(c)
 }
 
-// drawURLOpenTabButton replaces refresh where caps.LiveURL is false: it opens
+// drawURLOpenTabGlyph replaces refresh where caps.LiveURL is false: it opens
 // the address in a browser tab and the tile stays frozen.
-func (a *App) drawURLOpenTabButton() {
-	cx, cy := a.plusButtonCenter()
-	a.drawCircleButtonChrome(cx, cy)
-
-	c := a.cctx
-	band, _ := a.barTheme()
+func drawURLOpenTabGlyph(c js.Value, cx, cy float64, band string) {
 	c.Set("strokeStyle", band)
 	c.Set("lineWidth", 2.0)
 	c.Set("lineCap", "round")

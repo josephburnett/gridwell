@@ -109,9 +109,11 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	endGlyph(a.cctx)
 }
 
-// drawRefreshIcon draws a circular-arrow refresh icon: one arc with a gap at
-// the top-right and a chevron arrowhead at the open end.
-func drawRefreshIcon(c js.Value, cx, cy, radius float64, color string) {
+// drawRefreshGlyph draws a circular-arrow refresh icon: one arc with a gap at
+// the top-right and a chevron arrowhead at the open end. It opens the stream
+// on a frozen descent.
+func drawRefreshGlyph(c js.Value, cx, cy float64, color string) {
+	const radius = 7.0
 	beginSlotGlyph(c, color)
 
 	// Canvas y points down, so clockwise is the positive direction.

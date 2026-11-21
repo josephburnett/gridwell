@@ -237,6 +237,15 @@ func (a *App) barSlotMode(p *pane.Pane) barslot.Mode {
 	return barslot.Decide(in)
 }
 
+// slotGlyphs is what each mode but the + and the trashcan draws inside the
+// circle's one chrome.
+var slotGlyphs = map[barslot.Mode]func(c js.Value, cx, cy float64, band string){
+	barslot.ModeURLBack:    drawURLBackGlyph,
+	barslot.ModeGoLive:     drawRefreshGlyph,
+	barslot.ModeURLOpenTab: drawURLOpenTabGlyph,
+	barslot.ModeFreeze:     drawFreezeGlyph,
+}
+
 // drawBarSlot paints the bar's right-end circle. barslot.Decide says which
 // mode, so the glyph drawn is the same verdict barSlotClick acts on.
 func (a *App) drawBarSlot() {
@@ -244,18 +253,18 @@ func (a *App) drawBarSlot() {
 	if p == nil {
 		return
 	}
-	switch m := a.barSlotMode(p); m {
-	case barslot.ModeURLBack:
-		a.drawURLBackButton()
-	case barslot.ModeGoLive:
-		a.drawURLRefreshButton()
-	case barslot.ModeURLOpenTab:
-		a.drawURLOpenTabButton()
-	case barslot.ModeFreeze:
-		a.drawFreezeButton()
-	case barslot.ModePlus, barslot.ModeTrashcan:
-		a.drawPlusButton(p, m == barslot.ModeTrashcan)
+	m := a.barSlotMode(p)
+	glyph := slotGlyphs[m]
+	if glyph == nil {
+		if m == barslot.ModePlus || m == barslot.ModeTrashcan {
+			a.drawPlusButton(p, m == barslot.ModeTrashcan)
+		}
+		return
 	}
+	cx, cy := a.plusButtonCenter()
+	a.drawCircleButtonChrome(cx, cy)
+	band, _ := a.barTheme()
+	glyph(a.cctx, cx, cy, band)
 }
 
 // barSlotClick dispatches a click on the circle slot, always on the focused
