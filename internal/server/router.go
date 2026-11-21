@@ -46,19 +46,6 @@ func refuseUnclaimed(req proto.Message) error {
 	return nil
 }
 
-// route resolves the namespace that owns id. Ids are always qualified; there
-// is no privileged namespace a bare id falls back to.
-func (rt *router) route(id string) (ns namespace.Namespace, local, uuid string, transit bool, err error) {
-	if _, _, ok := rpc.SplitID(id); !ok {
-		return nil, "", "", false, status.Errorf(gcodes.InvalidArgument, "unqualified id %q", id)
-	}
-	c, local, uuid, transit, found := rt.srv.resolve(id)
-	if !found {
-		return nil, "", "", false, rt.srv.undeclared(id)
-	}
-	return c, local, uuid, transit, nil
-}
-
 // hop is the inbound peel for a request routed on the qualified id routed.
 func (rt *router) hop(routed string, transit bool) rpc.Hop {
 	return rpc.InboundHop(routed, rt.srv.cfg.ID, transit)
@@ -81,7 +68,7 @@ func qualifyEvent(uuid string, transit bool, ev *pb.Event) *pb.Event {
 }
 
 func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {
-	c, local, uuid, transit, err := rt.route(req.GridId)
+	c, local, uuid, transit, err := rt.srv.route(req.GridId)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +217,7 @@ func infoRefusal(err error) string {
 }
 
 func (rt *router) GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.TileResponse, error) {
-	c, local, uuid, transit, err := rt.route(req.TileId)
+	c, local, uuid, transit, err := rt.srv.route(req.TileId)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +240,7 @@ func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindRespon
 	}
 	scope := cmp.Or(m.GridId, m.Scope, rpc.ParseFindQuery(m.Query).ID)
 	if scope != "" {
-		c, _, uuid, transit, err := rt.route(scope)
+		c, _, uuid, transit, err := rt.srv.route(scope)
 		if err != nil {
 			return nil, err
 		}
@@ -364,7 +351,7 @@ func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*p
 // The link gesture is a plain CreateTile, never a copy.
 func (rt *router) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.TileResponse, error) {
 	m := req
-	c, local, uuid, transit, err := rt.route(m.TileId)
+	c, local, uuid, transit, err := rt.srv.route(m.TileId)
 	if err != nil {
 		return nil, err
 	}
@@ -425,7 +412,7 @@ func (rt *router) copyAcrossSources(ctx context.Context, m *pb.CopyTileRequest, 
 // shows, a file's derived placement among it, which home's own overlap check
 // cannot see; nil for every other route.
 func (rt *router) placeRoute(ctx context.Context, grid string, file bool) (ns namespace.Namespace, uuid string, transit bool, taken []*pb.Tile, err error) {
-	c, local, uuid, transit, err := rt.route(grid)
+	c, local, uuid, transit, err := rt.srv.route(grid)
 	if err != nil || transit || file || !rpc.IsFilesID(grid) || rt.srv.src.Home == nil {
 		return c, uuid, transit, nil, err
 	}
@@ -464,7 +451,7 @@ func (rt *router) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Tile
 	if err := refuseUnclaimed(req); err != nil {
 		return nil, err
 	}
-	c, _, uuid, transit, err := rt.route(req.TileId)
+	c, _, uuid, transit, err := rt.srv.route(req.TileId)
 	if err != nil {
 		return nil, err
 	}
@@ -480,7 +467,7 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 		return nil, err
 	}
 	qualifiedID := req.TileId
-	c, local, _, transit, err := rt.route(req.TileId)
+	c, local, _, transit, err := rt.srv.route(req.TileId)
 	if err != nil {
 		return nil, err
 	}
@@ -544,7 +531,7 @@ func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []stri
 		return nil
 	}
 	for _, id := range candidates {
-		ec, elocal, euuid, transit, err := rt.route(id)
+		ec, elocal, euuid, transit, err := rt.srv.route(id)
 		if err != nil {
 			continue
 		}
@@ -584,7 +571,7 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 	if root {
 		ref = m.RootGridId
 	}
-	c, _, uuid, transit, err := rt.route(ref)
+	c, _, uuid, transit, err := rt.srv.route(ref)
 	if err != nil {
 		return nil, err
 	}
@@ -646,7 +633,7 @@ func (rt *router) SetSelection(ctx context.Context, req *pb.SetSelectionRequest)
 	if req.All {
 		return rt.clearAllSelections(ctx, req)
 	}
-	c, _, _, transit, err := rt.route(req.GridId)
+	c, _, _, transit, err := rt.srv.route(req.GridId)
 	if err != nil {
 		return nil, err
 	}
@@ -671,7 +658,7 @@ func (rt *router) ShellTmuxAlive(ctx context.Context, req *pb.ShellTmuxAliveRequ
 	if rt.srv.cfg.DisableShells {
 		return &pb.ShellTmuxAliveResponse{Alive: false}, nil
 	}
-	c, local, _, _, err := rt.route(req.TileId)
+	c, local, _, _, err := rt.srv.route(req.TileId)
 	if err != nil {
 		return nil, err
 	}

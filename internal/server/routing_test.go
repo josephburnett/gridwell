@@ -37,7 +37,7 @@ func TestRoute(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			ns, local, _, transit, err := rt.route(c.id)
+			ns, local, _, transit, err := rt.srv.route(c.id)
 			if c.wantErr {
 				if err == nil {
 					t.Fatalf("route(%q) answered %v, want an error", c.id, ns)

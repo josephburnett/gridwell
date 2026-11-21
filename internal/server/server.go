@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	gcodes "google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
@@ -139,6 +141,19 @@ func (s *Server) resolve(id string) (ns namespace.Namespace, local, uuid string,
 	}
 	ns, ok = s.owned(owner)
 	return ns, local, first, false, ok
+}
+
+// route is resolve for a verb, refusing a bare id, since no namespace is
+// privileged to take one, and an owner this node does not declare.
+func (s *Server) route(id string) (ns namespace.Namespace, local, uuid string, transit bool, err error) {
+	if _, _, ok := rpc.SplitID(id); !ok {
+		return nil, "", "", false, status.Errorf(gcodes.InvalidArgument, "unqualified id %q", id)
+	}
+	c, local, uuid, transit, found := s.resolve(id)
+	if !found {
+		return nil, "", "", false, s.undeclared(id)
+	}
+	return c, local, uuid, transit, nil
 }
 
 // owned is the namespace of this node's own whose owner id is owner: home or

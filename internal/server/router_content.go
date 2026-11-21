@@ -127,7 +127,7 @@ func (rt *router) WriteContent(ctx context.Context, recv func() (*pb.WriteConten
 		}
 		return nil, status.Error(gcodes.InvalidArgument, err.Error())
 	}
-	c, local, uuid, transit, err := rt.route(first.TileId)
+	c, local, uuid, transit, err := rt.srv.route(first.TileId)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (rt *router) MoveTile(ctx context.Context, req *pb.MoveTileRequest) (*pb.Ti
 	if why := rpc.MoveRefusal(req); why != "" {
 		return nil, status.Error(gcodes.InvalidArgument, why)
 	}
-	c, local, uuid, transit, err := rt.route(req.TileId)
+	c, local, uuid, transit, err := rt.srv.route(req.TileId)
 	if err != nil {
 		return nil, err
 	}

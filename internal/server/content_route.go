@@ -3,8 +3,6 @@ package server
 import (
 	"context"
 
-	gcodes "google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -34,12 +32,9 @@ func (s *Server) servePage(ctx context.Context, req *pb.ServeContentRequest, sen
 // to a link row. The row is the one that owns the content, nil when a hop
 // forwards it.
 func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespace.Namespace, string, *pb.Tile, error) {
-	if _, _, ok := rpc.SplitID(qualifiedID); !ok {
-		return nil, "", nil, status.Errorf(gcodes.InvalidArgument, "unqualified id %q", qualifiedID)
-	}
-	c, local, uuid, transit, found := s.resolve(qualifiedID)
-	if !found {
-		return nil, "", nil, s.undeclared(qualifiedID)
+	c, local, uuid, transit, err := s.route(qualifiedID)
+	if err != nil {
+		return nil, "", nil, err
 	}
 	if transit {
 		return c, local, nil, nil
@@ -52,12 +47,12 @@ func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespac
 	if target == "" {
 		return c, local, tr.GetTile(), nil
 	}
-	// The target is spelled from this node, so it routes like any other id,
-	// through resolve. Peeling the first segment by hand would answer home for
-	// a connection-chained target, which the transport owns.
-	tc, tlocal, _, ttransit, found := s.resolve(target)
-	if !found {
-		return nil, "", nil, s.undeclared(target)
+	// The target is spelled from this node, so it routes like any other id.
+	// Peeling the first segment by hand would answer home for a
+	// connection-chained target, which the transport owns.
+	tc, tlocal, _, ttransit, err := s.route(target)
+	if err != nil {
+		return nil, "", nil, err
 	}
 	// The target is checked as a directly addressed id is, so its owner's
 	// verdict on a gone key is the answer whichever id the read named. A
