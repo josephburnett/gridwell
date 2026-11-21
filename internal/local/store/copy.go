@@ -150,32 +150,12 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, de
 // tileRefs decides per row. An owned grid is 1:1 with its parent door, so
 // there is no refcount to consult.
 func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT id, kind, child_grid_id, blob_id, preview_blob_id FROM tiles WHERE grid_id = ?`, gridID)
-	if err != nil {
-		return err
-	}
-	type ref struct {
-		id      int64
-		kind    string
-		child   sql.NullString
-		blob    sql.NullInt64
-		preview sql.NullInt64
-	}
-	refs, err := collect(rows, func(rows *sql.Rows) (ref, error) {
-		var r ref
-		err := rows.Scan(&r.id, &r.kind, &r.child, &r.blob, &r.preview)
-		return r, err
-	})
+	refs, err := refRows(ctx, tx, ` WHERE grid_id = ?`, gridID)
 	if err != nil {
 		return err
 	}
 	for _, r := range refs {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, r.id); err != nil {
-			return err
-		}
-		if err := s.decTileRefs(ctx, tx, r.kind,
-			r.child.String, nullToInt(r.blob), nullToInt(r.preview)); err != nil {
+		if err := s.destroy(ctx, tx, r.id, r.kind, r.child.String, nullToInt(r.blob), nullToInt(r.preview)); err != nil {
 			return err
 		}
 	}
@@ -293,9 +273,12 @@ func tileRefs(kind, childGrid string, blob, previewBlob int64) (gridRef, blobRef
 	return 0, 0
 }
 
-// decTileRefs releases what a deleted tile owned: its interior-door child
-// grid, recursively, and its blob, collected at refcount zero.
-func (s *Store) decTileRefs(ctx context.Context, tx *sql.Tx, kind, childGrid string, blob, previewBlob int64) error {
+// destroy deletes tile row id and releases what it owned: its interior-door
+// child grid, recursively, and its blob, collected at refcount zero.
+func (s *Store) destroy(ctx context.Context, tx *sql.Tx, id int64, kind, childGrid string, blob, previewBlob int64) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, id); err != nil {
+		return err
+	}
 	g, b := tileRefs(kind, childGrid, blob, previewBlob)
 	if g != 0 {
 		if err := s.deleteGrid(ctx, tx, g); err != nil {
@@ -308,6 +291,28 @@ func (s *Store) decTileRefs(ctx context.Context, tx *sql.Tx, kind, childGrid str
 		}
 	}
 	return nil
+}
+
+// refRow is a tile row as a destroy and the reach walk read it: where it sits
+// and what it owns.
+type refRow struct {
+	id, grid      int64
+	kind, key     string
+	child         sql.NullString
+	blob, preview sql.NullInt64
+	tombstoned    bool
+}
+
+// refRows reads the tile rows where (a WHERE clause, or "" for all) keeps.
+func refRows(ctx context.Context, q gridReader, where string, args ...any) ([]refRow, error) {
+	rows, err := q.QueryContext(ctx, `SELECT id, grid_id, kind, key, child_grid_id, blob_id, preview_blob_id, tombstoned FROM tiles`+where, args...)
+	if err != nil {
+		return nil, err
+	}
+	return collect(rows, func(r *sql.Rows) (refRow, error) {
+		var t refRow
+		return t, r.Scan(&t.id, &t.grid, &t.kind, &t.key, &t.child, &t.blob, &t.preview, &t.tombstoned)
+	})
 }
 
 func (s *Store) decBlobRefcount(ctx context.Context, tx *sql.Tx, blobID int64) error {

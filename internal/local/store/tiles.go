@@ -376,10 +376,7 @@ func (s *Store) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReques
 		if !destroy {
 			return s.moveTileToTrash(ctx, tx, events, t)
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID); err != nil {
-			return err
-		}
-		if err := s.decTileRefs(ctx, tx, t.Kind, t.ChildGridId, t.BlobId, t.PreviewBlobId); err != nil {
+		if err := s.destroy(ctx, tx, tileID, t.Kind, t.ChildGridId, t.BlobId, t.PreviewBlobId); err != nil {
 			return err
 		}
 		if err := s.bumpGridVersion(ctx, tx, events, srcGrid); err != nil {

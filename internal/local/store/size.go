@@ -85,20 +85,12 @@ func (a Analysis) Removable() int {
 // cleanPlan is what analyze found for Clean to remove, and kept, the ids of
 // every row and blob it must leave as they are.
 type cleanPlan struct {
-	goneGrid  []sizeTile
-	scratch   []sizeTile // ephemeral visits no layout names
+	goneGrid  []refRow
+	scratch   []refRow // ephemeral visits no layout names
 	unreached []int64
 	unnamed   []int64
 	drift     map[int64]int64
 	kept      string
-}
-
-type sizeTile struct {
-	id, grid      int64
-	kind, key     string
-	child         sql.NullString
-	blob, preview sql.NullInt64
-	tombstoned    bool
 }
 
 // OpenReadOnly opens the database at path for reading alone, beside a node
@@ -147,19 +139,9 @@ func (s *Store) Clean(ctx context.Context) error {
 				return err
 			}
 		}
-		for _, t := range p.goneGrid {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, t.id); err != nil {
-				return err
-			}
-			if err := s.decTileRefs(ctx, tx, t.kind, t.child.String, nullToInt(t.blob), nullToInt(t.preview)); err != nil {
-				return err
-			}
-		}
-		for _, t := range p.scratch {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, t.id); err != nil {
-				return err
-			}
-			if err := s.decTileRefs(ctx, tx, t.kind, t.child.String, nullToInt(t.blob), nullToInt(t.preview)); err != nil {
+		// A gone grid holds no selection to leave.
+		for _, t := range append(p.goneGrid, p.scratch...) {
+			if err := s.destroy(ctx, tx, t.id, t.kind, t.child.String, nullToInt(t.blob), nullToInt(t.preview)); err != nil {
 				return err
 			}
 			if _, _, err := leaveSelection(ctx, tx, t.grid, t.id); err != nil {
@@ -263,18 +245,11 @@ func analyze(ctx context.Context, q gridReader, node string) (Analysis, cleanPla
 		}
 	}
 
-	rows, err = q.QueryContext(ctx, `SELECT id, grid_id, kind, key, child_grid_id, blob_id, preview_blob_id, tombstoned FROM tiles`)
+	tiles, err := refRows(ctx, q, "")
 	if err != nil {
 		return a, p, err
 	}
-	tiles, err := collect(rows, func(r *sql.Rows) (sizeTile, error) {
-		var t sizeTile
-		return t, r.Scan(&t.id, &t.grid, &t.kind, &t.key, &t.child, &t.blob, &t.preview, &t.tombstoned)
-	})
-	if err != nil {
-		return a, p, err
-	}
-	onGrid := map[int64][]sizeTile{}
+	onGrid := map[int64][]refRow{}
 	for _, t := range tiles {
 		onGrid[t.grid] = append(onGrid[t.grid], t)
 	}
