@@ -11,6 +11,7 @@ package main
 import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
@@ -114,11 +115,7 @@ func (a *App) navWorldForRestore() nav.World {
 		Failed:    map[string]bool{},
 		RootViews: map[string]rpc.Framing{},
 	}
-	for _, gid := range a.c.KnownGridIDs() {
-		g, ok := a.c.Grid(gid)
-		if !ok {
-			continue
-		}
+	a.forEachCachedGrid(func(gid string, g *cache.Grid) bool {
 		rows := make(map[string]nav.RestoreTile, len(g.Tiles))
 		for id, t := range g.Tiles {
 			rows[id] = nav.RestoreTile{
@@ -132,7 +129,8 @@ func (a *App) navWorldForRestore() nav.World {
 			}
 		}
 		rw.Grids[gid] = rows
-	}
+		return true
+	})
 	for _, id := range a.fetch.grids.FailedKeys() {
 		rw.Failed[id] = true
 	}
