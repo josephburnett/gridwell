@@ -163,16 +163,8 @@ func (s *Store) CreateDoorToOtherNamespace(ctx context.Context, gridID string, x
 	}
 	return s.createTile(ctx, gridID, x, y, w, h, named,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
-			res, err := tx.ExecContext(ctx, `
-				INSERT INTO tiles (grid_id, kind, x, y, w, h,
-					view_cx, view_cy, view_zoom, child_grid_id, alt_text,
-					created_at, updated_at)
-				VALUES (?, 'door', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				gid, x, y, w, h, vcx, vcy, vzoom, childGridID, alt, now, now)
-			if err != nil {
-				return 0, fmt.Errorf("insert door to another namespace: %w", err)
-			}
-			return res.LastInsertId()
+			return insertTile(ctx, tx, "door to another namespace", gid, rpc.KindDoor, x, y, w, h, now,
+				"view_cx, view_cy, view_zoom, child_grid_id, alt_text", vcx, vcy, vzoom, childGridID, alt)
 		})
 }
 
@@ -189,15 +181,7 @@ func (s *Store) CreateText(ctx context.Context, gridID string, x, y, w, h int64,
 			if err != nil {
 				return 0, err
 			}
-			res, err := tx.ExecContext(ctx, `
-				INSERT INTO tiles (grid_id, kind, x, y, w, h,
-					blob_id, alt_text, created_at, updated_at)
-				VALUES (?, 'text', ?, ?, ?, ?, ?, ?, ?, ?)`,
-				gid, x, y, w, h, blobID, alt, now, now)
-			if err != nil {
-				return 0, fmt.Errorf("insert text tile: %w", err)
-			}
-			tileID, err := res.LastInsertId()
+			tileID, err := insertTile(ctx, tx, "text tile", gid, rpc.KindText, x, y, w, h, now, "blob_id, alt_text", blobID, alt)
 			if err != nil {
 				return 0, err
 			}
@@ -208,32 +192,28 @@ func (s *Store) CreateText(ctx context.Context, gridID string, x, y, w, h int64,
 		})
 }
 
-// insertDoorRow is the single place the interior-door INSERT lives, shared by
-// CreateDoor and the trash's month doors so they cannot drift.
-func insertDoorRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h, childGridID int64, label string, now int64) (int64, error) {
-	res, err := tx.ExecContext(ctx, `
-		INSERT INTO tiles (grid_id, kind, x, y, w, h,
-			child_grid_id, alt_text, created_at, updated_at)
-		VALUES (?, 'door', ?, ?, ?, ?, ?, ?, ?, ?)`,
-		gridID, x, y, w, h, childGridID, label, now, now)
+// insertTile is the one INSERT a create runs: a kind's row at its placement
+// and time, with cols set to vals; what names it in an error.
+func insertTile(ctx context.Context, tx *sql.Tx, what string, gridID int64, kind string, x, y, w, h, now int64,
+	cols string, vals ...any) (int64, error) {
+	args := append([]any{gridID, kind, x, y, w, h, now, now}, vals...)
+	res, err := tx.ExecContext(ctx, `INSERT INTO tiles (grid_id, kind, x, y, w, h, created_at, updated_at, `+cols+`)
+		VALUES (`+placeholders(len(args))+`)`, args...)
 	if err != nil {
-		return 0, fmt.Errorf("insert door: %w", err)
+		return 0, fmt.Errorf("insert %s: %w", what, err)
 	}
 	return res.LastInsertId()
 }
 
-// insertURLRow is the single place the url INSERT lives, shared by CreateURL
-// and CreateScratchURL so they cannot drift.
+// insertDoorRow is the interior door's INSERT, shared by CreateDoor and the
+// trash's month doors.
+func insertDoorRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h, childGridID int64, label string, now int64) (int64, error) {
+	return insertTile(ctx, tx, "interior door", gridID, rpc.KindDoor, x, y, w, h, now, "child_grid_id, alt_text", childGridID, label)
+}
+
+// insertURLRow is the url INSERT, shared by CreateURL and CreateScratchURL.
 func insertURLRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h int64, url, name string, now int64) (int64, error) {
-	res, err := tx.ExecContext(ctx, `
-		INSERT INTO tiles (grid_id, kind, x, y, w, h,
-			url_string, alt_text, created_at, updated_at)
-		VALUES (?, 'url', ?, ?, ?, ?, ?, ?, ?, ?)`,
-		gridID, x, y, w, h, url, name, now, now)
-	if err != nil {
-		return 0, fmt.Errorf("insert url tile: %w", err)
-	}
-	return res.LastInsertId()
+	return insertTile(ctx, tx, "url tile", gridID, rpc.KindURL, x, y, w, h, now, "url_string, alt_text", url, name)
 }
 
 // CreateURL creates a url tile. An empty url is the legal unconfigured state:
@@ -290,19 +270,11 @@ func (s *Store) CreateScratchURL(ctx context.Context, url string) (*gridwellv1.T
 	})
 }
 
-// CreateScratchShell is CreateScratchURL's shell twin. Unlike a placed shell
-// it is deleted on ascent, which kills the tmux, so nothing persists.
+// CreateScratchShell is CreateScratchURL's shell twin. Its visit closes to
+// the trash, and its tmux runs until the row is destroyed there.
 func (s *Store) CreateScratchShell(ctx context.Context) (*gridwellv1.Tile, error) {
 	return s.createScratch(ctx, func(tx *sql.Tx, gridID, now int64) (int64, error) {
-		res, err := tx.ExecContext(ctx, `
-			INSERT INTO tiles (grid_id, kind, x, y, w, h,
-				alt_text, created_at, updated_at)
-			VALUES (?, 'shell', 0, 0, 1, 1, 'shell', ?, ?)`,
-			gridID, now, now)
-		if err != nil {
-			return 0, fmt.Errorf("insert scratch shell tile: %w", err)
-		}
-		return res.LastInsertId()
+		return insertTile(ctx, tx, "scratch shell tile", gridID, rpc.KindShell, 0, 0, 1, 1, now, "alt_text", shellName)
 	})
 }
 

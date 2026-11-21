@@ -3,11 +3,13 @@ package store
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
+
+// shellName is a new shell's name, until its first capture names it.
+const shellName = "shell"
 
 // CreateShell creates a shell tile frozen with an empty preview. An explicit
 // refresh from the client starts the PTY; from then on the tmux lives in a
@@ -16,15 +18,7 @@ import (
 func (s *Store) CreateShell(ctx context.Context, gridID string, x, y, w, h int64) (*gridwellv1.Tile, error) {
 	return s.createTile(ctx, gridID, x, y, w, h, false,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
-			res, err := tx.ExecContext(ctx, `
-				INSERT INTO tiles (grid_id, kind, x, y, w, h,
-					alt_text, created_at, updated_at)
-				VALUES (?, 'shell', ?, ?, ?, ?, ?, ?, ?)`,
-				gid, x, y, w, h, "shell", now, now)
-			if err != nil {
-				return 0, fmt.Errorf("insert shell tile: %w", err)
-			}
-			return res.LastInsertId()
+			return insertTile(ctx, tx, "shell tile", gid, rpc.KindShell, x, y, w, h, now, "alt_text", shellName)
 		})
 }
 

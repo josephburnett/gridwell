@@ -32,14 +32,6 @@ func (s *Store) CreateLeafLink(ctx context.Context, gridID string, x, y, w, h in
 	}
 	return s.createTile(ctx, gridID, x, y, w, h, named,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
-			res, err := tx.ExecContext(ctx, `
-				INSERT INTO tiles (grid_id, kind, x, y, w, h,
-					link_target_id, alt_text, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				gid, kind, x, y, w, h, linkTargetID, alt, now, now)
-			if err != nil {
-				return 0, fmt.Errorf("insert leaf link: %w", err)
-			}
-			return res.LastInsertId()
+			return insertTile(ctx, tx, "leaf link", gid, kind, x, y, w, h, now, "link_target_id, alt_text", linkTargetID, alt)
 		})
 }

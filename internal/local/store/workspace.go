@@ -33,15 +33,7 @@ func (s *Store) CreateWorkspace(ctx context.Context, gridID string, x, y, w, h i
 				}
 				blob = sql.NullInt64{Int64: blobID, Valid: true}
 			}
-			res, err := tx.ExecContext(ctx, `
-				INSERT INTO tiles (grid_id, kind, x, y, w, h,
-					blob_id, alt_text, created_at, updated_at)
-				VALUES (?, 'workspace', ?, ?, ?, ?, ?, ?, ?, ?)`,
-				gid, x, y, w, h, blob, alt, now, now)
-			if err != nil {
-				return 0, fmt.Errorf("insert workspace tile: %w", err)
-			}
-			tileID, err := res.LastInsertId()
+			tileID, err := insertTile(ctx, tx, "workspace tile", gid, rpc.KindWorkspace, x, y, w, h, now, "blob_id, alt_text", blob, alt)
 			if err != nil {
 				return 0, err
 			}
