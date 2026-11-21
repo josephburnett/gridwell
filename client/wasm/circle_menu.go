@@ -77,42 +77,24 @@ const domChoiceMenuID = "gw-circle-menu"
 func (a *App) openDOMChoiceMenu(items []circlemenu.Item, onPick func(string)) {
 	a.closeDOMChoiceMenu()
 
-	box := a.doc.Call("createElement", "div")
-	box.Set("id", domChoiceMenuID)
-	st := box.Get("style")
-	st.Set("position", "absolute")
-	st.Set("zIndex", "21")
-	st.Set("minWidth", "150px")
-	st.Set("padding", "4px")
-	st.Set("borderRadius", "6px")
-	st.Set("background", a.pal.MenuBg)
-	st.Set("border", "1px solid "+a.pal.Border)
-	st.Set("boxShadow", "0 8px 32px "+a.pal.CardShadow)
-	st.Set("fontSize", "12px")
-	st.Set("userSelect", "none")
+	box := a.element("div", domChoiceMenuID, map[string]string{"position": "absolute", "zIndex": "21",
+		"minWidth": "150px", "padding": "4px", "borderRadius": "6px", "background": a.pal.MenuBg,
+		"border": "1px solid " + a.pal.Border, "boxShadow": "0 8px 32px " + a.pal.CardShadow,
+		"fontSize": "12px", "userSelect": "none"})
 
 	pick := func(id string) {
 		a.closeDOMChoiceMenu()
 		onPick(id)
 	}
 	for _, it := range items {
-		row := a.doc.Call("createElement", "div")
+		label, color := it.Label, a.pal.SubtleText
+		if it.State == circlemenu.StateOn {
+			label, color = "✓ "+label, a.pal.MenuItemHi
+		}
+		row := a.element("div", "", map[string]string{"padding": "6px 10px", "borderRadius": "4px",
+			"cursor": "pointer", "whiteSpace": "nowrap", "color": color})
 		row.Call("setAttribute", "data-gw-choice", it.ID)
-		label := it.Label
-		if it.State == circlemenu.StateOn {
-			label = "✓ " + label
-		}
 		row.Set("textContent", label)
-		rs := row.Get("style")
-		rs.Set("padding", "6px 10px")
-		rs.Set("borderRadius", "4px")
-		rs.Set("cursor", "pointer")
-		rs.Set("whiteSpace", "nowrap")
-		if it.State == circlemenu.StateOn {
-			rs.Set("color", a.pal.MenuItemHi)
-		} else {
-			rs.Set("color", a.pal.SubtleText)
-		}
 		id := it.ID
 		a.overlays.choiceMenuCbs = append(a.overlays.choiceMenuCbs,
 			listen(row, "mousedown", func(ev js.Value) {
@@ -141,6 +123,7 @@ func (a *App) openDOMChoiceMenu(items []circlemenu.Item, onPick func(string)) {
 	if top < 4 {
 		top = 4
 	}
+	st := box.Get("style")
 	st.Set("left", pxf(left))
 	st.Set("top", pxf(top))
 

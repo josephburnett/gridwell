@@ -49,21 +49,13 @@ func (a *App) ensureFileView() *fileView {
 		return v
 	}
 	v := &fileView{}
-	el := func(tag, id string, style map[string]string) js.Value {
-		e := a.doc.Call("createElement", tag)
-		e.Set("id", id)
-		for k, val := range style {
-			e.Get("style").Set(k, val)
-		}
-		return e
-	}
-	v.root = el("div", "gw-file-info", map[string]string{"position": "absolute", "display": "none",
+	v.root = a.element("div", "gw-file-info", map[string]string{"position": "absolute", "display": "none",
 		"overflow": "auto", "boxSizing": "border-box", "padding": "8px", "zIndex": "5",
 		"fontFamily": a.defaultMarkdownStyle().monospace, "fontSize": "13px", "lineHeight": "1.35"})
-	v.table = el("table", "gw-file-info-table", map[string]string{"borderSpacing": "12px 2px"})
-	v.more = el("div", "gw-file-see-more", map[string]string{"cursor": "pointer", "textDecoration": "underline", "margin": "8px 12px"})
-	v.header = el("div", "gw-file-hex-header", map[string]string{"margin": "8px 12px 4px"})
-	v.hex = el("pre", "gw-file-hex", map[string]string{"margin": "0 12px"})
+	v.table = a.element("table", "gw-file-info-table", map[string]string{"borderSpacing": "12px 2px"})
+	v.more = a.element("div", "gw-file-see-more", map[string]string{"cursor": "pointer", "textDecoration": "underline", "margin": "8px 12px"})
+	v.header = a.element("div", "gw-file-hex-header", map[string]string{"margin": "8px 12px 4px"})
+	v.hex = a.element("pre", "gw-file-hex", map[string]string{"margin": "0 12px"})
 	for _, c := range []js.Value{v.table, v.more, v.header, v.hex} {
 		v.root.Call("appendChild", c)
 	}

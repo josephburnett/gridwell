@@ -18,6 +18,19 @@ import (
 // style value.
 func pxf(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) + "px" }
 
+// element makes a DOM element with its id, none for "", and inline style.
+func (a *App) element(tag, id string, style map[string]string) js.Value {
+	e := a.doc.Call("createElement", tag)
+	if id != "" {
+		e.Set("id", id)
+	}
+	st := e.Get("style")
+	for k, v := range style {
+		st.Set(k, v)
+	}
+	return e
+}
+
 func setBoundsPx(style js.Value, left, top, width, height float64) {
 	style.Set("left", pxf(left))
 	style.Set("top", pxf(top))
@@ -108,31 +121,20 @@ func (a *App) ensureFileTextarea() {
 	if a.hasTextarea() {
 		return
 	}
-	ta := a.doc.Call("createElement", "textarea")
-	ta.Set("id", "gw-text-editor") // stable hook for e2e (wrap parity, #216)
-	style := ta.Get("style")
-	style.Set("position", "absolute")
-	style.Set("display", "none")
-	style.Set("background", a.pal.FileInnerBg)
-	style.Set("color", a.pal.TextFg)
-	style.Set("border", "0")
-	style.Set("outline", "none")
-	// border-box so the padding fits inside the width and height
-	// textTextareaBox returns; content-box would overhang the pane's right
-	// and bottom border strokes.
-	style.Set("boxSizing", "border-box")
 	// Metrics mirror drawMarkdownText exactly so raw text does not reflow when
 	// focus enters or leaves the pane. The painter replicates this line box's
 	// baseline, not the other way round, so the inset here stays uniform.
 	mst := a.defaultMarkdownStyle()
-	style.Set("padding", strconv.FormatFloat(mst.pad, 'f', 3, 64)+"px")
-	style.Set("margin", "0")
-	style.Set("resize", "none")
-	style.Set("fontFamily", mst.monospace)
-	style.Set("fontSize", pxf(mst.codePx))
-	style.Set("lineHeight", strconv.FormatFloat(rawTextLineHeight, 'f', 2, 64))
-	style.Set("zIndex", "5")
-	style.Set("caretColor", a.pal.TextFg)
+	// The id is a stable hook for e2e (wrap parity, #216).
+	ta := a.element("textarea", "gw-text-editor", map[string]string{"position": "absolute", "display": "none",
+		"background": a.pal.FileInnerBg, "color": a.pal.TextFg, "border": "0", "outline": "none",
+		// border-box so the padding fits inside the width and height
+		// textTextareaBox returns; content-box would overhang the pane's right
+		// and bottom border strokes.
+		"boxSizing": "border-box",
+		"padding":   strconv.FormatFloat(mst.pad, 'f', 3, 64) + "px", "margin": "0", "resize": "none",
+		"fontFamily": mst.monospace, "fontSize": pxf(mst.codePx),
+		"lineHeight": strconv.FormatFloat(rawTextLineHeight, 'f', 2, 64), "zIndex": "5", "caretColor": a.pal.TextFg})
 	ta.Set("spellcheck", false)
 	ta.Set("autocapitalize", "off")
 	ta.Set("autocorrect", "off")
@@ -438,16 +440,11 @@ func (a *App) ensureInfoToggle() js.Value {
 // and color come from the palette on every placeBarButton, so there is no
 // second, frozen copy of the theme fact.
 func (a *App) newBarButton(id, glyph, fontSize string, onLeft func()) js.Value {
-	btn := a.doc.Call("createElement", "div")
-	btn.Set("id", id)
-	btn.Set("textContent", glyph)
-	style := btn.Get("style")
-	for k, val := range map[string]string{"position": "absolute", "display": "none", "boxSizing": "border-box",
+	btn := a.element("div", id, map[string]string{"position": "absolute", "display": "none", "boxSizing": "border-box",
 		"borderRadius": "50%", "cursor": "pointer", "alignItems": "center", "justifyContent": "center",
 		"zIndex": "6", "userSelect": "none", "fontSize": fontSize,
-		"width": pxf(2 * plusButtonRadius), "height": pxf(2 * plusButtonRadius)} {
-		style.Set(k, val)
-	}
+		"width": pxf(2 * plusButtonRadius), "height": pxf(2 * plusButtonRadius)})
+	btn.Set("textContent", glyph)
 	btn.Call("addEventListener", "mousedown", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		ev := args[0]
 		ev.Call("preventDefault")

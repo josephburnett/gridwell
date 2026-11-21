@@ -34,21 +34,15 @@ func (a *App) ensureRenderedView() {
 	a.doc.Get("head").Call("appendChild", st)
 	a.overlays.renderedStyle = st
 
-	div := a.doc.Call("createElement", "div")
-	div.Set("id", "gw-rendered-view")
+	div := a.element("div", "gw-rendered-view", map[string]string{"position": "absolute", "display": "none",
+		"overflow": "auto", "boxSizing": "border-box", "background": a.pal.FileInnerBg, "zIndex": "5",
+		// A gutter that is always kept is one the raster can leave too, so a
+		// document long enough to scroll wraps as a short one does.
+		"scrollbarGutter": "stable",
+		// An image never has subpixel (LCD) text and Chromium draws none on a
+		// will-change layer, so the overlay smooths glyphs as the raster does.
+		"willChange": "transform"})
 	s := div.Get("style")
-	s.Set("position", "absolute")
-	s.Set("display", "none")
-	s.Set("overflow", "auto")
-	s.Set("boxSizing", "border-box")
-	s.Set("background", a.pal.FileInnerBg)
-	s.Set("zIndex", "5")
-	// A gutter that is always kept is one the raster can leave too, so a
-	// document long enough to scroll wraps as a short one does.
-	s.Set("scrollbarGutter", "stable")
-	// An image never has subpixel (LCD) text and Chromium draws none on a
-	// will-change layer, so the overlay smooths glyphs as the raster does.
-	s.Set("willChange", "transform")
 
 	// Links never navigate the app page: an http(s) link opens as an
 	// ephemeral visit below, the one live-link vocabulary, and everything

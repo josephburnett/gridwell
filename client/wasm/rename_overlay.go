@@ -138,22 +138,12 @@ type renameInput struct {
 // not be silently discarded. An unchanged value never writes, because reading
 // never mutates; onCancel, when set, hears every close that writes nothing.
 func (a *App) openNameInputAt(value string, width float64, position func(st js.Value), onCommit func(string), onCancel func()) {
-	doc := js.Global().Get("document")
-	in := doc.Call("createElement", "input")
-	in.Set("id", "gw-rename-input")
+	in := a.element("input", "gw-rename-input", map[string]string{"position": "absolute", "zIndex": "8",
+		"background": a.pal.MenuBg, "border": "1px solid " + a.pal.FocusBorder, "borderRadius": "10px",
+		"padding": "1px 10px", "font": "12px sans-serif", "color": a.pal.MenuItemHi, "outline": "none",
+		"width": pxf(width)})
 	in.Set("value", value)
-	st := in.Get("style")
-	st.Set("position", "absolute")
-	st.Set("zIndex", "8")
-	st.Set("background", a.pal.MenuBg)
-	st.Set("border", "1px solid "+a.pal.FocusBorder)
-	st.Set("borderRadius", "10px")
-	st.Set("padding", "1px 10px")
-	st.Set("font", "12px sans-serif")
-	st.Set("color", a.pal.MenuItemHi)
-	st.Set("outline", "none")
-	st.Set("width", pxf(width))
-	position(st)
+	position(in.Get("style"))
 
 	orig := strings.TrimSpace(value)
 	closed := false
@@ -187,7 +177,7 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 	offBlur = listen(in, "blur", func(js.Value) {
 		closeInput(true) // blur commits; see the doc comment
 	})
-	doc.Get("body").Call("appendChild", in)
+	a.doc.Get("body").Call("appendChild", in)
 	a.overlays.rename = &renameInput{el: in, end: closeInput}
 	a.draw() // hides the title while editing, and gives the input the keyboard
 	in.Call("select")

@@ -207,21 +207,12 @@ func (a *App) openShellStream(p *pane.Pane, tileID, key string) {
 		return
 	}
 
-	doc := js.Global().Get("document")
-	container := doc.Call("createElement", "div")
-	container.Set("className", "gw-shell-host")
-	style := container.Get("style")
-	style.Set("position", "absolute")
-	style.Set("display", "block")
-	style.Set("background", a.pal.Bg)
-	style.Set("zIndex", "5")
-	style.Set("overflow", "hidden")
 	// Off-screen until placed, so no 0x0 terminal flashes during the transition.
-	style.Set("left", "-9999px")
-	style.Set("top", "-9999px")
-	style.Set("width", "300px")
-	style.Set("height", "200px")
-	doc.Get("body").Call("appendChild", container)
+	container := a.element("div", "", map[string]string{"position": "absolute", "display": "block",
+		"background": a.pal.Bg, "zIndex": "5", "overflow": "hidden",
+		"left": "-9999px", "top": "-9999px", "width": "300px", "height": "200px"})
+	container.Set("className", "gw-shell-host")
+	a.doc.Get("body").Call("appendChild", container)
 
 	// The handlers read the pane off conn, since a takeover moves it.
 	conn := &shellStreamConn{tileID: tileID, key: key}
@@ -268,7 +259,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID, key string) {
 	if !Terminal.Truthy() {
 		shellLog("xterm.Terminal not loaded; index.html missing script tag?")
 		a.reportErr(errsurface.Error, "shell", "terminal engine unavailable on this host (xterm not loaded)")
-		doc.Get("body").Call("removeChild", container)
+		a.doc.Get("body").Call("removeChild", container)
 		return
 	}
 	opts := js.Global().Get("Object").New()
