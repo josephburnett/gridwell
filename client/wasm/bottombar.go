@@ -36,7 +36,7 @@ func (a *App) bottomBarRect() (x, top, w float64, ok bool) {
 	if p == nil {
 		return 0, 0, 0, false
 	}
-	r := a.paneRectByID(p.ID)
+	r := a.paneRect(p.ID)
 	return wsbar.Rect(a.width, a.height, errsurface.NoticesHeight(a.errs.Len()), r.X, r.W)
 }
 

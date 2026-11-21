@@ -56,7 +56,7 @@ func (a *App) drawPaneHotspotOverlay(rd *rightDragState) {
 	if paneID == "" {
 		return
 	}
-	pr := a.paneRectByID(paneID)
+	pr := a.paneRect(paneID)
 	if pr.W <= 0 || pr.H <= 0 {
 		return
 	}
@@ -321,7 +321,7 @@ func (a *App) drawSwapPreview(rd *rightDragState) {
 	if originPane == nil {
 		return
 	}
-	originRect := paneRectFor(a, originPane)
+	originRect := a.paneRect(originPane.ID)
 	x1 := originRect.X + originRect.W/2
 	y1 := originRect.Y + originRect.H/2
 

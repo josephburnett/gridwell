@@ -168,7 +168,7 @@ func (a *App) onViewPress(vp viewPress, button int) {
 	switch {
 	case act == gesture.PressFocuses:
 	case button == 0 && vp.at:
-		a.armLeftResize(paneRectFor(a, p), vp.sx, vp.sy)
+		a.armLeftResize(a.paneRect(p.ID), vp.sx, vp.sy)
 	case button == 1:
 		a.menu.Close()
 		a.ascendPane(p)
@@ -188,7 +188,7 @@ func (a *App) onForwardedRightDown(id int) {
 	if vp != nil && gesture.Press(a.trans.Any(), a.armed()) != gesture.PressNothing {
 		if p := a.tree.FindPane(vp.paneID); p != nil {
 			// IntentCopy: a content descent can only arm pane gestures, which ignore it.
-			a.onRightDown(p, paneRectFor(a, p), vp.sx, vp.sy, dragdrop.IntentCopy, false)
+			a.onRightDown(p, a.paneRect(p.ID), vp.sx, vp.sy, dragdrop.IntentCopy, false)
 			a.draw()
 		}
 	}
@@ -314,7 +314,7 @@ func (a *App) finishRightDrag(sx, sy float64) {
 		a.dragging = nil
 		a.ghost = nil
 		if p := a.tree.FindPane(rd.tilePaneID); p != nil {
-			a.attemptDescentOrAscent(p, paneRectFor(a, p), rd.startX, rd.startY, true)
+			a.attemptDescentOrAscent(p, a.paneRect(p.ID), rd.startX, rd.startY, true)
 		}
 	case rd.kind == rightDragSwap:
 		a.commitSwap(rd, sx, sy)

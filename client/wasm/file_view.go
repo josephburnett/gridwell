@@ -65,7 +65,7 @@ func (a *App) ensureFileView() *fileView {
 	}))
 	a.installOverlayMouse(v.root, func(ev js.Value, sx, sy float64) bool {
 		if p := a.tree.FocusedPane(); p != nil && ev.Get("button").Int() == 0 &&
-			pointInFileInner(paneRectFor(a, p), sx, sy) && v.more.Call("contains", ev.Get("target")).Bool() {
+			pointInFileInner(a.paneRect(p.ID), sx, sy) && v.more.Call("contains", ev.Get("target")).Bool() {
 			a.onSeeMore()
 		}
 		return a.claimTextPress(ev, sx, sy)

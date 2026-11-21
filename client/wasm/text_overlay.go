@@ -90,7 +90,7 @@ func (a *App) claimTextPress(ev js.Value, sx, sy float64) bool {
 	if p == nil || p.ContentID() == "" {
 		return true
 	}
-	if !pointInFileInner(paneRectFor(a, p), sx, sy) {
+	if !pointInFileInner(a.paneRect(p.ID), sx, sy) {
 		ev.Call("preventDefault")
 		a.ascend(p, 1, true)
 	}

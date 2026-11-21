@@ -135,7 +135,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 		return
 	}
 	gid := a.gridIDForPane(p)
-	r := paneRectFor(a, p)
+	r := a.paneRect(p.ID)
 	scrollX := int64(p.TextScrollX + 0.5)
 	scrollY := int64(p.TextScrollY + 0.5)
 

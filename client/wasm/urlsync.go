@@ -168,7 +168,7 @@ func (a *App) adoptPendingViews() {
 		if !p.ViewPending {
 			return
 		}
-		v, ok := a.ownerView(p, paneRectFor(a, p))
+		v, ok := a.ownerView(p, a.paneRect(p.ID))
 		if !ok || !p.Adopt(v) {
 			return
 		}
@@ -196,7 +196,7 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 	if a.trans.Active(p.ID) || p.ViewPending {
 		return
 	}
-	size, ok := paneRectFor(a, p).Size()
+	size, ok := a.paneRect(p.ID).Size()
 	if !ok {
 		return
 	}
@@ -264,7 +264,7 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 	if !ok || p.ViewPending || !rpc.TextDocument(file) {
 		return
 	}
-	r := paneRectFor(a, p)
+	r := a.paneRect(p.ID)
 	if _, sized := r.Size(); !sized {
 		return
 	}

@@ -205,7 +205,7 @@ func (a *App) navStartTransition(e nav.Effect) {
 		var dd dragdrop.Pane
 		ok := false
 		if p := a.tree.FindPane(e.PaneID); p != nil {
-			dd, ok = p.Screen(paneRectFor(a, p))
+			dd, ok = p.Screen(a.paneRect(p.ID))
 		}
 		if ok {
 			x0, y0 := dd.CellToScreen(float64(e.Tile.X), float64(e.Tile.Y))

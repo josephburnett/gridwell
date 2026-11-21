@@ -108,7 +108,7 @@ func (a *App) focusedTextDescent() (*pane.Pane, *gridwellv1.Tile, pane.Rect, tex
 		return nil, nil, pane.Rect{}, textedit.Descent{}
 	}
 	t, _, _, d := a.textDescentOf(p)
-	return p, t, paneRectFor(a, p), d
+	return p, t, a.paneRect(p.ID), d
 }
 
 // textDescentOf is what pane p, descended, shows of its row t: shown, the

@@ -108,7 +108,7 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	addr := a.webAddress(t)
 	a.emit(traceevent.URLOpen(p.ID, t.Id, addr))
 	urlConsole("place pane=%s tile=%s url=%s", p.ID, t.Id, addr)
-	a.bridgePlace(p.ID, t.Id, v.gen, addr, contentViewBounds(paneRectFor(a, p)), contentzoom.Of(t.GetContentZoom()),
+	a.bridgePlace(p.ID, t.Id, v.gen, addr, contentViewBounds(a.paneRect(p.ID)), contentzoom.Of(t.GetContentZoom()),
 		t.UrlHistory, pane.ParkSurface(a.canvasGesture(), p.ID),
 		func() { a.dropURLView(p.ID, v) })
 	a.draw()
@@ -396,9 +396,4 @@ func (a *App) canvasGesture() pane.CanvasGesture {
 // interaction, ephemeral visits included.
 func (a *App) isURLDescent(p *pane.Pane) bool {
 	return a.descentKind(p) == rpc.DescentURL
-}
-
-func (a *App) paneRectByID(paneID string) pane.Rect {
-	rs := a.layoutPanes()
-	return rs[paneID]
 }

@@ -198,7 +198,7 @@ func (a *App) menuPaneForPointer() (*pane.Pane, pane.Rect, bool) {
 	if mp == nil {
 		return nil, pane.Rect{}, false
 	}
-	return mp, paneRectFor(a, mp), true
+	return mp, a.paneRect(mp.ID), true
 }
 
 // cellAtScreen floors: round-half makes clicks in a tile's lower-right miss.
@@ -262,7 +262,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		if zone := wsbar.Where(sx, sy, bx, top, bw); zone != wsbar.ZoneOutside {
 			fp := a.tree.FocusedPane()
 			if fp != nil && gesture.ClassifyWheel(gesture.WheelInput{Zone: zone, TextFocused: fp.ContentID() != "", Alt: alt}) == gesture.WheelZoomFocused {
-				fr := a.paneRectByID(fp.ID)
+				fr := a.paneRect(fp.ID)
 				a.wheelZoomPaneAt(fp, fr, dy, fr.X+fr.W/2, fr.Y+fr.H/2)
 			}
 			return nil
@@ -695,12 +695,9 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 	return nil
 }
 
-func paneRectFor(a *App, p *pane.Pane) pane.Rect {
-	rects := a.layoutPanes()
-	if r, ok := rects[p.ID]; ok {
-		return r
-	}
-	return pane.Rect{}
+// paneRect is the pane's laid-out rect, empty for one not laid out.
+func (a *App) paneRect(paneID string) pane.Rect {
+	return a.layoutPanes()[paneID]
 }
 
 // overDeleteButton takes the drag explicitly, because the commit path clears
@@ -772,7 +769,7 @@ const zoomDistFactor = 4.0
 // from the row that owns it. It restores every ascent with no session state,
 // where 0,0 at zoom 1 would be a framing the user never set.
 func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (rpc.Framing, bool) {
-	size, ok := paneRectFor(a, p).Size()
+	size, ok := a.paneRect(p.ID).Size()
 	if !ok {
 		return rpc.Framing{}, false
 	}
@@ -808,7 +805,7 @@ func (a *App) storedRootView(anchor string, s zoomtrans.Size) (rpc.Framing, bool
 // splitBelowForOpen runs pane.SplitBelowForOpen, the one programmatic split,
 // for the focused pane p. The shed ascent is unanimated: no ascent was asked.
 func (a *App) splitBelowForOpen(p *pane.Pane) (target *pane.Pane, split bool) {
-	target, split, shed := a.tree.SplitBelowForOpen(paneRectFor(a, p))
+	target, split, shed := a.tree.SplitBelowForOpen(a.paneRect(p.ID))
 	if split {
 		a.emit(traceevent.PaneSplit(target.ID, p.ID))
 	}

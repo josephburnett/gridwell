@@ -131,7 +131,7 @@ func (a *App) moveBand(sx, sy float64) {
 	if p == nil {
 		return
 	}
-	if x, y, ok := cellAtScreen(p, paneRectFor(a, p), sx, sy); ok && (x != b.bx || y != b.by) {
+	if x, y, ok := cellAtScreen(p, a.paneRect(p.ID), sx, sy); ok && (x != b.bx || y != b.by) {
 		b.bx, b.by = x, y
 		a.scheduleDraw(traceevent.WhyPointer)
 	}

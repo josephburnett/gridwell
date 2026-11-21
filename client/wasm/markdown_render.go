@@ -30,7 +30,7 @@ import (
 // both read this one width, so an unfocused raw pane is a scaled copy rather
 // than a re-wrap; a rendered one reads renderedContentWidth.
 func (a *App) textContentWidth(p *pane.Pane) float64 {
-	_, _, w, _ := textInnerBox(paneRectFor(a, p))
+	_, _, w, _ := textInnerBox(a.paneRect(p.ID))
 	// The wrap width the layout runs at, which textScaleFor blows back up, so
 	// zooming re-wraps lines to keep filling the pane.
 	return w / a.textScaleFor(p)
@@ -41,7 +41,7 @@ func (a *App) textContentWidth(p *pane.Pane) float64 {
 // raster's and its overlay's alike.
 func (a *App) renderedContentWidth(p *pane.Pane) float64 {
 	a.ensureRenderedView() // measures the gutter
-	_, _, w, _ := textInnerBox(paneRectFor(a, p))
+	_, _, w, _ := textInnerBox(a.paneRect(p.ID))
 	return (w - a.overlays.renderedGutter) / a.textScaleFor(p)
 }
 

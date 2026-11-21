@@ -70,7 +70,7 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 			a.draw()
 			return true
 		}
-		r := paneRectFor(a, focused)
+		r := a.paneRect(focused.ID)
 		// Descent and ascent come first; selection is what is left over.
 		if a.attemptDescentOrAscent(focused, r, sx, sy,
 			verdict == dragdrop.DropNavigateSplit) {

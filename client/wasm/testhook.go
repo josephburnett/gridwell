@@ -368,7 +368,7 @@ func (a *App) thShellStandin(_ js.Value, args []js.Value) any {
 		return nil
 	}
 	// The same box the in-pane draw uses; see render.go's DescentShell arm.
-	r := a.paneRectByID(p.ID)
+	r := a.paneRect(p.ID)
 	x, y, _, _ := paneContentBox(r)
 	cached, ok := a.views.urlPreview.Get(rpc.ContentID(file), file.PreviewBlobId)
 	if !ok {
@@ -410,7 +410,7 @@ func (a *App) thTextareaInfo(js.Value, []js.Value) any {
 	if p == nil || p.ContentID() == "" || p.TextMode != rpc.TextModeText {
 		return nil
 	}
-	r := paneRectFor(a, p)
+	r := a.paneRect(p.ID)
 	return map[string]any{
 		"paneID":     p.ID,
 		"tileID":     p.ContentID(),
