@@ -119,57 +119,41 @@ func encodeNode(n TreeNode, rel func(string) (string, bool), idPrefix string, sk
 // ProjectionHolds, so the common blob stays byte-identical to older ones.
 func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*LayoutPane, bool) {
 	bareID := strings.TrimPrefix(p.ID, idPrefix)
-	home := &LayoutPane{ID: bareID}
+	ok := true
+	to := func(id string) string {
+		if !ok {
+			return ""
+		}
+		r, in := rel(id)
+		ok = in
+		return r
+	}
+	opt := func(id string) string {
+		if id == "" {
+			return ""
+		}
+		return to(id)
+	}
 	var place []LayoutFrame
 	if !p.ProjectionHolds() {
 		frames := p.Frames()
 		place = make([]LayoutFrame, len(frames))
 		for i, f := range frames {
-			lf := LayoutFrame{Content: f.Content}
-			if f.GridID != "" {
-				g, ok := rel(f.GridID)
-				if !ok {
-					return home, false
-				}
-				lf.GridID = g
-			}
-			if f.Door != "" {
-				d, ok := rel(f.Door)
-				if !ok {
-					return home, false
-				}
-				lf.Door = d
-			}
-			place[i] = lf
+			place[i] = LayoutFrame{Content: f.Content, GridID: opt(f.GridID), Door: opt(f.Door)}
 		}
 	}
 	panchor, ppath := p.AnchorPathAt(p.Depth() - 1)
-	anchor := ""
-	if panchor != "" {
-		a, ok := rel(panchor)
-		if !ok {
-			return home, false
-		}
-		anchor = a
-	}
+	anchor := opt(panchor)
 	var path []string
 	if len(ppath) > 0 {
 		path = make([]string, len(ppath))
 		for i, seg := range ppath {
-			s, ok := rel(seg)
-			if !ok {
-				return home, false
-			}
-			path[i] = s
+			path[i] = to(seg)
 		}
 	}
-	textFocus := ""
-	if id := p.ContentID(); id != "" {
-		tf, ok := rel(id)
-		if !ok {
-			return home, false
-		}
-		textFocus = tf
+	textFocus := opt(p.ContentID())
+	if !ok {
+		return &LayoutPane{ID: bareID}, false
 	}
 	return &LayoutPane{
 		ID: bareID, Anchor: anchor, Path: path, TextFocus: textFocus, Place: place,
@@ -322,33 +306,24 @@ func decodeLeaf(lp *LayoutPane, abs func(string) string, idPrefix string) *Pane 
 // decodePlace rebuilds a leaf's frame stack from Place, or else from the
 // Anchor/Path/TextFocus projection.
 func decodePlace(lp *LayoutPane, abs func(string) string) Stack {
+	opt := func(id string) string {
+		if id == "" {
+			return ""
+		}
+		return abs(id)
+	}
 	if len(lp.Place) > 0 {
 		frames := make([]Frame, len(lp.Place))
 		for i, lf := range lp.Place {
-			f := Frame{Content: lf.Content}
-			if lf.GridID != "" {
-				f.GridID = abs(lf.GridID)
-			}
-			if lf.Door != "" {
-				f.Door = abs(lf.Door)
-			}
-			frames[i] = f
+			frames[i] = Frame{Content: lf.Content, GridID: opt(lf.GridID), Door: opt(lf.Door)}
 		}
 		return StackOf(frames)
-	}
-	anchor := ""
-	if lp.Anchor != "" {
-		anchor = abs(lp.Anchor)
 	}
 	path := make([]string, len(lp.Path))
 	for i, seg := range lp.Path {
 		path[i] = abs(seg)
 	}
-	textFocus := ""
-	if lp.TextFocus != "" {
-		textFocus = abs(lp.TextFocus)
-	}
-	return StackAt(anchor, path, textFocus)
+	return StackAt(opt(lp.Anchor), path, opt(lp.TextFocus))
 }
 
 func paneIDNum(id string) (int, bool) {
