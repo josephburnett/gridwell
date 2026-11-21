@@ -220,33 +220,19 @@ func (w *walker) walkTile(t *pb.Tile, listing string) bool {
 	}
 	// A body is what the walk fetches; everything else renders offline from
 	// its cached row and preview.
-	if rpc.IsBodyKind(t.GetKind()) && w.spent < prefetchContentBudget {
-		if !w.pause() {
-			return false
-		}
-		n, ok := drain(func(count func(int)) error {
-			return w.c.ReadContent(w.ctx, &pb.ReadContentRequest{TileId: t.GetId()},
-				func(ch *pb.ContentChunk) error { count(len(ch.GetData())); return nil })
-		})
-		if !ok {
-			return false
-		}
-		w.spent += n
+	if rpc.IsBodyKind(t.GetKind()) && !w.warm(func(count func(int)) error {
+		return w.c.ReadContent(w.ctx, &pb.ReadContentRequest{TileId: t.GetId()},
+			func(ch *pb.ContentChunk) error { count(len(ch.GetData())); return nil })
+	}) {
+		return false
 	}
 	// A served page's body is the served page at the root subpath,
 	// rpc.PageURL's target, bounded like every other body.
-	if rpc.PageContent(t) && w.spent < prefetchContentBudget {
-		if !w.pause() {
-			return false
-		}
-		n, ok := drain(func(count func(int)) error {
-			return w.c.ServeContent(w.ctx, &pb.ServeContentRequest{TileId: t.GetId()},
-				func(ch *pb.ServeContentChunk) error { count(len(ch.GetData())); return nil })
-		})
-		if !ok {
-			return false
-		}
-		w.spent += n
+	if rpc.PageContent(t) && !w.warm(func(count func(int)) error {
+		return w.c.ServeContent(w.ctx, &pb.ServeContentRequest{TileId: t.GetId()},
+			func(ch *pb.ServeContentChunk) error { count(len(ch.GetData())); return nil })
+	}) {
+		return false
 	}
 	// A leaf link's target is what the link renders through, so warm it even
 	// if its own grid is never walked. walkTile owns the seen-set:
@@ -297,17 +283,21 @@ func listingKey(resp *pb.GetGridResponse) string {
 	return string(sum[:])
 }
 
-// drain runs one content read to warm the cache and reports the bytes seen.
-// ok is false when the source went unheard before a single chunk, so the walk
-// aborts; a failure after bytes have flowed ends only this branch.
-func drain(read func(count func(int)) error) (n int, ok bool) {
+// warm runs one body read to warm the cache while the walk's content budget
+// lasts, counting the bytes it sees against it. False aborts the walk: the
+// source went unheard before a single chunk; a failure after bytes have
+// flowed ends only this branch.
+func (w *walker) warm(read func(count func(int)) error) bool {
+	if w.spent >= prefetchContentBudget {
+		return true
+	}
+	if !w.pause() {
+		return false
+	}
 	first := true
 	err := read(func(size int) {
 		first = false
-		n += size
+		w.spent += size
 	})
-	if err != nil {
-		return n, !(first && gwerr.IsUnheard(err))
-	}
-	return n, true
+	return err == nil || !(first && gwerr.IsUnheard(err))
 }
