@@ -711,14 +711,7 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 	var settling sync.WaitGroup
 	for _, n := range rt.srv.namespaces() {
 		settling.Add(1)
-		settled := sync.OnceFunc(settling.Done)
-		if n.Transit {
-			// The transport has no handshake to ask.
-			go rt.watchSource(subCtx, n, func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{}, nil }, events, settled)
-			continue
-		}
-		go rt.watchSource(subCtx, n,
-			func(ctx context.Context) (*pb.InfoResponse, error) { return rt.srv.sourceInfo(ctx, n.UUID) }, events, settled)
+		go rt.watchSource(subCtx, n, events, sync.OnceFunc(settling.Done))
 	}
 	listening := make(chan struct{})
 	go func() { settling.Wait(); close(listening) }()
@@ -803,10 +796,10 @@ func (rt *router) DisableSource(_ context.Context, req *pb.DisableSourceRequest)
 // watchSource fans namespace n's events into the client's stream until ctx
 // ends, qualified with n.prefix(); the health it reports itself is keyed by
 // n.UUID, as a health event n sends names itself under its prefix. The Info
-// fetch rides namespace.Refollow's loop, so a source slow to start is not
-// excluded for good. settled is called once the first attempt is established
-// or has failed, or ctx has ended.
-func (rt *router) watchSource(ctx context.Context, n namespaceRow, infoOf func(context.Context) (*pb.InfoResponse, error), events chan<- *pb.Event, settled func()) {
+// fetch, which the transport has no handshake for, rides namespace.Refollow's
+// loop, so a source slow to start is not excluded for good. settled is called
+// once the first attempt is established or has failed, or ctx has ended.
+func (rt *router) watchSource(ctx context.Context, n namespaceRow, events chan<- *pb.Event, settled func()) {
 	defer settled()
 	namespace.Refollow{
 		Label: "subscribe: source " + n.UUID,
@@ -814,8 +807,10 @@ func (rt *router) watchSource(ctx context.Context, n namespaceRow, infoOf func(c
 		Down: func(detail string) { settled(); reportHealth(ctx, events, n.UUID, false, detail) },
 		Up:   func() { reportHealth(ctx, events, n.UUID, true, "") },
 		Attempt: func(ctx context.Context, established func()) error {
-			if _, err := infoOf(ctx); err != nil {
-				return err
+			if !n.Transit {
+				if _, err := rt.srv.sourceInfo(ctx, n.UUID); err != nil {
+					return err
+				}
 			}
 			return namespace.Follow(ctx, n.NS, &pb.SubscribeRequest{},
 				func(ev *pb.Event) error {
