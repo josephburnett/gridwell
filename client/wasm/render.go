@@ -624,8 +624,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 
 	// Border on top, hued by what the pane descended into, saturated on focus.
 	focused := p.ID == a.tree.Focus
-	urlLive := a.urlViewFor(p.ID) != nil
-	border := a.paneBorderColorFor(p, g, gridOK, focused, urlLive)
+	border := a.paneBorderColorFor(p, focused)
 	strokeTileBorder(a.cctx, r.X, r.Y, r.W, r.H, border, paneBorderPx)
 	if a.ghost != nil && a.ghost.outlinePane == p.ID && a.ghost.outlineTile == p.ContentID() && p.ContentID() != "" {
 		a.drawFocusedTileOutline(a.cctx, r.X+2, r.Y+2, r.W-4, r.H-4)
@@ -1116,8 +1115,8 @@ func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, parentCellSize float64, fr
 }
 
 // paneBorderColorFor is the pane's family's line, faded when it has no focus.
-func (a *App) paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) string {
-	c := a.pal.Family(pane.FamilyOf(a.borderInputFor(p, g, gridOK, focused, urlLive)))
+func (a *App) paneBorderColorFor(p *pane.Pane, focused bool) string {
+	c := a.pal.Family(pane.FamilyOf(a.borderInputFor(p, focused)))
 	if focused {
 		return c.Line
 	}
@@ -1125,12 +1124,12 @@ func (a *App) paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focus
 }
 
 // borderInputFor is shared with the bottom bar, so frame and band agree.
-func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) pane.BorderInput {
+func (a *App) borderInputFor(p *pane.Pane, focused bool) pane.BorderInput {
 	in := pane.BorderInput{
 		HasTextFocus: p.ContentID() != "",
 		DescentDepth: len(p.Path()),
 		Focused:      focused,
-		URLLive:      urlLive,
+		URLLive:      a.urlViewFor(p.ID) != nil,
 	}
 	if p.ContentID() != "" {
 		// descendedTile, so an ephemeral descent resolves too, gray because ascent
@@ -1144,7 +1143,7 @@ func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused b
 	} else {
 		in.Ephemeral = a.enteredVisit(p) != nil
 	}
-	if gridOK && g.Directory() {
+	if g, ok := a.c.Grid(a.gridIDForPane(p)); ok && g.Directory() {
 		in.InDirectory = true
 	}
 	return in

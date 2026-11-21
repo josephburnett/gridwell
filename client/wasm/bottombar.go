@@ -47,8 +47,7 @@ func (a *App) barTheme() (band, button string) {
 	if p == nil {
 		return a.pal.Bg, a.pal.FocusBorder
 	}
-	g, gridOK := a.c.Grid(a.gridIDForPane(p))
-	c := a.pal.Family(pane.FamilyOf(a.borderInputFor(p, g, gridOK, true, a.urlViewFor(p.ID) != nil)))
+	c := a.pal.Family(pane.FamilyOf(a.borderInputFor(p, true)))
 	return c.Band, c.Line
 }
 

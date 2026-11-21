@@ -7,7 +7,6 @@ import (
 	"math"
 	"syscall/js"
 
-	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/pane"
 )
@@ -274,14 +273,9 @@ func (a *App) drawSplitPreview(rd *rightDragState) {
 		active = valid
 	}
 
-	var g *cache.Grid
-	gid := a.gridIDForPane(host)
-	g, gridOK := a.c.Grid(gid)
-	urlLive := a.urlViewFor(host.ID) != nil
-
 	color := a.pal.SplitInactive
 	if active {
-		color = a.paneBorderColorFor(host, g, gridOK, true /* focused */, urlLive)
+		color = a.paneBorderColorFor(host, true /* focused */)
 	}
 	a.cctx.Call("beginPath")
 	if rd.splitAxis == pane.Horizontal {
