@@ -208,8 +208,8 @@ async function session(gw: GridwellDriver, win: Page): Promise<Session> {
   await gw.clickBarName('right');
   const input = win.locator('#gw-rename-input');
   await expect(input).toBeVisible();
-  await input.fill('far room');
-  ms['rename'] = await msToPaint(win, 'keydown', { kind: 'bar', label: 'far room' }, () => input.press('Enter'));
+  await input.fill('far desk');
+  ms['rename'] = await msToPaint(win, 'keydown', { kind: 'bar', label: 'far desk' }, () => input.press('Enter'));
   await gw.waitIdle();
   was = await viewOf(gw);
   ms['ascend'] = await msToPaint(win, 'mouseup', { kind: 'view', pane, was }, () => gw.ascendViaCrumb());
@@ -257,6 +257,10 @@ async function session(gw: GridwellDriver, win: Page): Promise<Session> {
   return { ms, reads, firstOpen: { from, to } };
 }
 
+// direct is the no-delay run's times, which the delayed run compares against;
+// the two run in order in one worker.
+let direct: Record<string, number> | null = null;
+
 for (const delay of [0, recorded.delayMs]) {
   test.describe(`@far a session on a far node, ${delay} ms each way on the hop`, () => {
     test.use({ extraNodes: ['second'], farDelayMs: delay });
@@ -274,7 +278,12 @@ for (const delay of [0, recorded.delayMs]) {
       await info.attach('far-session.json', { body: JSON.stringify(report, null, 2), contentType: 'application/json' });
       await info.attach('dump.jsonl', { body: lines.map((l) => JSON.stringify(l)).join('\n'), contentType: 'application/jsonl' });
 
-      const slow = Object.keys(s.ms).filter((k) => !(s.ms[k] < recorded.boundMs)).sort();
+      // A wait is what the hop adds, not what a busy machine adds: over the
+      // delayed hop a cell is slow when it is over the bound and at least the
+      // hop's one-way delay slower than the direct run just measured it.
+      if (delay === 0) direct = s.ms;
+      const added = (k: string) => (delay > 0 && direct && k in direct ? s.ms[k] - direct[k] : Infinity);
+      const slow = Object.keys(s.ms).filter((k) => !(s.ms[k] < recorded.boundMs) && !(added(k) < recorded.delayMs)).sort();
       const named = { ...recorded.waits, ...recorded.decided };
       const listed = delay > 0 ? Object.keys(named).sort() : [];
       expect.soft(slow, `cells at or over ${recorded.boundMs} ms: list a wait in far-session.json with why, or draw it on the gesture; drop a listed cell that is now fast`).toEqual(listed);
