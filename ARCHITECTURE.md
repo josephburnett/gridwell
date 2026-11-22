@@ -588,6 +588,23 @@ it. Onto a text the client inserts every row's reference (`paste.Text`,
 `applyTextareaEdit`), so the save chain claims the version; a text that
 takes no edits refuses with its reason (`paste.TextRefusal`).
 
+**Local echo.** On a slow link a typed key is drawn at once, ahead of its
+echo, after mosh's speculative local echo (`shellconn.LocalEcho`). A guess
+is an element over xterm's screen, never written into the terminal, so the
+node's output stays the one owner of what the screen says and a capture,
+which reads the canvas, never holds one. A guess is made for a printable
+one-cell character typed at the blank end of a row short of its last
+column, and for a backspace over the guesses since the last epoch; any
+other key starts a new epoch, as does output with no guess pending. An
+epoch's guesses are drawn only once the node has echoed one of them, so a
+prompt with echo off never shows a key. The guesses are confirmed when the
+row's cells and the cursor are them landed, and all dropped when not, when
+the oldest waits out `LocalEchoExpireMs`, or on a resize, move, park or
+end. Every guess, drawn or not, measures the key-to-echo delay, and guesses
+are drawn only while it is above `LocalEchoOnMs` (until it falls under
+`LocalEchoOffMs`), so a fast link draws nothing. Nothing reaches the node
+or the wire; the trace records each turn on or off and a summary.
+
 **Takeover.** One live surface per key: a content tile, or for a shell the
 tmux it names. Opening it elsewhere takes over, and `pane.TakeOver` says
 how — keep the surface the pane already has, move the one another pane holds
@@ -752,6 +769,7 @@ copy:
 | what Esc lets go of, and what it puts back | `gesture.Escape` over the armed gestures, and with none armed the selection it clears; a parked live view relays the key |
 | what a press does to the selection, and where the set lives | `gesture.ClassifySelect`, `Toggle`, `Sweep`, `Clear`; the grid row, in every pane (`Grid.selection`) |
 | does this descent go live | `shellconn.DecideAutoLive` |
+| what a typed key draws ahead of its echo | `shellconn.LocalEcho` |
 | what a closing url view writes back (a served page: its frame alone) | `urlview.Writeback` |
 | which preview a file's tile wears | `files.previewKey` |
 | which colour a tile, its swatch, its crumb, the pane on it and the bar wear | `pane.TileFamily`, `pane.FamilyOf`, over the one table `theme.Palette.Family` |

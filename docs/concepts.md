@@ -12,6 +12,7 @@ here.
 | **text** | The only tile the user types into, and the only one whose `version` claims bytes. |
 | **url** | The only tile with an address of its own and the browser's cookies and storage behind it. |
 | **shell** | The only tile whose content is a host process. It survives ascent as a tmux. |
+| **local echo** | A live shell's guess of a typed key, drawn over the terminal before the node echoes it, only on a slow link and only once the node has echoed a key since the last Enter or any key it could not guess, so a password is never drawn. The node's output replaces it; nothing is stored or sent. `shellconn.LocalEcho`. |
 | **workspace tile** | The only tile whose content is an arrangement: a pane tree, with each frame's framing and scroll. Descent swaps the window's pane tree, not one pane. |
 | **file and directory** | Not tiles but the + menu's two red swatches on a directory's grid this user may make a name in (`Grid.accepts_files`, `menu.Offer.Disk`): each asks for a name in the entry modal, then makes an empty file or a directory on disk, which the listing shows. Every other primitive on a directory's grid makes a Gridwell tile there. |
 
