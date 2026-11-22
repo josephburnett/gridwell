@@ -53,7 +53,7 @@ test('copying a workspace: shared blob, independent divergence', async ({ gw, wi
   await gw.descendCell(ax, ay + 2);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
   await expect.poll(async () => (await gw.panes()).length).toBe(2);
-  await gw.splitFocusedPaneVertical();
+  await gw.splitFocusedPaneHorizontal();
   await expect.poll(async () => (await gw.panes()).length).toBe(3);
   await expect.poll(async () => {
     try {

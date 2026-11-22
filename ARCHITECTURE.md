@@ -425,6 +425,11 @@ framing back through `SetFraming` if the pane moved its view since it last
 settled (`pane.Frame.FramingWrite`), except inside a workspace tile where the
 blob owns it, and freezes a live preview, with no claim and no version bump.
 A debounced settle persister does the same without waiting for an ascent.
+A pane's centre is drawn at its rect's middle. A boundary the user drags, an
+edge split or a divider, moves every grid frame's centre and its settled view
+with it (`pane.Tree.Reframe`, measured from the press by `pane.StayPut`), so
+the grid stays where it was on screen and nothing is written; a window resize
+and the split below change no view, so the centre stays in the middle.
 
 **Content.** A cache entry ({bytes, base, dirty}, keyed by tile id) owns a
 text tile's body; its base (`rpc.ContentBasis`) is the version the bytes

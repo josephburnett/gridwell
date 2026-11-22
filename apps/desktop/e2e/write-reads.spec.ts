@@ -47,10 +47,7 @@ test('a text mode flip reads no listing back', async ({ gw, window }) => {
   const [left, right] = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(right.gridID, 'both panes show the grid').toBe(f.gridID);
   await gw.clickScreen(left.x + 20, left.y + 20);
-  const lx = Math.round(left.cx);
-  const ly = Math.round(left.cy) - 1;
-  expect(tileAt(await gw.getGrid(f.gridID), 'text', lx, ly)?.id, 'the left pane frames the tile').toBe(made.id);
-  await gw.descendCell(lx, ly);
+  await gw.descendCell(cx, cy);
   await gw.typeText('# flip');
   await settle(window, c.textSaveMs);
 

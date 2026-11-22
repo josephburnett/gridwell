@@ -122,7 +122,7 @@ test('a press beside the bar during a transition focuses the column above', asyn
   const [left, right] = (await gw.panes()).slice().sort((a: PaneInfo, b: PaneInfo) => a.x - b.x);
   await gw.focusPane(left);
   const bar = await gw.bar();
-  const tile = await gw.cellCenter(left.id, Math.round(left.cx), Math.round(left.cy));
+  const tile = await gw.cellCenter(left.id, Math.round(f.cx), Math.round(f.cy));
   await window.evaluate(() => (window as any).__gridwellTest.setTransitionMs(4000));
   try {
     await window.mouse.click(tile.x, tile.y);

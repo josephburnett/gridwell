@@ -216,6 +216,15 @@ func (s *Stack) Frames() []Frame {
 	return append(out, s.Frame)
 }
 
+// framePtrs is every frame in place, bottom first, for a writer of them all.
+func (s *Stack) framePtrs() []*Frame {
+	out := make([]*Frame, 0, len(s.below)+1)
+	for i := range s.below {
+		out = append(out, &s.below[i])
+	}
+	return append(out, &s.Frame)
+}
+
 func (s *Stack) Copy() Stack {
 	c := *s
 	if len(s.below) > 0 {

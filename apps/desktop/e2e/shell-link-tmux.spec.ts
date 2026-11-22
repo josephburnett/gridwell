@@ -68,12 +68,12 @@ test('a link to a copy takes over the tmux of its source, and the source takes i
   await gw.copyTileCell(cx, cy, cx + 2, cy);
   const copy = (await shellAt(cx + 2, cy))!;
   expect(copy.shellTmux, "the copy names its source's tmux").toBe(source.id);
-  await gw.linkTileCell(cx + 2, cy, cx + 4, cy);
-  const link = (await shellAt(cx + 4, cy))!;
+  await gw.linkTileCell(cx + 2, cy, cx + 2, cy + 2);
+  const link = (await shellAt(cx + 2, cy + 2))!;
   expect(link.linkTargetId, 'the link names the copy').toBe(copy.id);
 
   // Going live on the link takes the tmux over.
-  await gw.descendCell(cx + 4, cy);
+  await gw.descendCell(cx + 2, cy + 2);
   await expect
     .poll(shellViews, { message: 'the link holds the one live terminal', timeout: 15_000 })
     .toEqual({ [right.id]: copy.id });

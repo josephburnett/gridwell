@@ -1112,7 +1112,16 @@ These were decided deliberately. Do not reverse one without a new decision.
   that pane's size. A grid's first visit writes nothing either, so the row
   keeps no framing until the user frames it. The settled view is the
   frame's: a navigation lands it, a framing write takes it, and a split's
-  copy carries it (`pane.Frame.FramingWrite`).
+  copy carries it (`pane.Frame.FramingWrite`). A boundary the user drags,
+  an edge split's or a divider's, the corner grab, the crush and a finger's
+  included, covers or uncovers and leaves every grid in the pane where it
+  was on screen, writing no framing; a window resize and the split below a
+  ctrl-click or a link opens keep the centre in the middle (Joe, 2026-11-22:
+  "the original is then recentered which moves things out of view. i want
+  it to stay put."; chose "Split and divider drag", and for the split below
+  "Recenter as today": "You did not place that boundary, so the pane above
+  recenters and what you clicked stays in view."; `pane.StayPut`,
+  `pane.Tree.Reframe`).
 - The wheel zooms the grid the pane shows, wherever the cursor is, a door
   included (Joe, 2026-11-20: "I would like zoom *through* a grid tile to
   stop happening. ... I would still like to be able to do it but with a key

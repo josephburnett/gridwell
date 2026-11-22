@@ -209,7 +209,7 @@ test('inside a workspace tile the selection is the grid row\'s, every pane on th
 
   await shiftClick(gw, window, wx + 2, wy);
   await expectSelection(gw, window, inner.id, f.gridID, [a.id], 'shift-click inside');
-  await gw.splitFocusedPaneVertical();
+  await gw.splitFocusedPaneHorizontal();
   const panes = await gw.panes();
   expect(panes, 'two panes inside').toHaveLength(2);
   for (const p of panes) {

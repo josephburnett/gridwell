@@ -517,8 +517,10 @@ type leftResizeState struct {
 	// cannot mark a side the release does not collapse. At zero a bare click
 	// would read (0,0), past the wall, and close a pane, so it arms to the press.
 	curX, curY float64
-	// press is the tree's ratios at the press, which a cancel restores.
-	press pane.Ratios
+	// press is the tree's ratios at the press, which a cancel restores, and
+	// planted every grid's view there, which each move reframes from.
+	press   pane.Ratios
+	planted pane.Planted
 }
 
 // armLeftResize arms one resize per axis grabbed, true when anything armed.
@@ -546,7 +548,8 @@ func (a *App) armLeftResize(r pane.Rect, sx, sy float64) bool {
 	if len(axes) == 0 {
 		return false
 	}
-	a.leftResize = &leftResizeState{axes: axes, curX: sx, curY: sy, press: pane.RatiosOf(a.tree.Root)}
+	a.leftResize = &leftResizeState{axes: axes, curX: sx, curY: sy,
+		press: pane.RatiosOf(a.tree.Root), planted: a.tree.Plant(a.rootLayoutRect())}
 	// Park live surfaces now; canvasGesture reads leftResize. Half the
 	// grab band can sit over a view that would eat the next mousemove.
 	a.draw()
@@ -588,6 +591,7 @@ func (a *App) onLeftResizeMove(sx, sy float64) {
 		// Walled at the pane minimum: the drag never collapses, the release does.
 		pane.ResizeThrough(a.tree.Root, a.rootLayoutRect(), ax.targetSplit, cursor, pane.MinPanePx)
 	}
+	a.tree.Reframe(lr.planted, a.rootLayoutRect())
 	a.scheduleDraw(traceevent.WhyPointer)
 }
 
@@ -614,6 +618,7 @@ func (a *App) finishLeftResize() {
 			a.emit(traceevent.PaneClose(closed))
 		}
 	}
+	a.tree.Reframe(lr.planted, a.rootLayoutRect())
 	a.draw()
 	a.scheduleURLUpdate()
 }
@@ -647,10 +652,12 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 		return
 	}
 	_ = a.tree.SetFocus(p.ID)
+	planted := a.tree.Plant(a.rootLayoutRect())
 	np, err := a.tree.SplitOnSideAt(side, ratio)
 	if err != nil {
 		return
 	}
+	a.tree.Reframe(planted, a.rootLayoutRect())
 	a.emit(traceevent.PaneSplit(np.ID, p.ID))
 	// A new pane is a copy of the source, deliberately: a split means another
 	// view of where I am. A content frame is the exception, because there is one

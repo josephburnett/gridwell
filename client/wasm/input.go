@@ -117,6 +117,7 @@ func (a *App) cancelGesture(relayed, onCanvas bool) bool {
 	a.emit(traceevent.Cancel(a.tree.Focus, relayed))
 	if u.Dividers {
 		lr.press.Restore()
+		a.tree.Reframe(lr.planted, a.rootLayoutRect())
 	}
 	if u.View {
 		if p := a.tree.FindPane(d.originPaneID); p != nil {
@@ -796,6 +797,7 @@ func (a *App) storedRootView(anchor string, s zoomtrans.Size) (rpc.Framing, bool
 
 // splitBelowForOpen runs pane.SplitBelowForOpen, the one programmatic split,
 // for the focused pane p. The shed ascent is unanimated: no ascent was asked.
+// Nobody dragged this boundary, so the pane above recentres (see pane.StayPut).
 func (a *App) splitBelowForOpen(p *pane.Pane) (target *pane.Pane, split bool) {
 	target, split, shed := a.tree.SplitBelowForOpen(a.paneRect(p.ID))
 	if split {

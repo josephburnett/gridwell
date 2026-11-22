@@ -694,20 +694,23 @@ export class GridwellDriver {
     await this.waitIdle();
   }
 
-  // Right-drags inward from the pane's right edge band.
+  // Right-drags inward from the pane's right edge band. The new pane takes
+  // the far 40%, so the original, whose grid stays put (pane.StayPut), still
+  // shows its centre cell.
   async splitFocusedPaneVertical(): Promise<void> {
     const p = await this.focused();
     const y = p.y + p.h / 2;
-    await this.rightDragScreen(p.x + p.w - 5, y, p.x + p.w * 0.45, y);
+    await this.rightDragScreen(p.x + p.w - 5, y, p.x + p.w * 0.6, y);
   }
 
-  // Right-drags inward from the pane's bottom edge band.
+  // Right-drags inward from the pane's bottom edge band, the new pane taking
+  // the bottom 40%.
   async splitFocusedPaneHorizontal(): Promise<void> {
     const p = await this.focused();
     // The one bar lives below every pane, so the whole bottom edge is the
     // pane's own border band.
     const x = p.x + p.w * 0.3;
-    await this.rightDragScreen(x, p.y + p.h - 5, x, p.y + p.h * 0.45);
+    await this.rightDragScreen(x, p.y + p.h - 5, x, p.y + p.h * 0.6);
   }
 
   // The horizontal boundary between two stacked panes.
