@@ -502,7 +502,9 @@ The version interlock, the outbox park, and the drain.
    answer files the node's row in its place; any failure takes it away.
    A delete takes the row out of its grid at the drop (`cache.Cache.Remove`)
    and holds it out until its own echo or a read after its answer; a
-   failure puts it back.
+   failure puts it back. A rename holds the name it commits
+   (`cache.Cache.Hold` of `WroteName`) while it is owed, parked included,
+   and a verdict against it puts the old name back.
 9. The drain. `retry.Events` sets `gap` on any stream error and on a clean
    EOF — Subscribe has no cursor, so both are gaps — and calls
    `retryKick(true, cache.EverySource)` once the next stream opens. The

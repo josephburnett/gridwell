@@ -317,3 +317,50 @@ func TestADeleteHoldsTheRowOutUntilItsVerdict(t *testing.T) {
 		t.Errorf("Remove of an uncached row = %v, want nil", pl)
 	}
 }
+
+// A rename is drawn at the commit: the row shows the new name through every
+// older row until the rename's echo or a read after its answer, and a
+// refusal puts the old name back.
+func TestARenameHoldsTheNameUntilItsVerdict(t *testing.T) {
+	row := func(name string, version int64) *gridwellv1.Tile {
+		return &gridwellv1.Tile{Id: "t", GridId: "a", Kind: rpc.KindDoor, W: 1, H: 1, Version: version, AltText: name, Named: name != "old"}
+	}
+	echo := func(n *gridwellv1.Tile) func(*Cache) {
+		return func(c *Cache) {
+			c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{Tile: n}}})
+		}
+	}
+	read := func(n *gridwellv1.Tile) func(*Cache) {
+		return func(c *Cache) { c.PutGrid(&gridwellv1.Grid{Id: "a"}, []*gridwellv1.Tile{n}) }
+	}
+	type step func(*Cache, *Holding)
+	do := func(f func(*Cache)) step { return func(c *Cache, _ *Holding) { f(c) } }
+	landed := step(func(_ *Cache, pl *Holding) { pl.Landed(row("new", 3)) })
+	failed := step(func(_ *Cache, pl *Holding) { pl.Failed() })
+	cases := []struct {
+		name  string
+		steps []step
+		want  string
+	}{
+		{name: "the name shows at the commit", want: "new"},
+		{name: "an older echo cannot put the old name back", steps: []step{do(echo(row("old", 2)))}, want: "new"},
+		{name: "a read from before the rename cannot either", steps: []step{do(read(row("old", 2)))}, want: "new"},
+		{name: "its echo releases it, so a later name shows", steps: []step{do(echo(row("new", 3))), do(echo(row("later", 4)))}, want: "later"},
+		{name: "a read after the answer is the node's word", steps: []step{landed, do(read(row("later", 4)))}, want: "later"},
+		{name: "a refusal puts the old name back", steps: []step{failed}, want: "old"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := New()
+			c.PutGrid(&gridwellv1.Grid{Id: "a"}, []*gridwellv1.Tile{row("old", 2)})
+			pl := c.Hold("t", WroteName, func(n *gridwellv1.Tile) { n.AltText, n.Named = "new", true })
+			for _, s := range tc.steps {
+				s(c, pl)
+			}
+			got := mustRow(t, c, "a", "t")
+			if got.AltText != tc.want || got.Named != (tc.want != "old") {
+				t.Errorf("name = %q named %v, want %q", got.AltText, got.Named, tc.want)
+			}
+		})
+	}
+}

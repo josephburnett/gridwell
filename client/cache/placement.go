@@ -23,11 +23,11 @@ func (p Placement) set(t *gridwellv1.Tile) {
 	t.GridId, t.X, t.Y, t.W, t.H = p.GridID, p.X, p.Y, p.W, p.H
 }
 
-// hold is a fact the cache shows ahead of its echo, one of held. Neither
-// claims a version, so until the stream carries it every row for the tile is
-// older and takes the held fact; the stream is ordered, so nothing older
-// follows the write's own echo. Once the write has landed, a read is the
-// node's word too, which recovers an echo lost in a stream gap.
+// hold is a fact the cache shows ahead of its echo, one of held. Until the
+// stream carries it every row for the tile is older, whatever its version,
+// and takes the held fact; the stream is ordered, so nothing older follows
+// the write's own echo. Once the write has landed, a read is the node's word
+// too, which recovers an echo lost in a stream gap.
 type hold struct {
 	row    *gridwellv1.Tile // carries the held fact
 	seq    uint64
@@ -39,7 +39,7 @@ type holdKey struct {
 	w  Wrote
 }
 
-var held = []Wrote{WrotePlacement, WroteZoom}
+var held = []Wrote{WrotePlacement, WroteZoom, WroteName}
 
 // wroteRow is a create's: the whole row, pending (Pend).
 const wroteRow Wrote = 0

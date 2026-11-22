@@ -661,6 +661,14 @@ func farWaits(t *testing.T, root string) int {
 	return len(s.Waits) + len(s.Known)
 }
 
+// TestFarWaitsIsZero holds the far session's waits at the floor the far-waits
+// row reached, so it is a permanent test rather than a ledger row.
+func TestFarWaitsIsZero(t *testing.T) {
+	if n := farWaits(t, repoRoot(t)); n != 0 {
+		t.Errorf("%s lists %d waits and known failures: draw each gesture when it is made and reconcile it on the node's verdict, fix the failure, or move the wait to decided with the CLAUDE.md decision that keeps it", farSessionFile, n)
+	}
+}
+
 // productionLines counts the lines of the tree scripts/comment-share.sh reads.
 func productionLines(t *testing.T, root string) int {
 	n := 0

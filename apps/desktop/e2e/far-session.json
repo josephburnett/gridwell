@@ -1,9 +1,7 @@
 {
   "delayMs": 100,
   "boundMs": 100,
-  "waits": {
-    "rename": "the bar shows the old name until RenameTile answers (client/wasm/rename_overlay.go commitRename, PutWriteResponse in then)"
-  },
+  "waits": {},
   "decided": {},
   "firstOpenRoundTrips": 1,
   "textSavesInFlight": 1,

@@ -585,8 +585,11 @@ func (w Wrote) claimsVersion() bool { return w < WroteFrozen }
 
 // same says a and b agree on the fact w names, for the facts a hold carries.
 func (w Wrote) same(a, b *gridwellv1.Tile) bool {
-	if w == WrotePlacement {
+	switch w {
+	case WrotePlacement:
 		return PlacementOf(a) == PlacementOf(b)
+	case WroteName:
+		return a.GetAltText() == b.GetAltText() && a.GetNamed() == b.GetNamed()
 	}
 	return a.GetContentZoom() == b.GetContentZoom()
 }
@@ -598,7 +601,7 @@ func (w Wrote) copy(dst, src *gridwellv1.Tile) {
 	case WroteAddress:
 		dst.UrlString = src.UrlString
 	case WroteName:
-		dst.AltText = src.AltText
+		dst.AltText, dst.Named = src.AltText, src.Named
 	case WroteFrozen:
 		dst.UrlFrozen = src.UrlFrozen
 	case WrotePlacement:

@@ -15,15 +15,16 @@ import { droppedPanes, errorNotices, eventToPaint, maxInFlight, QUEUE_MS, queued
 // boundMs whatever the hop; a cell that waits on the far node's answer is
 // named in waits, with why, or in decided, with the CLAUDE.md decision that
 // keeps it waiting, and the run at the delay must find exactly those
-// cells slow, so the list is always exact and its count is the far-waits row
-// of test/boundary/ratchet.txt. The session's own dump then stands in for a
-// person reading it: no refusal, no read repeated with nothing between, no
-// error notice, no pane dropped from a layout, and the reads to a far grid's
-// first paint and the saves in flight per text at the numbers recorded, the
-// calls open at once (what the page's six sockets to its node must hold) at
-// most the number recorded, and every event folded in painted within
-// boundMs. A failure the session finds today is listed under known, with
-// why, so the spec is green and the list, counted in the same row, is exact.
+// cells slow, so the list is always exact, and test/boundary's
+// TestFarWaitsIsZero holds its count at zero. The session's own dump then
+// stands in for a person reading it: no refusal, no read repeated with
+// nothing between, no error notice, no pane dropped from a layout, and the
+// reads to a far grid's first paint and the saves in flight per text at the
+// numbers recorded, the calls open at once (what the page's six sockets to
+// its node must hold) at most the number recorded, and every event folded in
+// painted within boundMs. A failure the session finds is listed under known,
+// with why, so the spec is green and the list, counted by the same test, is
+// exact.
 
 const SPEC = path.join(__dirname, 'far-session.json');
 

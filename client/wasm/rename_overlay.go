@@ -200,12 +200,16 @@ func (a *App) openRenameAt(tileID string, saw int64, value string, width float64
 // it claims and bumps a version: cl, read at each send, moves only by this
 // client's own landings (outbox.Claims), so a name another writer set since
 // the input opened is refused. It rides the row's chain behind this client's
-// other writes to it, and closes cl once nothing is owed. apply may be nil.
+// other writes to it, and closes cl once nothing is owed. The row shows the
+// name from the commit (cache.Hold) while it is owed, and a verdict against
+// it puts the old one back. apply may be nil.
 func (a *App) commitRename(cl *outbox.Claim, tileID, alt string, apply func(t *gridwellv1.Tile, claimed int64)) {
 	var tile *gridwellv1.Tile
 	var claimed int64
+	landed := false
 	claims := a.persist.out.Claims
 	key := outbox.Key{Op: "Rename", ID: tileID}
+	held := a.c.Hold(tileID, cache.WroteName, func(n *gridwellv1.Tile) { n.AltText, n.Named = alt, true })
 	a.post(write{
 		label: key.Op, gid: a.gridIDOfTile(tileID), id: tileID,
 		source: "rename", failText: "rename", chain: tileID,
@@ -216,18 +220,24 @@ func (a *App) commitRename(cl *outbox.Claim, tileID, alt string, apply func(t *g
 			return err
 		},
 		then: func() {
+			landed = true
 			if tile != nil {
 				claims.Landed(tileID, claimed, tile.Version)
 				if apply != nil {
 					apply(tile, claimed)
 				}
-				a.c.PutWriteResponse(tile.GridId, tile, cache.WroteName)
+				held.Landed(tile)
 			}
 			a.draw()
 		},
 		done: func() {
-			if !a.persist.out.Has(key) {
-				claims.Close(cl)
+			if a.persist.out.Has(key) {
+				return
+			}
+			claims.Close(cl)
+			if !landed {
+				held.Failed()
+				a.scheduleDraw(traceevent.WhyDrag)
 			}
 		},
 	})
