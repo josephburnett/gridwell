@@ -7,7 +7,6 @@ import {
   SetBoundsArgs,
   SetHiddenArgs,
   SetZoomArgs,
-  RemoveArgs,
   PaneRef,
   ReloadArgs,
   FreezeResult,
@@ -121,7 +120,7 @@ export function registerWebviewIpc(
     drags.pageEnded(a.id);
   });
 
-  handle(CH.remove, async (a: RemoveArgs): Promise<FreezeResult> => {
+  handle(CH.remove, async (a: PaneRef): Promise<FreezeResult> => {
     return registry.remove(a.paneId);
   });
 

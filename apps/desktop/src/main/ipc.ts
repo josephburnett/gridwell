@@ -15,7 +15,7 @@ export const CH = {
   setBounds: 'gw:setBounds', // SetBoundsArgs → void
   setHidden: 'gw:setHidden', // SetHiddenArgs → void
   setZoom: 'gw:setZoom', // SetZoomArgs → void (user content zoom)
-  remove: 'gw:remove',     // RemoveArgs → FreezeResult
+  remove: 'gw:remove',     // PaneRef → FreezeResult
   goBack: 'gw:goBack',     // PaneRef → void
   reload: 'gw:reload',     // ReloadArgs → void
   showMenu: 'gw:showMenu', // PaneRef → void. The bar circle's right-click
@@ -179,10 +179,6 @@ export interface SetBoundsArgs {
 export interface SetHiddenArgs {
   paneId: string;
   hidden: boolean;
-}
-
-export interface RemoveArgs {
-  paneId: string;
 }
 
 // What the renderer persists as the tile's frozen preview.
