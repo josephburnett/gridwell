@@ -71,7 +71,7 @@ async function msToPaint(win: Page, on: 'mouseup' | 'mousedown' | 'keydown', pro
     const holds = (): boolean => {
       switch (p.kind) {
         case 'tile': {
-          const at: string = h.tileAt(p.pane, p.x, p.y);
+          const at: string = h.drawnAt(p.pane, p.x, p.y);
           return p.want === '*' ? at !== '' : at === p.want;
         }
         case 'view': {
@@ -122,6 +122,8 @@ interface Session {
   ms: Record<string, number>;
   reads: Record<string, number>;
   firstOpen: { from: number; to: number };
+  // pressedPending is whether a create was still pending when pressed.
+  pressedPending: boolean;
 }
 
 // PAGES url tiles, each with a captured preview, are more previews than the
@@ -192,14 +194,24 @@ async function session(gw: GridwellDriver, win: Page): Promise<Session> {
   });
   await gw.waitIdle();
 
-  // One of each kind, along a row.
+  // One of each kind, along a row. A row the node has not answered for yet
+  // is drawn but hit by nothing: a right-drag from it before the answer
+  // copies nothing, so no call names an id the node never minted.
+  const drawnAt = (x: number, y: number): Promise<string> =>
+    win.evaluate(([p, x, y]) => (window as any).__gridwellTest.drawnAt(p, x, y), [pane, x, y] as [string, number, number]);
+  let pressedPending = false;
   const kinds = ['door', 'markdown', 'url', 'shell', 'workspace'];
   for (let i = 0; i < kinds.length; i++) {
     await gw.openMenu();
     ms[`create ${kinds[i]}`] = await msToPaint(win, 'mouseup', { kind: 'tile', pane, x: cx + i, y: cy, want: '*' },
       () => gw.dragCreate(kinds[i], cx + i, cy));
+    if (i === 0 && (await drawnAt(cx, cy)).startsWith('pending-')) {
+      pressedPending = true;
+      await gw.copyTileCell(cx, cy, cx, cy - 1);
+    }
     await gw.waitIdle();
   }
+  expect.soft(await at(cx, cy - 1), 'a press on a pending row copies nothing').toBe('');
   const door = await at(cx, cy);
   const text = await at(cx + 1, cy);
 
@@ -292,7 +304,7 @@ async function session(gw: GridwellDriver, win: Page): Promise<Session> {
   ms['split'] = await msToPaint(win, 'mouseup', { kind: 'panes', more: n + 1 }, () => gw.splitFocusedPaneVertical());
   await gw.waitIdle();
 
-  return { ms, reads, firstOpen: { from, to } };
+  return { ms, reads, firstOpen: { from, to }, pressedPending };
 }
 
 // direct is the no-delay run's times, which the delayed run compares against;
@@ -334,6 +346,7 @@ for (const delay of [0, recorded.delayMs]) {
       expect.soft(slow, `cells at or over ${recorded.boundMs} ms: list a wait in far-session.json with why, or draw it on the gesture; drop a listed cell that is now fast`).toEqual(listed);
       for (const k of Object.keys(named)) expect.soft(s.ms, `listed cell ${k} was not measured`).toHaveProperty([k]);
       expect.soft(Object.values(s.reads).every(Number.isFinite), 'every read cell painted').toBe(true);
+      if (delay > 0) expect.soft(s.pressedPending, 'a create over the slow hop is pressed while pending').toBe(true);
       expect.soft(trips, 'serial reads before a far grid first paints').toBe(recorded.firstOpenRoundTrips);
       expect.soft(saves, 'saves of one text in flight at once').toBe(recorded.textSavesInFlight);
       expect.soft(eventPaintMs, `an event folded in is painted within ${recorded.boundMs} ms`).toBeLessThan(recorded.boundMs);

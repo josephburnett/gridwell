@@ -16,6 +16,7 @@ import (
 	"github.com/josephburnett/gridwell/client/anim"
 	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/door"
+	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -149,6 +150,7 @@ func (a *App) installTestHook() {
 		"ghost":         js.FuncOf(a.thGhost),
 		"cellCenter":    js.FuncOf(a.thCellCenter),
 		"tileAt":        js.FuncOf(a.thTileAt),
+		"drawnAt":       js.FuncOf(a.thDrawnAt),
 		"shellVisitURL": js.FuncOf(a.thShellVisitURL),
 		"localPaneIds":  js.FuncOf(a.thLocalPaneIds),
 		"urlViews":      js.FuncOf(a.thURLViews),
@@ -973,6 +975,28 @@ func (a *App) thTileAt(_ js.Value, args []js.Value) any {
 	}
 	if n := a.tileAtCell(p, int64(args[1].Int()), int64(args[2].Int())); n != nil {
 		return n.Id
+	}
+	return ""
+}
+
+// thDrawnAt is thTileAt over what the pane draws at the cell, a row still
+// pending (cache.Pend) among it, so a spec times a create to its paint.
+func (a *App) thDrawnAt(_ js.Value, args []js.Value) any {
+	if len(args) < 3 {
+		return ""
+	}
+	p := a.tree.FindPane(args[0].String())
+	if p == nil {
+		return ""
+	}
+	g, ok := a.c.Grid(a.gridIDForPane(p))
+	if !ok {
+		return ""
+	}
+	for _, n := range g.Drawn() {
+		if dragdrop.TileContainsCell(n.X, n.Y, n.W, n.H, int64(args[1].Int()), int64(args[2].Int())) {
+			return n.Id
+		}
 	}
 	return ""
 }

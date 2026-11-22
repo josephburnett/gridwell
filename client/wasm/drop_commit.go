@@ -307,16 +307,17 @@ func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 	}
 }
 
-// occupiedForDrop is dragdrop.Carry.Occupied over the target grid's cached
-// rows: c landed with its first tile at (x, y). vacates is a move's, which
-// mirrors the server's MoveTile self-exclusion.
+// occupiedForDrop is dragdrop.Carry.Occupied over the target grid's drawn
+// rows, so a pending row's cell is taken: c landed with its first tile at
+// (x, y). vacates is a move's, which mirrors the server's MoveTile
+// self-exclusion.
 func (a *App) occupiedForDrop(gridID string, c dragdrop.Carry, x, y int64, vacates bool) bool {
 	g, ok := a.c.Grid(gridID)
 	if !ok {
 		return false
 	}
-	occupants := make([]dragdrop.Member, 0, len(g.Tiles))
-	for _, n := range g.Tiles {
+	occupants := make([]dragdrop.Member, 0, len(g.Tiles)+len(g.Pending))
+	for _, n := range g.Drawn() {
 		occupants = append(occupants, memberOf(n))
 	}
 	return c.Occupied(x, y, occupants, vacates)

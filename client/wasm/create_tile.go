@@ -8,6 +8,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
 )
@@ -17,12 +18,13 @@ import (
 // already allowed. openConfigureURL rides along because a bare url tile's
 // address is asked for on its first descent, not at create.
 
-// createTile is the one create call. Every primitive, link and ephemeral
-// visit lands its row through here, so the label the outbox keys on and the
-// continuation the row feeds are one shape rather than a copy per caller.
+// createTile is the one create call. Every primitive and link lands its row
+// through here, drawn from the gesture as dragdrop.CreateDrawn says, so the
+// label the outbox keys on and the continuation the row feeds are one shape
+// rather than a copy per caller.
 func (a *App) createTile(label, gid string, req *gridwellv1.CreateTileRequest,
 	onSuccess func(*gridwellv1.Tile)) {
-	a.postTileMutate(label, gid, func(ctx context.Context) (*gridwellv1.Tile, error) {
+	a.postTileMutate(label, gid, dragdrop.CreateDrawn(req), func(ctx context.Context) (*gridwellv1.Tile, error) {
 		return a.cl.CreateTile(ctx, req)
 	}, onSuccess)
 }
@@ -56,7 +58,7 @@ func createOnDisk(label, title, kind string) func(a *App, gid string, cellX, cel
 func (a *App) createTextAtCell(gid string, data []byte, cellX, cellY int64) {
 	req := &gridwellv1.CreateTileRequest{GridId: gid,
 		Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: cellX, Y: cellY, W: 1, H: 1}}
-	a.postTileMutate("CreateText", gid, func(ctx context.Context) (*gridwellv1.Tile, error) {
+	a.postTileMutate("CreateText", gid, dragdrop.CreateDrawn(req), func(ctx context.Context) (*gridwellv1.Tile, error) {
 		return a.cl.CreateWithContent(ctx, req, data)
 	}, nil)
 }

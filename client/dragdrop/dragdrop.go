@@ -6,6 +6,8 @@ package dragdrop
 import (
 	"math"
 
+	"google.golang.org/protobuf/proto"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
@@ -362,6 +364,40 @@ func CarryCopiesAsLink(rows []*gridwellv1.Tile, dest string, accepts, known bool
 		}
 	}
 	return true
+}
+
+// CopyDrawn is the row a copy of row onto dest at (x, y) is drawn as until
+// the node answers, what rpc.CopyOf makes of it as the ghost promised: a link
+// to what it names, dashed, or row's kind, name and size, without the bytes,
+// preview or grid the node mints. Nil for a copy the node would refuse.
+// accepts and known are CarryCopiesAsLink's.
+func CopyDrawn(row *gridwellv1.Tile, dest string, accepts, known bool, x, y int64) *gridwellv1.Tile {
+	as, target := rpc.CopyOf(row, dest, rpc.SameNode(row.GetId(), dest), func() bool { return accepts || !known })
+	n := &gridwellv1.Tile{Kind: row.Kind, AltText: row.AltText, Named: row.Named}
+	switch as {
+	case rpc.CopyRefused:
+		return nil
+	case rpc.CopyLinkTile:
+		n.LinkTargetId, n.Link = target, true
+	case rpc.CopyLinkGrid:
+		n.Kind, n.ChildGridId, n.Link = rpc.KindDoor, target, true
+	}
+	n.GridId, n.X, n.Y, n.W, n.H = dest, x, y, row.W, row.H
+	return n
+}
+
+// CreateDrawn is the row a CreateTile of req is drawn as until the node
+// answers: the asked row on its grid, dashed when it names a target, since a
+// create that names one makes a link. Nil for a file or a directory, whose
+// row the files make on disk under its path.
+func CreateDrawn(req *gridwellv1.CreateTileRequest) *gridwellv1.Tile {
+	if req.GetFile() || req.GetTile() == nil {
+		return nil
+	}
+	n := proto.CloneOf(req.Tile)
+	n.GridId = req.GridId
+	n.Link = rpc.LeafLink(n) || n.ChildGridId != ""
+	return n
 }
 
 // CarryMovesAsLink: rpc.MoveRefusal refuses a row of the carry onto dest, so

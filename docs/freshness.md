@@ -496,6 +496,10 @@ The version interlock, the outbox park, and the drain.
    grid. `cache.Cache.Move` holds the placement against every older row
    instead, until the stream carries it (the stream is ordered, so nothing
    older follows) or, once the write has landed, a grid read answers.
+   A create, a copy or a link is drawn the same way (`App.pendWrite`): the
+   row it asks for stands in its grid's `Pending` under a provisional id
+   (`cache.Cache.Pend`), drawn by every view and hit by no press, until the
+   answer files the node's row in its place; any failure takes it away.
 9. The drain. `retry.Events` sets `gap` on any stream error and on a clean
    EOF — Subscribe has no cursor, so both are gaps — and calls
    `retryKick(true, cache.EverySource)` once the next stream opens. The

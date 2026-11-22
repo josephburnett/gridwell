@@ -213,16 +213,16 @@ func cellAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) (int64, int64, bool
 	return x, y, true
 }
 
+// tileAtCell is the tile a press at the cell hits: one of the grid's tiles,
+// never a row still pending (cache.Pend), which is drawn but not pressed.
 func (a *App) tileAtCell(p *pane.Pane, cellX, cellY int64) *gridwellv1.Tile {
-	gid := a.gridIDForPane(p)
-	g, ok := a.c.Grid(gid)
+	g, ok := a.c.Grid(a.gridIDForPane(p))
 	if !ok {
 		return nil
 	}
 	for _, n := range g.Tiles {
 		if dragdrop.TileContainsCell(n.X, n.Y, n.W, n.H, cellX, cellY) {
-			nn := n
-			return nn
+			return n
 		}
 	}
 	return nil

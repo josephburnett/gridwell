@@ -97,14 +97,15 @@ func (a *App) visitCopy(p *pane.Pane, template *gridwellv1.Tile) {
 }
 
 // visitIn makes the visit's row in the pane's scratch grid by the call
-// build builds and descends into it.
+// build builds and descends into it. Nothing is drawn ahead: the descent
+// needs the id the node mints.
 func (a *App) visitIn(p *pane.Pane, label string, build func(scratch string) tileCall) {
 	scratch := a.scratchOrReport(p)
 	if scratch == "" {
 		return
 	}
 	paneID := p.ID
-	a.postTileMutate(label, scratch, build(scratch), func(created *gridwellv1.Tile) {
+	a.postTileMutate(label, scratch, nil, build(scratch), func(created *gridwellv1.Tile) {
 		if fp := a.tree.FindPane(paneID); fp != nil {
 			a.descend(fp, created)
 		}

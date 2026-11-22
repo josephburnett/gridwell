@@ -403,22 +403,19 @@ func (a *App) commitRightCopy(d *dragState, sx, sy float64) {
 	gh := a.ghost
 	to := d.carry().At(dropX, dropY)
 	for i, row := range d.carried {
-		req := &gridwellv1.CopyTileRequest{
-			TileId:     row.Id,
-			DestGridId: t.gridID,
-			X:          to[i].X,
-			Y:          to[i].Y,
-		}
-		undo := func() { a.snapBackMember(gh, d, i) }
-		a.post(write{
-			label: "CopyTile", gid: d.srcGridID,
-			call: func(ctx context.Context) error {
-				_, err := a.cl.CopyTile(ctx, req)
-				return err
-			},
-			undo: undo,
-		})
+		a.postCopy(row, d.srcGridID, t.gridID, to[i].X, to[i].Y, func() { a.snapBackMember(gh, d, i) })
 	}
+}
+
+// postCopy is the one CopyTile: row onto dest at (x, y), drawn from the
+// release as dragdrop.CopyDrawn says over the accepts of src, the grid row
+// sits on, as the ghost read them; undo is the caller's animation of a
+// refusal.
+func (a *App) postCopy(row *gridwellv1.Tile, src, dest string, x, y int64, undo func()) {
+	accepts, known := a.gridAcceptsTiles(row.GetGridId())
+	req := &gridwellv1.CopyTileRequest{TileId: row.Id, DestGridId: dest, X: x, Y: y}
+	a.post(a.pendWrite("CopyTile", src, dragdrop.CopyDrawn(row, dest, accepts, known, x, y),
+		func(ctx context.Context) (*gridwellv1.Tile, error) { return a.cl.CopyTile(ctx, req) }, nil, undo))
 }
 
 // runDeleteTile deletes every carried tile, each its own DeleteTile. It takes

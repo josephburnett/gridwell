@@ -100,10 +100,12 @@ func (e *contentEntry) behind(n *gridwellv1.Tile, told bool) bool {
 	return e.row.blobDiffers(n.BlobId)
 }
 
-// Grid is a cached grid plus its tiles indexed by id.
+// Grid is a cached grid plus its tiles indexed by id, and the rows drawn
+// ahead of the creates that mint them, by provisional id (Pend).
 type Grid struct {
-	Meta  *gridwellv1.Grid
-	Tiles map[string]*gridwellv1.Tile
+	Meta    *gridwellv1.Grid
+	Tiles   map[string]*gridwellv1.Tile
+	Pending map[string]*gridwellv1.Tile
 }
 
 // Directory reports that the grid is a directory, told by its id
@@ -278,6 +280,7 @@ func (c *Cache) PutGrid(g *gridwellv1.Grid, tiles []*gridwellv1.Tile) {
 	}
 	c.keepHeldLocked(gr)
 	if was, ok := c.grids[g.Id]; ok {
+		gr.Pending = was.Pending
 		for id := range was.Tiles {
 			if _, kept := gr.Tiles[id]; !kept {
 				c.dropCleanLocked(id)
@@ -399,6 +402,9 @@ func (c *Cache) Grid(id string) (*Grid, bool) {
 	}
 	out := &Grid{Meta: g.Meta, Tiles: make(map[string]*gridwellv1.Tile, len(g.Tiles))}
 	maps.Copy(out.Tiles, g.Tiles)
+	if len(g.Pending) > 0 {
+		out.Pending = maps.Clone(g.Pending)
+	}
 	return out, true
 }
 

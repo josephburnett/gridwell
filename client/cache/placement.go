@@ -41,6 +41,9 @@ type holdKey struct {
 
 var held = []Wrote{WrotePlacement, WroteZoom}
 
+// wroteRow is a create's: the whole row, pending (Pend).
+const wroteRow Wrote = 0
+
 // Holding is one write's claim on the cache, settled by its verdict. A nil
 // Holding held nothing and settles nothing.
 type Holding struct {
@@ -77,9 +80,14 @@ func (c *Cache) Hold(tileID string, w Wrote, edit func(*gridwellv1.Tile)) *Holdi
 
 // Landed folds the write's answer in for what it set, then lets a read
 // decide the fact. An answer under another id is a source's minted row,
-// whose echo will never name this one, so the hold ends there.
+// whose echo will never name this one, so the hold ends there; a pending
+// row's answer is the node's row, filed in its place.
 func (pl *Holding) Landed(resp *gridwellv1.Tile) {
 	if pl == nil || resp == nil {
+		return
+	}
+	if pl.key.w == wroteRow {
+		pl.c.unpend(pl.origin, resp)
 		return
 	}
 	pl.c.PutWriteResponse(resp.GridId, resp, pl.key.w)
@@ -96,7 +104,8 @@ func (pl *Holding) Landed(resp *gridwellv1.Tile) {
 }
 
 // Failed puts the fact back as it was, unless a later write of it has
-// superseded this one or the stream has already spoken for it.
+// superseded this one or the stream has already spoken for it. A pending
+// row goes, as it does on Released.
 func (pl *Holding) Failed() { pl.end(true) }
 
 // Released ends the hold of a write that did not land, leaving the row as it
@@ -108,6 +117,10 @@ func (pl *Holding) end(restore bool) {
 		return
 	}
 	c := pl.c
+	if pl.key.w == wroteRow {
+		c.unpend(pl.origin, nil)
+		return
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if h, ok := c.holds[pl.key]; !ok || h.seq != pl.seq || (h.landed && !restore) {

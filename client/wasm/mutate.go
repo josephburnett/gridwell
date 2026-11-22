@@ -218,17 +218,28 @@ func (a *App) doOnUnload(w write) error {
 }
 
 // postTileMutate is the adapter for the plain single-grid tile mutations: no
-// claim and no parked value.
-func (a *App) postTileMutate(label string, gid string, call tileCall, onSuccess func(*gridwellv1.Tile)) {
+// claim and no parked value. drawn is the row the gesture draws ahead of the
+// answer (pendWrite), nil for none.
+func (a *App) postTileMutate(label string, gid string, drawn *gridwellv1.Tile, call tileCall, onSuccess func(*gridwellv1.Tile)) {
+	a.post(a.pendWrite(label, gid, drawn, call, onSuccess, nil))
+}
+
+// pendWrite is the write of a row the node mints. drawn is shown from now
+// (cache.Pend) as a move is (placementWrite): the answer files the node's row
+// in its place, and a failure takes it away, runs undo and redraws, the
+// dispatcher telling why.
+func (a *App) pendWrite(label, gid string, drawn *gridwellv1.Tile, call tileCall, onSuccess func(*gridwellv1.Tile), undo func()) write {
+	pl := a.c.Pend(drawn)
 	var tile *gridwellv1.Tile
-	a.post(write{
-		label: label, gid: gid,
+	w := write{
+		label: label, gid: gid, optimistic: pl != nil,
 		call: func(ctx context.Context) error {
 			var err error
 			tile, err = call(ctx)
 			return err
 		},
 		then: func() {
+			pl.Landed(tile)
 			if onSuccess == nil || tile == nil {
 				return
 			}
@@ -240,7 +251,17 @@ func (a *App) postTileMutate(label string, gid string, call tileCall, onSuccess 
 			}
 			onSuccess(tile)
 		},
-	})
+	}
+	if pl != nil || undo != nil {
+		w.undo = func() {
+			pl.Failed()
+			if undo != nil {
+				undo()
+			}
+			a.scheduleDraw(traceevent.WhyDrag)
+		}
+	}
+	return w
 }
 
 // jsonBeacon wraps a *Beacon builder as a dispatcher beacon. Every beacon the

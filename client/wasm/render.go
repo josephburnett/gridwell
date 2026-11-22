@@ -317,7 +317,7 @@ func (a *App) menuGroups(p *pane.Pane) (templates, sources, primitives []menuIte
 	if a.templates != "" {
 		templates = append(templates, menuItem{copySwatch: true})
 		if g, ok := a.c.Grid(a.templates); ok {
-			for _, t := range menu.Templates(g.Tiles) {
+			for _, t := range menu.Templates(g.Drawn()) {
 				templates = append(templates, menuItem{template: t})
 			}
 		}
@@ -580,7 +580,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					picked[id] = true
 				}
 				var painted []string
-				for _, n := range g.Tiles {
+				for _, n := range g.Drawn() {
 					if dragdrop.HiddenMatch(a.ghostHidden(), a.ghostHiddenPane(), p.ID, n.Id) {
 						continue
 					}
@@ -991,7 +991,7 @@ func (a *App) drawChildPreview(child *cache.Grid,
 ) {
 	c := a.cctx
 	borderPx := previewBorderPxFor(previewCell)
-	for _, n := range child.Tiles {
+	for _, n := range child.Drawn() {
 		if hidden.Has(n.Id) {
 			continue
 		}

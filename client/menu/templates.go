@@ -11,16 +11,18 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 )
 
-// Templates is the grid's tiles newest first. A row's times are not on the
-// wire, and home mints row ids in creation order, so the id is the order.
-func Templates(tiles map[string]*gridwellv1.Tile) []*gridwellv1.Tile {
-	out := make([]*gridwellv1.Tile, 0, len(tiles))
-	for _, t := range tiles {
-		out = append(out, t)
-	}
+// Templates is the grid's drawn rows newest first. A row's times are not on
+// the wire, and home mints row ids in creation order, so the id is the order,
+// and a row still pending (cache.Provisional) is newer than any.
+func Templates(tiles []*gridwellv1.Tile) []*gridwellv1.Tile {
+	out := slices.Clone(tiles)
 	minted := func(t *gridwellv1.Tile) int64 {
+		if cache.Provisional(t.Id) {
+			return math.MaxInt64
+		}
 		n, _ := strconv.ParseInt(rpc.LocalOf(t.Id), 10, 64)
 		return n
 	}
@@ -33,7 +35,7 @@ func Templates(tiles map[string]*gridwellv1.Tile) []*gridwellv1.Tile {
 // TemplateCell is where a new template h tall lands on the templates grid:
 // at column 0 above every tile there, so the grid opened as a place reads
 // newest first as the strip does, and no cell it takes is held.
-func TemplateCell(tiles map[string]*gridwellv1.Tile, h int64) (x, y int64) {
+func TemplateCell(tiles []*gridwellv1.Tile, h int64) (x, y int64) {
 	if len(tiles) == 0 {
 		return 0, 0
 	}

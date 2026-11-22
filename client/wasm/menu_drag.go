@@ -3,13 +3,13 @@
 package main
 
 import (
-	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"math"
 
 	"google.golang.org/protobuf/proto"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
@@ -69,6 +69,10 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 // dragdrop.DecideDrop decides as it does for every tile. The strip is only
 // where the ghost starts.
 func (a *App) startTemplateDrag(p *pane.Pane, i int, n *gridwellv1.Tile, sx, sy float64, intent dragdrop.Intent) {
+	if cache.Provisional(n.Id) {
+		// Drawn, not pressed: the node has not minted its id.
+		return
+	}
 	r := a.menuLayoutFor(p).TileRect(i)
 	a.dragging = (&dragState{
 		originPaneID: p.ID,
@@ -84,9 +88,9 @@ func (a *App) startTemplateDrag(p *pane.Pane, i int, n *gridwellv1.Tile, sx, sy 
 }
 
 // commitTemplateCopy copies the tile the copy swatch was released over into
-// the templates grid, at menu.TemplateCell over the grid as cached, and the
-// ghost flies home to the swatch; the new template comes into the strip with
-// the event that tells of it.
+// the templates grid, at menu.TemplateCell over the grid as drawn, and the
+// ghost flies home to the swatch; the new template is drawn in the strip from
+// the release (postCopy).
 func (a *App) commitTemplateCopy(d *dragState, t *dropTarget) {
 	a.cancelDragSnapBack(d)
 	g, ok := a.c.Grid(a.templates)
@@ -94,11 +98,8 @@ func (a *App) commitTemplateCopy(d *dragState, t *dropTarget) {
 		a.reportErr(errsurface.Info, "templates", "the templates are still loading — try again in a moment")
 		return
 	}
-	x, y := menu.TemplateCell(g.Tiles, t.tile.H)
-	req := &gridwellv1.CopyTileRequest{TileId: t.tile.Id, DestGridId: a.templates, X: x, Y: y}
-	a.postTileMutate("CopyTile", a.templates, func(ctx context.Context) (*gridwellv1.Tile, error) {
-		return a.cl.CopyTile(ctx, req)
-	}, nil)
+	x, y := menu.TemplateCell(g.Drawn(), t.tile.H)
+	a.postCopy(t.tile, a.templates, a.templates, x, y, nil)
 }
 
 // menuItemGhostNode synthesizes the 1x1 tile the ghost renderer paints, so
