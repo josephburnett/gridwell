@@ -259,15 +259,7 @@ export class WebviewRegistry {
   async place(paneId: string, tileId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', hidden = false, gen = 0): Promise<void> {
     const rounded = roundBounds(bounds);
     const partition = SESSION_PARTITION;
-    const stale = this.entries.get(paneId);
-    if (stale) {
-      // closeURLStream is the one path that persists a freeze. Reaching here
-      // means a view was replaced without it, so this freeze has no caller.
-      this.reportErr(`pane ${paneId}: live view replaced (${stale.tileId} → ${tileId}) without a close; its final frame is lost`);
-      // remove() reports its own failures and the lost frame is already on
-      // the notice row, so a rejection here must not stop the replacement view.
-      await this.remove(paneId).catch(() => {});
-    }
+    await this.displace(paneId, tileId);
     const view = this.newView({
       webPreferences: {
         partition,
@@ -348,6 +340,16 @@ export class WebviewRegistry {
     } else {
       void view.webContents.loadURL(url);
     }
+  }
+
+  // displace removes a view still on paneId. The renderer closes a pane's own
+  // view (closeURLStream, the one freeze writeback) before another takes it,
+  // so this loses that view's final frame; a failed remove() has said so.
+  private async displace(paneId: string, tileId: string): Promise<void> {
+    const stale = this.entries.get(paneId);
+    if (!stale) return;
+    this.reportErr(`pane ${paneId}: live view replaced (${stale.tileId} → ${tileId}) without a close; its final frame is lost`);
+    await this.remove(paneId).catch(() => {});
   }
 
   setBounds(paneId: string, bounds: Bounds): void {
@@ -434,13 +436,7 @@ export class WebviewRegistry {
   move(fromPaneId: string, toPaneId: string, bounds: Bounds | undefined, hidden: boolean): void {
     const e = this.entries.get(fromPaneId);
     if (!e) throw new Error(`pane ${fromPaneId}: no live view to move`);
-    const stale = this.entries.get(toPaneId);
-    if (stale && stale !== e) {
-      // As in place(): the renderer closes a pane's own view before a move
-      // lands on it, so reaching here loses that view's final frame.
-      this.reportErr(`pane ${toPaneId}: live view replaced (${stale.tileId} → ${e.tileId}) without a close; its final frame is lost`);
-      void this.remove(toPaneId).catch(() => {});
-    }
+    if (toPaneId !== fromPaneId) void this.displace(toPaneId, e.tileId);
     // The settle and a park waiting on its preview were armed for the old pane.
     this.take(e);
     e.paneId = toPaneId;

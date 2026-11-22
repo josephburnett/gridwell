@@ -326,6 +326,26 @@ test('a move re-keys the view onto the new pane: its bounds, no reload, and ever
   assert.equal(wc.closed, 1);
 });
 
+test('a move onto a pane still holding a view replaces it as a place does: one notice, that view closed', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS);
+  await r.reg.place('p2', 'u1/8', SLACK, BOUNDS);
+  const [moved, displaced] = r.views;
+
+  r.reg.move('p1', 'p2', BOUNDS, false);
+  await settle();
+
+  assert.deepEqual(r.reg.paneIds(), ['p2']);
+  assert.equal(r.reg.tileIdFor('p2'), 'u1/9');
+  assert.ok(r.children.has(moved));
+  assert.ok(!r.children.has(displaced), 'the displaced view still paints over the pane');
+  assert.equal(displaced.webContents!.closed, 1, 'the displaced view was left open');
+  assert.deepEqual(
+    r.errors.map((e) => e.message),
+    ['pane p2: live view replaced (u1/8 → u1/9) without a close; its final frame is lost'],
+  );
+});
+
 test('paneOf names the pane a live view serves, after a move too, and no pane for any other webContents', async () => {
   const r = rig();
   await r.reg.place('p1', 'u1/9', SLACK, BOUNDS);
