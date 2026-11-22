@@ -153,7 +153,12 @@ func Start(opts Options) (*Node, error) {
 	}
 	src.Transport = cache.Front(impl, sourcecache.Options{Prefetch: true})
 	src.Switches = impl
-	closers = append(closers, func() { closeImpl(impl) })
+	closers = append(closers, func() {
+		// A close failure at shutdown is reported, never fatal.
+		if err := impl.Close(); err != nil {
+			log.Printf("gridwell: close: %v", err)
+		}
+	})
 	ln, err := net.Listen("tcp", cfg.Web.Bind)
 	if err != nil {
 		return fail(err)
@@ -248,18 +253,6 @@ func startTransport(st *store.Store, cfg *config.ServerConfig) (*connection.Serv
 func closeAll(closers []func()) {
 	for i := len(closers) - 1; i >= 0; i-- {
 		closers[i]()
-	}
-}
-
-// closeImpl releases a native impl's own resources. A close failure at
-// shutdown is reported, never fatal; the process is exiting.
-func closeImpl(impl any) {
-	c, ok := impl.(interface{ Close() error })
-	if !ok {
-		return
-	}
-	if err := c.Close(); err != nil {
-		log.Printf("gridwell: close: %v", err)
 	}
 }
 
