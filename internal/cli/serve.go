@@ -118,12 +118,6 @@ func staticFS(dir string) fs.FS {
 	return os.DirFS(dir)
 }
 
-// buildServeConfig is node.BuildConfig under the name the CLI's tests and
-// call sites use.
-func buildServeConfig(dir, cfgPath string) (*config.ServerConfig, error) {
-	return node.BuildConfig(dir, cfgPath)
-}
-
 // RunServe starts the backend HTTP server: Connect-RPC, the event stream,
 // the wasm client, and shell PTYs. Live url tiles are hosted natively by the
 // Electron shell, so there is no browser driver here. The listen address
@@ -146,7 +140,7 @@ func RunServe(args []string) int {
 
 	// A missing config file is a fresh node; the node mints its id and
 	// writes the file.
-	cfg, err := buildServeConfig(dir, cfgPath)
+	cfg, err := node.BuildConfig(dir, cfgPath)
 	if err != nil {
 		return die("serve", err)
 	}

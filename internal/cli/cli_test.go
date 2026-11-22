@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/server"
 )
 
@@ -142,7 +143,7 @@ func TestMCPAddLine(t *testing.T) {
 func TestBuildServeConfigFreshHome(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "server.yaml")
-	cfg, err := buildServeConfig(dir, path)
+	cfg, err := node.BuildConfig(dir, path)
 	if err != nil {
 		t.Fatalf("fresh node: %v", err)
 	}
@@ -159,7 +160,7 @@ func TestBuildServeConfigFreshHome(t *testing.T) {
 	if _, err := os.Stat(config.DBFile(dir)); err != nil {
 		t.Fatalf("the node's store must exist after the first build: %v", err)
 	}
-	again, err := buildServeConfig(dir, path)
+	again, err := node.BuildConfig(dir, path)
 	if err != nil || again.ID != cfg.ID {
 		t.Fatalf("a second build must keep the id: %v %+v", err, again)
 	}
@@ -170,13 +171,13 @@ func TestBuildServeConfigFreshHome(t *testing.T) {
 func TestBuildServeConfigChangedID(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "server.yaml")
-	if _, err := buildServeConfig(dir, path); err != nil {
+	if _, err := node.BuildConfig(dir, path); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte("id: changed1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := buildServeConfig(dir, path); err == nil || !strings.Contains(err.Error(), "did `id` change") {
+	if _, err := node.BuildConfig(dir, path); err == nil || !strings.Contains(err.Error(), "did `id` change") {
 		t.Fatalf("a changed id must be refused, got %v", err)
 	}
 }
