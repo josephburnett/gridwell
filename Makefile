@@ -1,4 +1,4 @@
-.PHONY: build bin mac-bins wasm fmt-check proto-check check check-electron check-e2e check-web check-connections serve clean launch vendor dist dist-mac dist-win stamp-version node-modules
+.PHONY: build bin mac-bins wasm fmt-check proto-check check check-electron check-e2e check-far check-web check-connections serve clean launch vendor dist dist-mac dist-win stamp-version node-modules
 
 # HOST_GOOS is what this machine builds for. The release builds run on native
 # runners, one per OS, so nothing here cross-compiles a distribution.
@@ -191,8 +191,16 @@ check-electron: node-modules
 # pre-merge gate rather than part of the per-commit check. It needs xvfb and a
 # prior `make vendor` for node_modules and Playwright.
 check-e2e: build node-modules
-	cd $(DESKTOP) && npm run build && xvfb-run -a npm run test:e2e -- $(PW_FLAGS)
+	cd $(DESKTOP) && npm run build && xvfb-run -a npm run test:e2e -- --grep-invert @far $(PW_FLAGS)
 	$(FLAKY_REPORT) $(DESKTOP)/playwright-report/e2e.json
+
+# check-far is the latency gate: the specs tagged @far (far-session.spec.ts),
+# a session of ordinary use on a far node's grids over a direct hop and over
+# one delayed 100 ms each way, timing every gesture to its first paint and
+# auditing the session's dump. check-e2e leaves them to it, so neither runs
+# them twice, and CI runs both.
+check-far: build node-modules
+	cd $(DESKTOP) && npm run build && xvfb-run -a npm run test:e2e -- --grep @far $(PW_FLAGS)
 
 # check-web drives the browser-mode client: `gridwell serve` and the system
 # Chromium, so the repo stays offline-buildable. It is the only gate that sees

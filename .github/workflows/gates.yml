@@ -107,6 +107,12 @@ jobs:
         run: make check-e2e PW_FLAGS=--retries=1
         env:
           GRIDWELL_E2E_VERBOSE: "1"
+      # The latency gate, with no retry: a gesture that waits on the far
+      # node is a cell in far-session.json, never a flake.
+      - name: latency gate
+        run: make check-far
+        env:
+          GRIDWELL_E2E_VERBOSE: "1"
       # Traces and error-context for every failed spec. A runner-only
       # failure leaves the trace as the only way to see what the app did.
       - name: post-e2e socket dir evidence
