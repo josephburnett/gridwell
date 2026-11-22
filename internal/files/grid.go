@@ -371,8 +371,8 @@ func (l listing) absent(dir, path string) error {
 	return gwerr.DeadLink("", "files: %s is gone", path)
 }
 
-// mint is the one place a file's row appears, at the placement GetGrid
-// already answers, so touching a tile never moves it.
+// mint is a file's row on touch, at the placement GetGrid already
+// answers, so touching a tile never moves it.
 func (s *Source) mint(tileID string) (int64, error) {
 	path, dir, err := tilePath(tileID)
 	if err != nil {
@@ -392,18 +392,22 @@ func (s *Source) mint(tileID string) (int64, error) {
 	if !ok {
 		return 0, l.absent(dir, path)
 	}
+	r := l.rows[i]
+	return s.mintEntry(dir, e, r.X, r.Y, r.W, r.H)
+}
+
+// mintEntry mints e's row in dir at a placement, its door's grid with it:
+// the one mint of a file's row, a touch's and a write's that made the entry.
+func (s *Source) mintEntry(dir string, e listed, x, y, w, h int64) (int64, error) {
 	gid, err := s.mem.GridOf(dir)
+	var child int64
+	if err == nil && e.Child != "" {
+		child, err = s.mem.GridOf(e.Child)
+	}
 	if err != nil {
 		return 0, err
 	}
-	var child int64
-	if e.Child != "" {
-		if child, err = s.mem.GridOf(e.Child); err != nil {
-			return 0, err
-		}
-	}
-	r := l.rows[i]
-	return s.mem.Mint(gid, e.Entry, child, r.X, r.Y, r.W, r.H)
+	return s.mem.Mint(gid, e.Entry, child, x, y, w, h)
 }
 
 // row is path's live row in dir, ok false when it has none.

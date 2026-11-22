@@ -140,14 +140,7 @@ func (s *Source) minted(dir, path string, t *pb.Tile) (*pb.TileResponse, error) 
 	if !ok {
 		return nil, l.absent(dir, path)
 	}
-	gid, err := s.mem.GridOf(dir)
-	var child int64
-	if err == nil && e.Child != "" {
-		child, err = s.mem.GridOf(e.Child)
-	}
-	if err == nil {
-		_, err = s.mem.Mint(gid, e.Entry, child, t.X, t.Y, max(t.W, 1), max(t.H, 1))
-	}
+	_, err = s.mintEntry(dir, e, t.X, t.Y, max(t.W, 1), max(t.H, 1))
 	return s.changedTile(path, true, err, true)
 }
 
