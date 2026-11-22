@@ -32,41 +32,33 @@ func EnsureVersion(ctx context.Context, db *sql.DB, appID int64, target int, mig
 		return err
 	}
 
-	if gotApp == 0 && userVer == 0 {
-		// Both stamps in one transaction, header pragmas being transactional.
-		// A crash between them would leave application_id set with
-		// user_version 0, and the next Open would run the chain against
-		// latest-shape tables, whose ADD COLUMNs then fail forever.
-		tx, err := db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("begin: %w", err)
-		}
-		if err := setPragmaIntTx(ctx, tx, "application_id", appID); err != nil {
-			_ = tx.Rollback()
-			return err
-		}
-		if err := setPragmaIntTx(ctx, tx, "user_version", int64(target)); err != nil {
-			_ = tx.Rollback()
-			return err
-		}
-		return tx.Commit()
-	}
-	if gotApp != appID {
+	fresh := gotApp == 0 && userVer == 0
+	if !fresh && gotApp != appID {
 		return fmt.Errorf("not a Gridwell database of this kind: application_id %#x, want %#x", gotApp, appID)
 	}
 	if userVer > int64(target) {
 		return fmt.Errorf("stored schema version %d is newer than this binary's %d", userVer, target)
 	}
-	if userVer == int64(target) {
+	if !fresh && userVer == int64(target) {
 		return nil
 	}
 
+	// Every stamp rides inside one transaction, header pragmas being
+	// transactional. A fresh file stamped application_id without user_version,
+	// or a migrated one with its DDL and no version, would re-run the chain on
+	// the next Open, fail on "duplicate column name" and stay unopenable.
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}
+	if fresh {
+		if err := setPragmaIntTx(ctx, tx, "application_id", appID); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
 	for _, m := range migs {
-		if m.To <= int(userVer) || m.To > target {
+		if fresh || m.To <= int(userVer) || m.To > target {
 			continue
 		}
 		if err := m.Run(ctx, tx); err != nil {
@@ -74,10 +66,6 @@ func EnsureVersion(ctx context.Context, db *sql.DB, appID int64, target int, mig
 			return fmt.Errorf("migration to v%d: %w", m.To, err)
 		}
 	}
-	// The stamp rides inside the migration transaction. Stamping after the
-	// commit would persist the DDL without the version recording it, after
-	// which every Open re-runs the chain, fails on "duplicate column name" and
-	// leaves the file unopenable.
 	if err := setPragmaIntTx(ctx, tx, "user_version", int64(target)); err != nil {
 		_ = tx.Rollback()
 		return err
