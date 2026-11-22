@@ -15,7 +15,5 @@
   "decided": {},
   "firstOpenRoundTrips": 1,
   "textSavesInFlight": 1,
-  "known": {
-    "a far workspace keeps its panes": "entering a far workspace tile raises the layout notice 'a pane views content the workspace's node cannot reach; it will reopen at home' twice: the capture drops the pane (being fixed on branch farcapture)"
-  }
+  "known": {}
 }
