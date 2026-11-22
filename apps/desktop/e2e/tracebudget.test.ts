@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { TraceLine } from './trace';
-import { attribute, budgetVerdict, CAUSE_MS, GestureWindow, unattributed } from './tracebudget';
+import {
+  attribute, budgetVerdict, CAUSE_MS, droppedPanes, errorNotices, GestureWindow, maxInFlight, refusedCalls,
+  repeatedReads, roundTrips, unattributed,
+} from './tracebudget';
 
 let seq = 0;
 function rec(origin: string, src: string, kind: string, msg: string, t: number, kv?: Record<string, string>): TraceLine {
@@ -84,4 +87,71 @@ test('the budget fails on a rise and on an unrecorded fall', () => {
   assert.equal(budgetVerdict(3, 3), null);
   assert.match(budgetVerdict(4, 3)!, /rose from 3 to 4/);
   assert.match(budgetVerdict(2, 3)!, /fell from 3 to 2/);
+});
+
+const call = (verb: string, req: string, start: number, end: number, end_: string, kv: Record<string, string> = {}) => [
+  rec('client', 'rpc', 'rpc', `${verb} start`, start, { req, ...kv }),
+  rec('client', 'rpc', 'rpc', `${verb} ${end_}`, end, { req, ...kv }),
+];
+
+test('a refusal counts; the client cancelling its own read and a dead link do not', () => {
+  const lines = [
+    ...call('MoveTile', 'a', 1, 2, 'error: failed_precondition: stale', { id: 't/1', code: 'failed_precondition' }),
+    ...call('GetGrid', 'b', 3, 4, 'error: canceled: context canceled', { id: 'g/1', code: 'canceled' }),
+    ...call('GetGrid', 'c', 5, 6, 'dead', { id: 'g/2' }),
+  ];
+  assert.deepEqual(refusedCalls(lines).map((c) => c.req), ['a']);
+});
+
+test('error notices and layout notices are found by severity and source', () => {
+  const lines = [
+    rec('client', 'grid:g', 'notice', 'grid unavailable', 1, { sev: 'error' }),
+    rec('client', 'trace', 'notice', 'logs dumped', 2, { sev: 'info' }),
+    rec('client', 'layout:w/1', 'notice', 'it will reopen at home', 3, { sev: 'info' }),
+  ];
+  assert.deepEqual(errorNotices(lines).map((r) => r.src), ['grid:g']);
+  assert.deepEqual(droppedPanes(lines).map((r) => r.src), ['layout:w/1']);
+});
+
+test('a read asked again with nothing between is repeated; an event between excuses it', () => {
+  const twice = [...call('GetGrid', 'a', 1, 2, 'ok', { id: 'g/1' }), ...call('GetGrid', 'b', 5, 6, 'ok', { id: 'g/1' })];
+  assert.deepEqual(repeatedReads(twice).map((c) => c.req), ['b']);
+  const told = [
+    ...call('GetGrid', 'a', 1, 2, 'ok', { id: 'g/1' }),
+    rec('client', 'events', 'recv', 'grid changed', 3, { id: 'g/1' }),
+    ...call('GetGrid', 'b', 5, 6, 'ok', { id: 'g/1' }),
+  ];
+  assert.deepEqual(repeatedReads(told), []);
+  const written = [
+    ...call('GetGrid', 'a', 1, 2, 'ok', { id: 'g/1' }),
+    rec('node', 'router', 'rpc', 'CreateTile start', 3, { id: 'g/1' }),
+    ...call('GetGrid', 'b', 5, 6, 'ok', { id: 'g/1' }),
+  ];
+  assert.deepEqual(repeatedReads(written), [], "another writer's write on the node excuses it");
+  const overlapping = [...call('GetGrid', 'a', 1, 6, 'ok', { id: 'g/1' }), ...call('GetGrid', 'b', 2, 7, 'ok', { id: 'g/1' })];
+  assert.deepEqual(repeatedReads(overlapping), []);
+});
+
+test('in-flight is counted per id', () => {
+  const lines = [
+    ...call('WriteContent', 'a', 1, 4, 'ok', { id: 't/1' }),
+    ...call('WriteContent', 'b', 4, 6, 'ok', { id: 't/1' }),
+    ...call('WriteContent', 'c', 2, 3, 'ok', { id: 't/2' }),
+    ...call('WriteContent', 'd', 2, 5, 'ok', { id: 't/2' }),
+  ];
+  const m = maxInFlight(lines, 'WriteContent');
+  assert.equal(m.get('t/1'), 1);
+  assert.equal(m.get('t/2'), 2);
+});
+
+test('round trips are the longest chain of reads each asked after the last was answered', () => {
+  const lines = [
+    ...call('GetGrid', 'a', 10, 20, 'ok', { id: 'g/1' }),
+    ...call('ReadContent', 'b', 25, 30, 'ok', { id: 't/1' }),
+    ...call('GetTilePreview', 'c', 12, 40, 'ok', { id: 't/2' }),
+    ...call('GetGrid', 'd', 31, 35, 'ok', { id: 'g/2' }),
+  ];
+  assert.equal(roundTrips(lines, 10, 50), 3);
+  assert.equal(roundTrips(lines, 10, 32), 2);
+  assert.equal(roundTrips(lines, 100, 200), 0);
 });

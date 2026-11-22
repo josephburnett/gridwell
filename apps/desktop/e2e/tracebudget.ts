@@ -189,3 +189,125 @@ export function budgetVerdict(count: number, recorded: number): string | null {
   }
   return null;
 }
+
+// The session audits: what a dump of ordinary use must not hold, read by the
+// specs in place of a person reading it. Each answers the offending records,
+// so a failure prints them.
+
+const READ_VERBS = new Set(['GetGrid', 'GetTile', 'GetTilePreview', 'ReadContent', 'Handshake']);
+
+interface ClientCall {
+  verb: string;
+  id: string;
+  req: string;
+  start: number;
+  end: number;
+  outcome: string;
+  code: string;
+}
+
+// clientCalls pairs the client's rpc start and end records by request id, on
+// the node's clock. A call still open at the dump has end Infinity.
+export function clientCalls(lines: TraceLine[]): ClientCall[] {
+  const open = new Map<string, ClientCall>();
+  const out: ClientCall[] = [];
+  for (const r of lines) {
+    if (r.origin !== 'client' || r.kind !== 'rpc' || !r.kv?.req || r.t === undefined) continue;
+    const [verb, ...rest] = r.msg.split(' ');
+    const phase = rest.join(' ');
+    if (phase === 'start') {
+      const c = { verb, id: r.kv.id ?? '', req: r.kv.req, start: r.t, end: Infinity, outcome: '', code: '' };
+      open.set(r.kv.req, c);
+      out.push(c);
+      continue;
+    }
+    const c = open.get(r.kv.req);
+    if (!c) continue;
+    open.delete(r.kv.req);
+    c.end = r.t;
+    c.outcome = phase.split(':')[0];
+    c.code = r.kv.code ?? '';
+  }
+  return out;
+}
+
+// refusedCalls is every call the node answered with an error. The client's
+// own cancel is no refusal (clientsync.OutcomeAbandoned), and a dead link is
+// a state (gwerr.DeadLink), so neither counts.
+export function refusedCalls(lines: TraceLine[]): ClientCall[] {
+  return clientCalls(lines).filter((c) => c.outcome === 'error' && c.code !== 'canceled');
+}
+
+// errorNotices is every notice of severity error the client raised.
+export function errorNotices(lines: TraceLine[]): TraceLine[] {
+  return lines.filter((r) => r.origin === 'client' && r.kind === 'notice' && r.kv?.sev === 'error');
+}
+
+// droppedPanes is every notice that a workspace's layout lost a pane on its
+// way in or out (the layout:<tile> notices).
+export function droppedPanes(lines: TraceLine[]): TraceLine[] {
+  return lines.filter((r) => r.origin === 'client' && r.kind === 'notice' && r.src.startsWith('layout:'));
+}
+
+// What can change what a read answers: on the client an event it was told,
+// a gesture, a navigation, a pane change, a drop or a write it made; on the
+// node any write, whoever asked it, and a source's health.
+function changes(r: TraceLine): boolean {
+  const verb = r.msg.split(' ')[0];
+  const write = r.kind === 'rpc' && !READ_VERBS.has(verb) && verb !== 'SetView' && verb !== 'Subscribe';
+  if (r.origin === 'node') return (r.src === 'router' && write) || r.src === 'connection' || r.src === 'files';
+  if (r.origin !== 'client') return false;
+  return ['events', 'gesture', 'nav', 'pane', 'drag', 'text', 'framing'].includes(r.src) || write;
+}
+
+// repeatedReads is every read of one id asked again after the last one was
+// answered, with nothing since the last was asked that could change its
+// answer: a write the node finished while serving it counts, since the
+// first answer may predate it.
+export function repeatedReads(lines: TraceLine[]): ClientCall[] {
+  const calls = clientCalls(lines).filter((c) => READ_VERBS.has(c.verb) && c.id !== '');
+  const marks = lines.filter(changes).map((r) => r.t ?? 0);
+  const last = new Map<string, ClientCall>();
+  const out: ClientCall[] = [];
+  for (const c of calls.sort((a, b) => a.start - b.start)) {
+    const key = `${c.verb}|${c.id}`;
+    const prev = last.get(key);
+    if (prev && prev.outcome === 'ok' && prev.end <= c.start && !marks.some((t) => t >= prev.start && t <= c.start)) out.push(c);
+    last.set(key, c);
+  }
+  return out;
+}
+
+// maxInFlight is, per id, the most calls of verb the client had open at once.
+export function maxInFlight(lines: TraceLine[], verb: string): Map<string, number> {
+  const edges: Array<[number, number, string]> = [];
+  for (const c of clientCalls(lines)) {
+    if (c.verb !== verb) continue;
+    edges.push([c.start, 1, c.id], [c.end, -1, c.id]);
+  }
+  edges.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const now = new Map<string, number>();
+  const most = new Map<string, number>();
+  for (const [, d, id] of edges) {
+    const n = (now.get(id) ?? 0) + d;
+    now.set(id, n);
+    most.set(id, Math.max(most.get(id) ?? 0, n));
+  }
+  return most;
+}
+
+// roundTrips is the longest chain of reads, each asked after the one before
+// it was answered, that started at or after from and were answered by to: the
+// serial round trips a paint at to waited on.
+export function roundTrips(lines: TraceLine[], from: number, to: number): number {
+  const reads = clientCalls(lines)
+    .filter((c) => READ_VERBS.has(c.verb) && c.start >= from && c.end <= to)
+    .sort((a, b) => a.start - b.start);
+  const depth: number[] = [];
+  reads.forEach((c, i) => {
+    let d = 1;
+    for (let j = 0; j < i; j++) if (reads[j].end <= c.start) d = Math.max(d, depth[j] + 1);
+    depth.push(d);
+  });
+  return Math.max(0, ...depth);
+}
