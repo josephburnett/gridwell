@@ -105,8 +105,8 @@ func (h heldGrid) GetGrid(ctx context.Context, _ *connect.Request[pb.GetGridRequ
 	return nil, connect.NewError(connect.CodeCanceled, ctx.Err())
 }
 
-// A health transition cancels every read in flight for its source and asks
-// again (inflight.Reads.CancelIf). The cancelled read is the client's own
+// A health transition cancels every read in flight that its source's dark
+// link stranded and asks again (inflight.Reads.CancelIf). The cancelled read is the client's own
 // doing, so across a real connect call it latches nothing, says nothing and
 // resolves nothing: the storm of 2026-10-02 was each one posting "grid
 // unavailable: context canceled".
@@ -130,6 +130,7 @@ func TestACancelledReadLeavesNoTrace(t *testing.T) {
 		errc <- err
 	}()
 	<-h.asked
+	reads.Strand(func(string) bool { return true })
 	reads.CancelIf(func(string) bool { return true })
 	err := <-errc
 	done()

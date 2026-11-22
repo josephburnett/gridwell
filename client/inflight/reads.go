@@ -153,6 +153,9 @@ func (r *Reads) ReviveIf(match func(key string) bool) []string {
 	return r.latchedKeys(func(k string, v Verdict) bool { return v == Dead && match(k) }, true)
 }
 
+// Strand is claimSet.strandIf over the claims.
+func (r *Reads) Strand(match func(key string) bool) { r.claims.strandIf(match) }
+
 // CancelIf is claimSet.cancelIf over the claims.
 func (r *Reads) CancelIf(match func(key string) bool) []string {
 	return r.claims.cancelIf(match)

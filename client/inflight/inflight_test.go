@@ -63,6 +63,7 @@ func TestCancelIfOverEveryKeyCancelsAndNamesEveryFetch(t *testing.T) {
 	s := newClaimSet(time.Minute)
 	ctxA, _, _ := s.begin("a")
 	ctxB, _, _ := s.begin("b")
+	s.strandIf(everyKey)
 
 	got := s.cancelIf(everyKey)
 	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
@@ -85,6 +86,7 @@ func TestCancelIfLeavesTheFetchesThatKeptTheirLink(t *testing.T) {
 	s := newClaimSet(time.Minute)
 	dark, _, _ := s.begin("n1abcde/laptop/far9xyz/1")
 	alive, _, _ := s.begin("fs9xyzw/1")
+	s.strandIf(everyKey)
 
 	got := s.cancelIf(func(k string) bool { return strings.HasPrefix(k, "n1abcde/laptop/") })
 	if len(got) != 1 || got[0] != "n1abcde/laptop/far9xyz/1" {
@@ -101,12 +103,44 @@ func TestCancelIfLeavesTheFetchesThatKeptTheirLink(t *testing.T) {
 	}
 }
 
+// A read asked after its source went dark was asked of a node that knew it,
+// so the resync keeps it, owed a re-ask once it lands, and ends only the
+// read the dark link stranded (Joe's trace of 2026-11-22: two previews asked
+// while the connection was coming back, cancelled 1.1 s in and asked again).
+func TestCancelIfKeepsAReadAskedSinceTheLinkWentDark(t *testing.T) {
+	s := newClaimSet(time.Minute)
+	stranded, strandedDone, _ := s.begin("n1abcde/laptop/far9xyz/1")
+	s.strandIf(everyKey)
+	since, sinceDone, _ := s.begin("n1abcde/laptop/far9xyz/2")
+
+	got := s.cancelIf(everyKey)
+	if len(got) != 1 || got[0] != "n1abcde/laptop/far9xyz/1" {
+		t.Fatalf("CancelIf = %v, want only the stranded read", got)
+	}
+	if !errors.Is(stranded.Err(), context.Canceled) {
+		t.Errorf("the stranded read must be cancelled: %v", stranded.Err())
+	}
+	if since.Err() != nil {
+		t.Errorf("the read asked since must still be in flight: %v", since.Err())
+	}
+	if _, _, ok := s.begin("n1abcde/laptop/far9xyz/2"); ok {
+		t.Error("the kept read must still dedupe the resync's own ask")
+	}
+	if owed := sinceDone(); !owed {
+		t.Error("the kept read must be owed a re-ask: its answer may be what the node held while dark")
+	}
+	if owed := strandedDone(); owed {
+		t.Error("a cancelled read's late return owes nothing; the resync asks again")
+	}
+}
+
 func TestZombieReleaseKeepsTheFreshClaim(t *testing.T) {
 	// The reconnect cancels the fetch, the caller re-asks at once, and
 	// only then does the cancelled fetch return and release. Freeing the
 	// key there would dogpile the fresh fetch on every draw.
 	s := newClaimSet(time.Minute)
 	_, zombieDone, _ := s.begin("g1")
+	s.strandIf(everyKey)
 	s.cancelIf(everyKey)
 
 	fresh, freshDone, ok := s.begin("g1")

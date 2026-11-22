@@ -79,6 +79,9 @@ type HealthReaction struct {
 	LiveOff StickyNotice
 	// Resync names the source whose grids refetch, "" for none.
 	Resync string
+	// Strand names the source that just went dark, whose reads in flight
+	// may never be answered (inflight.Reads.Strand), "" for none.
+	Strand string
 }
 
 // StickyNotice is one errsurface.Sticky notice: up with Message and its
@@ -110,6 +113,9 @@ func ReactHealth(h *pb.EventSourceHealth, label string, wasDark, disableable boo
 	}
 	if wasDark == h.GetHealthy() {
 		r.Resync = uuid
+	}
+	if !wasDark && !h.GetHealthy() {
+		r.Strand = uuid
 	}
 	return r
 }

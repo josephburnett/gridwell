@@ -84,12 +84,12 @@ func TestReactHealthTable(t *testing.T) {
 		h           *pb.EventSourceHealth
 		want        HealthReaction
 	}{
-		{"going dark says so and resyncs", false, false,
+		{"going dark says so, strands its reads and resyncs", false, false,
 			&pb.EventSourceHealth{Uuid: "n/c", Detail: "gone"},
 			HealthReaction{
 				Dark:    StickyNotice{Source: dark, Message: "fs: live updates stopped — gone"},
 				LiveOff: StickyNotice{Source: live},
-				Resync:  "n/c"}},
+				Resync:  "n/c", Strand: "n/c"}},
 		{"coming back takes the notice down and resyncs", true, false,
 			&pb.EventSourceHealth{Uuid: "n/c", Healthy: true},
 			HealthReaction{Dark: StickyNotice{Source: dark}, LiveOff: StickyNotice{Source: live}, Resync: "n/c"}},
@@ -115,7 +115,7 @@ func TestReactHealthTable(t *testing.T) {
 			HealthReaction{
 				Dark:    StickyNotice{Source: dark, Message: "fs: live updates stopped — gone"},
 				LiveOff: StickyNotice{Source: live, Message: "fs: live updates off — too many watches"},
-				Resync:  "n/c"}},
+				Resync:  "n/c", Strand: "n/c"}},
 		{"a down repeated while dark is not a move", true, false,
 			&pb.EventSourceHealth{Uuid: "n/c", Detail: "still gone"},
 			HealthReaction{
@@ -126,7 +126,7 @@ func TestReactHealthTable(t *testing.T) {
 			HealthReaction{
 				Dark:    StickyNotice{Source: dark, Message: "fs: live updates stopped — gone", Action: errsurface.Disable},
 				LiveOff: StickyNotice{Source: live},
-				Resync:  "n/c"}},
+				Resync:  "n/c", Strand: "n/c"}},
 		{"a refused watch offers no Disable: the source still answers", false, true,
 			&pb.EventSourceHealth{Uuid: "n/c", Healthy: true, LiveUpdatesOff: "too many watches"},
 			HealthReaction{
@@ -137,7 +137,7 @@ func TestReactHealthTable(t *testing.T) {
 			HealthReaction{Dark: StickyNotice{Source: dark}, LiveOff: StickyNotice{Source: live}}},
 		{"disabled while light goes dark without a notice", false, true,
 			&pb.EventSourceHealth{Uuid: "n/c", Detail: "disabled until the node restarts", Disabled: true},
-			HealthReaction{Dark: StickyNotice{Source: dark}, LiveOff: StickyNotice{Source: live}, Resync: "n/c"}},
+			HealthReaction{Dark: StickyNotice{Source: dark}, LiveOff: StickyNotice{Source: live}, Resync: "n/c", Strand: "n/c"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -1067,7 +1067,9 @@ func (a *App) startSSE() {
 			a.c.NoteStream(true)
 			a.resolveErr(errsurface.EventsSource)
 			if resync {
-				// The gap swallowed events without saying whose, so nothing scopes.
+				// The gap swallowed events without saying whose, so nothing scopes,
+				// and any socket may have died with it.
+				a.strand(cache.EverySource)
 				a.retryKick(true, cache.EverySource)
 			}
 		},
@@ -1148,17 +1150,15 @@ func (a *App) retryKick(resync bool, source string) {
 	if resync {
 		// Unconditional: what the source missed telling is unknown, so no
 		// "the cache already holds it" check may skip a grid here.
-		served := func(id string) bool { return cache.ServedBy(id, source) }
-		// Failure latches are gap state, asked again by name. The menu set's
-		// predicate is cache.Reaches: a connection's flap covers the nodes behind it.
-		reaches := func(ns string) bool { return cache.Reaches(ns, source) }
+		served, reaches := lostWith(source)
+		// Failure latches are gap state, asked again by name.
 		latched := a.fetch.grids.ClearIf(served)
 		a.reask(latched, a.fetch.tiles.ClearIf(served),
 			a.fetch.contents.ClearIf(served), a.fetch.previews.ClearIf(served),
 			a.fetch.menus.ClearIf(reaches))
-		// A request that dies with its link never returns, and its claim would block
-		// every retry; re-ask the grids by name. A cancelled read says nothing
-		// (clientsync.OutcomeAbandoned).
+		// A request stranded by its link may never return, and its claim would
+		// block every retry; re-ask the grids by name. A cancelled read says
+		// nothing (clientsync.OutcomeAbandoned).
 		stuck := a.fetch.grids.CancelIf(served)
 		a.fetch.tiles.CancelIf(served)
 		a.fetch.contents.CancelIf(served)
@@ -1173,6 +1173,24 @@ func (a *App) retryKick(resync bool, source string) {
 	}
 	a.syncContentOutbox()
 	a.drainOutbox()
+}
+
+// lostWith is which reads a source's link carries: the ids it serves, and
+// for the menus cache.Reaches, since a connection's flap covers the nodes
+// behind it. cache.EverySource is the client's own stream.
+func lostWith(source string) (served, reaches func(string) bool) {
+	return func(id string) bool { return cache.ServedBy(id, source) },
+		func(ns string) bool { return cache.Reaches(ns, source) }
+}
+
+// strand marks the reads in flight over source's link as stranded, so the
+// resync after ends them and keeps every read asked since.
+func (a *App) strand(source string) {
+	served, reaches := lostWith(source)
+	for _, r := range []*inflight.Reads{a.fetch.grids, a.fetch.tiles, a.fetch.contents, a.fetch.previews} {
+		r.Strand(served)
+	}
+	a.fetch.menus.Strand(reaches)
 }
 
 // reask asks again for reads whose latches were just cleared; previews and
@@ -1331,6 +1349,9 @@ func (a *App) reportSourceHealth(h *gridwellv1.EventSourceHealth) {
 		} else {
 			a.offerErr(errsurface.Error, n.Source, n.Message, n.Action)
 		}
+	}
+	if r.Strand != "" {
+		a.strand(r.Strand)
 	}
 	if r.Resync != "" {
 		a.persist.sched.healthResync.Transition(r.Resync)

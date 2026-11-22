@@ -2,8 +2,8 @@
 // is outstanding or has failed. Reads is the only way to hold a claim: the
 // claim set and the failure latch are unexported, so no caller can take a
 // claim without the latch that stops a failure being asked every draw. A
-// claim ends when its fetch returns or CancelIf declares its link gone. Batch
-// holds the reads a paint asks for until it ends. Only the event Subscribe
+// claim ends when its fetch returns or CancelIf ends it, stranded by a dark
+// link. Batch holds the reads a paint asks for until it ends. Only the event Subscribe
 // and the shell WebSocket are unbounded.
 package inflight
 
@@ -42,6 +42,9 @@ type claim struct {
 	// A refused ask owes nothing, because a draw asks every draw and its ask
 	// carries no news the read in flight does not already answer.
 	owed bool
+	// stranded records that the link this fetch rides went dark while it
+	// was held, so its answer may never come (strandIf).
+	stranded bool
 	// end closes when the fetch returns.
 	end chan struct{}
 }
@@ -102,15 +105,35 @@ func (s *claimSet) release(key string, c *claim) bool {
 	return c.owed
 }
 
-// cancelIf drops and cancels every claim whose key match reports, returning
-// those keys sorted. The caller chooses which keys lost a link, because one
-// source going dark leaves every other source's fetches still owed an answer.
+// strandIf marks every claim whose key match reports as riding a link that
+// went dark: the source's, or with every key the client's own stream.
+func (s *claimSet) strandIf(match func(key string) bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k, c := range s.m {
+		if match(k) {
+			c.stranded = true
+		}
+	}
+}
+
+// cancelIf drops and cancels every stranded claim whose key match reports,
+// returning those keys sorted, and owes every other claim it reports a
+// re-ask. A claim taken after its link went dark was asked of a node that
+// knew it, so it answers, though perhaps from what the node held while the
+// source was dark; cancelling it would throw away a round trip the resync
+// would only make again. The caller chooses which keys lost a link, because
+// one source going dark leaves every other source's fetches owed nothing.
 func (s *claimSet) cancelIf(match func(key string) bool) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	keys := make([]string, 0, len(s.m))
 	for k, c := range s.m {
 		if !match(k) {
+			continue
+		}
+		if !c.stranded {
+			c.owed = true
 			continue
 		}
 		keys = append(keys, k)
