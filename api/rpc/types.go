@@ -6,6 +6,7 @@ package rpc
 
 import (
 	"cmp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -74,6 +75,15 @@ func (c Content) InBlob() bool { return c == ContentBody || c == ContentLayout }
 // ContentChunkBytes is the size of every content chunk but the last, for
 // every producer of a content stream.
 const ContentChunkBytes = 256 * 1024
+
+// Chunks is data cut as every content stream carries it: at least one piece,
+// so an empty body still sends the first message, the one carrying the facts.
+func Chunks(data []byte) [][]byte {
+	if len(data) == 0 {
+		return [][]byte{data}
+	}
+	return slices.Collect(slices.Chunk(data, ContentChunkBytes))
+}
 
 // MaxContentBytes is the largest content body an API carries, either way;
 // store.MaxBlobBytes matches it.

@@ -837,12 +837,7 @@ func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send
 	}
 	if !flowed && gwerr.IsUnheard(err) {
 		if mt, ver, st, cached, ok := c.loadContent(ctx, in.TileId); ok {
-			return sendChunked(cached, func(b []byte, first bool) error {
-				if first {
-					return send(&pb.ContentChunk{MediaType: mt, Version: ver, ContentStamp: st, Data: b})
-				}
-				return send(&pb.ContentChunk{Data: b})
-			})
+			return namespace.SendChunks(cached, &pb.ContentChunk{MediaType: mt, Version: ver, ContentStamp: st}, send)
 		}
 	}
 	return err
@@ -865,24 +860,6 @@ func tee[C interface{ GetData() []byte }](read func(func(C) error) error, send f
 		return send(ch)
 	})
 	return first, data, flowed, fits, err
-}
-
-// sendChunked replays a cached body in the live chunk shape, so a caller
-// cannot tell a cached answer from a live one by its framing. One empty
-// first chunk still goes out for an empty body, carrying the metadata.
-func sendChunked(data []byte, emit func(b []byte, first bool) error) error {
-	first := true
-	for {
-		n := min(len(data), rpc.ContentChunkBytes)
-		if err := emit(data[:n], first); err != nil {
-			return err
-		}
-		data = data[n:]
-		first = false
-		if len(data) == 0 {
-			return nil
-		}
-	}
 }
 
 func (c *Layer) loadContent(ctx context.Context, tileID string) (mediaType string, version int64, stamp string, data []byte, ok bool) {

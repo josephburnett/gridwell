@@ -402,3 +402,25 @@ func TestEveryKindHasARow(t *testing.T) {
 		t.Error("an unknown kind reads a row that can do something")
 	}
 }
+
+// Every content stream is cut the same: full chunks, the rest last, and one
+// empty piece for an empty body, so its first message still goes out.
+func TestChunks(t *testing.T) {
+	for _, c := range []struct{ size, want int }{{0, 1}, {1, 1}, {ContentChunkBytes, 1}, {ContentChunkBytes + 1, 2}, {3 * ContentChunkBytes, 3}} {
+		data := make([]byte, c.size)
+		got := Chunks(data)
+		if len(got) != c.want {
+			t.Errorf("Chunks(%d bytes) = %d pieces, want %d", c.size, len(got), c.want)
+		}
+		var joined []byte
+		for i, p := range got {
+			if i < len(got)-1 && len(p) != ContentChunkBytes {
+				t.Errorf("Chunks(%d bytes)[%d] = %d bytes, want %d", c.size, i, len(p), ContentChunkBytes)
+			}
+			joined = append(joined, p...)
+		}
+		if len(joined) != c.size {
+			t.Errorf("Chunks(%d bytes) joins to %d", c.size, len(joined))
+		}
+	}
+}

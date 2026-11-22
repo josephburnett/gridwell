@@ -223,8 +223,8 @@ func (c *Client) ReadInfo(ctx context.Context, tileID string) (*pb.FileInfo, err
 func (c *Client) WriteContent(ctx context.Context, tileID string, claim ContentBasis, data []byte) (*pb.Tile, error) {
 	stream := c.cl.WriteContent(ctx)
 	req := &pb.WriteContentRequest{TileId: tileID, Version: claim.Version, ContentStamp: claim.Stamp}
-	for off := 0; off == 0 || off < len(data); off += ContentChunkBytes {
-		req.Data = data[off:min(off+ContentChunkBytes, len(data))]
+	for _, piece := range Chunks(data) {
+		req.Data = piece
 		if err := stream.Send(req); err != nil {
 			_, cerr := stream.CloseAndReceive()
 			return nil, cmp.Or(cerr, err)

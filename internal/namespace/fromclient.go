@@ -46,19 +46,17 @@ func Assembled(first *pb.WriteContentRequest, recv func() (*pb.WriteContentReque
 	}
 }
 
-// SendChunks is a ReadContent owner's send of data, Assembled's inverse: in
-// chunks of rpc.ContentChunkBytes, the first carrying first's facts, and one
-// chunk for empty data.
+// SendChunks is a ReadContent owner's send of data, Assembled's inverse: cut
+// by rpc.Chunks, the first chunk carrying first's facts.
 func SendChunks(data []byte, first *pb.ContentChunk, send func(*pb.ContentChunk) error) error {
-	c := first
-	for {
-		n := min(len(data), rpc.ContentChunkBytes)
-		c.Data = data[:n]
-		if err := send(c); err != nil || n == len(data) {
+	for _, piece := range rpc.Chunks(data) {
+		first.Data = piece
+		if err := send(first); err != nil {
 			return err
 		}
-		data, c = data[n:], &pb.ContentChunk{}
+		first = &pb.ContentChunk{}
 	}
+	return nil
 }
 
 // FromClient adapts a gridwell.v1 client to the in-process interface.

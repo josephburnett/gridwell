@@ -10,6 +10,7 @@ import (
 	"context"
 
 	"github.com/josephburnett/gridwell/api/gwerr"
+	"github.com/josephburnett/gridwell/api/rpc"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
@@ -40,12 +41,15 @@ func (c *Layer) ServeContent(ctx context.Context, in *pb.ServeContentRequest, se
 	}
 	if !flowed && gwerr.IsUnheard(err) {
 		if mt, cached, ok := c.loadServeContent(ctx, in.GetTileId()); ok {
-			return sendChunked(cached, func(b []byte, first bool) error {
-				if first {
-					return send(&pb.ServeContentChunk{MediaType: mt, Data: b})
+			m := &pb.ServeContentChunk{MediaType: mt}
+			for _, piece := range rpc.Chunks(cached) {
+				m.Data = piece
+				if err := send(m); err != nil {
+					return err
 				}
-				return send(&pb.ServeContentChunk{Data: b})
-			})
+				m = &pb.ServeContentChunk{}
+			}
+			return nil
 		}
 	}
 	return err

@@ -529,17 +529,13 @@ func (d *toolset) readBody(ctx context.Context, id string) (string, rpc.ContentB
 // chunks is a WriteContent stream of data claiming claim, cut where the
 // client cuts it.
 func chunks(id string, claim rpc.ContentBasis, data []byte) func() (*pb.WriteContentRequest, error) {
-	off, sent := 0, false
+	pieces, next := rpc.Chunks(data), &pb.WriteContentRequest{TileId: id, Version: claim.Version, ContentStamp: claim.Stamp}
 	return func() (*pb.WriteContentRequest, error) {
-		if sent && off >= len(data) {
+		if len(pieces) == 0 {
 			return nil, io.EOF
 		}
-		end := min(off+rpc.ContentChunkBytes, len(data))
-		m := &pb.WriteContentRequest{Data: data[off:end]}
-		if !sent {
-			m.TileId, m.Version, m.ContentStamp = id, claim.Version, claim.Stamp
-		}
-		off, sent = end, true
+		m := next
+		m.Data, pieces, next = pieces[0], pieces[1:], &pb.WriteContentRequest{}
 		return m, nil
 	}
 }

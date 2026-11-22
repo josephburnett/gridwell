@@ -41,12 +41,16 @@ func (d *contentFake) ServeContent(_ context.Context, in *pb.ServeContentRequest
 		return status.Error(codes.NotFound, "no page")
 	}
 	// The live chunk shape: chunk 1 carries the media type.
-	return sendChunked(b.data, func(chunk []byte, first bool) error {
-		if first {
-			return send(&pb.ServeContentChunk{MediaType: b.mediaType, Data: chunk})
+	for i, chunk := range rpc.Chunks(b.data) {
+		m := &pb.ServeContentChunk{Data: chunk}
+		if i == 0 {
+			m.MediaType = b.mediaType
 		}
-		return send(&pb.ServeContentChunk{Data: chunk})
-	})
+		if err := send(m); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func contentFixture(t *testing.T) (*Layer, *contentFake) {

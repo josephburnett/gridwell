@@ -2,8 +2,12 @@ package mcpapi
 
 import (
 	"errors"
+	"io"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // A bulk write answers one verdict per item, in order, and a refused item
@@ -45,5 +49,31 @@ func TestASpanIsRFC3339AsUnixSeconds(t *testing.T) {
 	}
 	if _, err := (&Span{To: "1792195200"}).rangeOf("modified"); err == nil || !strings.Contains(err.Error(), "modified.to") {
 		t.Fatalf("unix seconds = %v, want refused naming modified.to", err)
+	}
+}
+
+// A write_text stream is cut where the client cuts it, the first message
+// binding the tile and the claim, and an empty body still sends that one.
+func TestChunksBindTheClaimOnTheFirstMessageOnly(t *testing.T) {
+	for _, size := range []int{0, 5, rpc.ContentChunkBytes, 2*rpc.ContentChunkBytes + 7} {
+		recv := chunks("n/7", rpc.ContentBasis{Version: 3, Stamp: "s"}, make([]byte, size))
+		var sizes []int
+		for i := 0; ; i++ {
+			m, err := recv()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if bound := m.TileId == "n/7" && m.Version == 3 && m.ContentStamp == "s"; bound != (i == 0) || (i > 0 && (m.TileId != "" || m.Version != 0 || m.ContentStamp != "")) {
+				t.Fatalf("size %d: message %d = %v, want the claim on the first alone", size, i, m)
+			}
+			sizes = append(sizes, len(m.Data))
+		}
+		want := []int{size}
+		if size > rpc.ContentChunkBytes {
+			want = []int{rpc.ContentChunkBytes, rpc.ContentChunkBytes, 7}
+		}
+		if !slices.Equal(sizes, want) {
+			t.Errorf("size %d: chunks %v, want %v", size, sizes, want)
+		}
 	}
 }
