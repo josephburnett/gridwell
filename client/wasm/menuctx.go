@@ -56,7 +56,7 @@ func (a *App) nodeCtx(ns string) *menuContext {
 	}
 	mc, ok := a.views.menuCtxs[ns]
 	if !ok {
-		mc = &menuContext{}
+		mc = &menuContext{shellsDisabled: true} // unknown offers no shell, as menu.Offer's unknown AcceptsTiles
 		a.views.menuCtxs[ns] = mc
 	}
 	if !mc.fetched {
