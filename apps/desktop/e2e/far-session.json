@@ -2,7 +2,6 @@
   "delayMs": 100,
   "boundMs": 100,
   "waits": {
-    "delete": "the row stays in the cache until TileRemoved arrives, so the tile reappears when the ghost goes (client/wasm/right_button.go runDeleteTile)",
     "rename": "the bar shows the old name until RenameTile answers (client/wasm/rename_overlay.go commitRename, PutWriteResponse in then)"
   },
   "decided": {},

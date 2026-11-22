@@ -44,6 +44,27 @@ var held = []Wrote{WrotePlacement, WroteZoom}
 // wroteRow is a create's: the whole row, pending (Pend).
 const wroteRow Wrote = 0
 
+// wroteGone is a delete's: the row's absence from its grid (Remove).
+const wroteGone Wrote = -1
+
+// Remove takes the cached row out of its grid ahead of the delete that asks
+// for it, and holds it out as Move holds a placement: until the delete's
+// echo, a read after its answer, or its failure, which puts it back. Nil
+// when the row is not cached.
+func (c *Cache) Remove(tileID string) *Holding {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cur := c.rowLocked(tileID)
+	if cur == nil {
+		return nil
+	}
+	c.seq++
+	key := holdKey{tileID, wroteGone}
+	c.holds[key] = &hold{row: cur, seq: c.seq}
+	delete(c.grids[cur.GridId].Tiles, tileID)
+	return &Holding{c: c, key: key, seq: c.seq, origin: cur}
+}
+
 // Holding is one write's claim on the cache, settled by its verdict. A nil
 // Holding held nothing and settles nothing.
 type Holding struct {
@@ -83,20 +104,23 @@ func (c *Cache) Hold(tileID string, w Wrote, edit func(*gridwellv1.Tile)) *Holdi
 // whose echo will never name this one, so the hold ends there; a pending
 // row's answer is the node's row, filed in its place.
 func (pl *Holding) Landed(resp *gridwellv1.Tile) {
-	if pl == nil || resp == nil {
+	if pl == nil || resp == nil && pl.key.w != wroteGone {
 		return
 	}
-	if pl.key.w == wroteRow {
+	switch pl.key.w {
+	case wroteRow:
 		pl.c.unpend(pl.origin, resp)
 		return
+	case wroteGone:
+	default:
+		pl.c.PutWriteResponse(resp.GridId, resp, pl.key.w)
 	}
-	pl.c.PutWriteResponse(resp.GridId, resp, pl.key.w)
 	pl.c.mu.Lock()
 	defer pl.c.mu.Unlock()
 	h, ok := pl.c.holds[pl.key]
 	switch {
 	case !ok || h.seq != pl.seq:
-	case resp.Id != pl.key.id:
+	case resp != nil && resp.Id != pl.key.id:
 		delete(pl.c.holds, pl.key)
 	default:
 		h.landed = true
@@ -127,6 +151,12 @@ func (pl *Holding) end(restore bool) {
 		return
 	}
 	delete(c.holds, pl.key)
+	if pl.key.w == wroteGone {
+		if restore && c.rowLocked(pl.key.id) == nil {
+			c.storeLocked(pl.origin, false)
+		}
+		return
+	}
 	if cur := c.rowLocked(pl.key.id); restore && cur != nil {
 		n := proto.CloneOf(cur)
 		pl.key.w.copy(n, pl.origin)
@@ -145,8 +175,16 @@ const (
 )
 
 // admitLocked is the row a held tile may store: n with each held fact n does
-// not end the hold of. Callers hold c.mu.
+// not end the hold of, or nil for a row a delete holds out of n's grid.
+// Callers hold c.mu.
 func (c *Cache) admitLocked(n *gridwellv1.Tile, from origin) *gridwellv1.Tile {
+	gone := holdKey{n.Id, wroteGone}
+	if h, ok := c.holds[gone]; ok && h.row.GridId == n.GridId {
+		if from != byRead || !h.landed {
+			return nil
+		}
+		delete(c.holds, gone)
+	}
 	out := n
 	for _, w := range held {
 		key := holdKey{n.Id, w}

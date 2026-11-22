@@ -254,3 +254,66 @@ func TestAPatchEndsNoHold(t *testing.T) {
 		}
 	}
 }
+
+// A delete is drawn at the drop: the row leaves its grid at once and stays
+// out through every older row, until its own echo, a read after its answer,
+// or its refusal, which puts it back.
+func TestADeleteHoldsTheRowOutUntilItsVerdict(t *testing.T) {
+	row := func(grid string, x int64) *gridwellv1.Tile {
+		return &gridwellv1.Tile{Id: "t", GridId: grid, Kind: rpc.KindText, X: x, W: 1, H: 1, Version: 2}
+	}
+	changed := func(n *gridwellv1.Tile) func(*Cache) {
+		return func(c *Cache) {
+			c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{Tile: n}}})
+		}
+	}
+	removed := func(c *Cache) {
+		c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileRemoved{TileRemoved: &gridwellv1.TileRemoved{GridId: "a", TileId: "t"}}})
+	}
+	read := func(rows ...*gridwellv1.Tile) func(*Cache) {
+		return func(c *Cache) { c.PutGrid(&gridwellv1.Grid{Id: "a"}, rows) }
+	}
+	type step func(*Cache, *Holding)
+	do := func(f func(*Cache)) step { return func(c *Cache, _ *Holding) { f(c) } }
+	landed := step(func(_ *Cache, pl *Holding) { pl.Landed(nil) })
+	failed := step(func(_ *Cache, pl *Holding) { pl.Failed() })
+
+	cases := []struct {
+		name  string
+		steps []step
+		in    bool // the row is in grid a
+		trash bool // the row is in the trash
+	}{
+		{name: "it leaves its grid at the drop"},
+		{name: "an older echo in its grid cannot put it back", steps: []step{do(changed(row("a", 3)))}},
+		{name: "a read from before the delete cannot put it back", steps: []step{do(read(row("a", 0)))}},
+		{name: "the trash's echo files it in the trash", steps: []step{do(changed(row("trash", 0)))}, trash: true},
+		{name: "a read after the answer is the node's word", steps: []step{landed, do(read(row("a", 0)))}, in: true},
+		{name: "after its own echo the stream is the node's word", steps: []step{do(removed), do(changed(row("a", 4)))}, in: true},
+		{name: "a refusal puts it back", steps: []step{failed}, in: true},
+		{name: "a refusal after its own echo leaves it gone", steps: []step{do(removed), failed}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := New()
+			c.PutGrid(&gridwellv1.Grid{Id: "a"}, []*gridwellv1.Tile{row("a", 0)})
+			c.PutGrid(&gridwellv1.Grid{Id: "trash"}, nil)
+			pl := c.Remove("t")
+			if pl == nil {
+				t.Fatal("Remove of a cached row held nothing")
+			}
+			for _, s := range tc.steps {
+				s(c, pl)
+			}
+			if g, _ := c.Grid("a"); (g.Tiles["t"] != nil) != tc.in {
+				t.Errorf("row in its grid = %v, want %v", g.Tiles["t"] != nil, tc.in)
+			}
+			if g, _ := c.Grid("trash"); (g.Tiles["t"] != nil) != tc.trash {
+				t.Errorf("row in the trash = %v, want %v", g.Tiles["t"] != nil, tc.trash)
+			}
+		})
+	}
+	if pl := New().Remove("t"); pl != nil {
+		t.Errorf("Remove of an uncached row = %v, want nil", pl)
+	}
+}

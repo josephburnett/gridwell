@@ -425,8 +425,8 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	if t != nil {
 		dstGridID = t.gridID
 	}
-	// No snapback: the tile vanishes either way, so a failed delete putting the
-	// row back on screen is the reconcile.
+	// No snapback: the row leaves the grid at the drop (cache.Remove), so a
+	// failed delete putting it back on screen is the reconcile.
 	srcGrid, dst := d.srcGridID, dstGridID
 	refetch := func() {
 		a.refetchGrid(srcGrid)
@@ -443,10 +443,16 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 		// goes with the last row naming it, so its cached verdict is stale
 		// either way.
 		a.forgetShellAlive(src.Id)
+		gone := a.c.Remove(src.Id)
 		a.post(write{
-			label: "DeleteTile", gid: srcGrid,
+			label: "DeleteTile", gid: srcGrid, optimistic: gone != nil,
 			call: a.deleteCall(req),
-			undo: refetch,
+			then: func() { gone.Landed(nil) },
+			undo: func() {
+				gone.Failed()
+				refetch()
+				a.scheduleDraw(traceevent.WhyDrag)
+			},
 		})
 	}
 }

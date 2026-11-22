@@ -270,7 +270,9 @@ func (c *Cache) PutGrid(g *gridwellv1.Grid, tiles []*gridwellv1.Tile) {
 	gr := &Grid{Meta: g, Tiles: map[string]*gridwellv1.Tile{}}
 	var away []*gridwellv1.Tile
 	for _, n := range tiles {
-		if n = c.admitLocked(n, byRead); n.GridId != g.Id {
+		if n = c.admitLocked(n, byRead); n == nil {
+			continue
+		} else if n.GridId != g.Id {
 			away = append(away, n)
 			continue
 		}
@@ -626,7 +628,9 @@ func (c *Cache) PutWriteResponse(gridID string, resp *gridwellv1.Tile, w Wrote) 
 		n.Version = resp.Version
 	}
 	w.copy(n, resp)
-	if n = c.admitLocked(n, byRead); n.GridId != g.Meta.GetId() {
+	if n = c.admitLocked(n, byRead); n == nil {
+		return
+	} else if n.GridId != g.Meta.GetId() {
 		c.storeLocked(n, false)
 		return
 	}
@@ -634,9 +638,12 @@ func (c *Cache) PutWriteResponse(gridID string, resp *gridwellv1.Tile, w Wrote) 
 }
 
 // storeLocked puts n in its grid through putTileLocked, or, for a grid this
-// cache does not hold, only ages and evicts. told is putTileLocked's. Callers
-// hold c.mu.
+// cache does not hold, only ages and evicts; a nil n, a row admitLocked
+// holds out, stores nothing. told is putTileLocked's. Callers hold c.mu.
 func (c *Cache) storeLocked(n *gridwellv1.Tile, told bool) bool {
+	if n == nil {
+		return false
+	}
 	g, ok := c.grids[n.GridId]
 	if !ok {
 		c.ageContentLocked(n, told)
@@ -683,6 +690,11 @@ func (c *Cache) Apply(ev *gridwellv1.Event) bool {
 		// The held placement put it here after this removal.
 		if h, ok := c.holds[holdKey{r.TileId, WrotePlacement}]; ok && h.row.GridId == r.GridId {
 			return false
+		}
+		// A delete's own echo: what the stream says of the row from here on
+		// is newer.
+		if h, ok := c.holds[holdKey{r.TileId, wroteGone}]; ok && h.row.GridId == r.GridId {
+			delete(c.holds, holdKey{r.TileId, wroteGone})
 		}
 		_, present := g.Tiles[r.TileId]
 		c.dropCleanLocked(r.TileId)

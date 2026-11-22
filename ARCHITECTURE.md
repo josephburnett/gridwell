@@ -771,6 +771,7 @@ copy:
 | where is this pane | `pane.Stack` |
 | is this write still owed | `outbox.Send` |
 | a row drawn ahead of the create that mints it, and what it is drawn as | `cache.Cache.Pend` (`Grid.Drawn` draws, `Grid.Tiles` is hit); `dragdrop.CreateDrawn`, `dragdrop.CopyDrawn` |
+| a row a delete has taken away ahead of its verdict | `cache.Cache.Remove` |
 | the bytes, their version, edited or not | one cache entry per tile id |
 | which dividers a press grabs | `pane.GrabDividers` (one per axis) |
 | what Esc lets go of, and what it puts back | `gesture.Escape` over the armed gestures, and with none armed the selection it clears; a parked live view relays the key |
