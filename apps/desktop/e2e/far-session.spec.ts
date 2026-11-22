@@ -5,7 +5,7 @@ import { test, expect, homePassword, loginToken } from './fixtures';
 import type { GridwellDriver } from './driver';
 import { createText, createTile } from './oracle';
 import { dumpNow } from './trace';
-import { droppedPanes, errorNotices, maxInFlight, refusedCalls, repeatedReads, roundTrips } from './tracebudget';
+import { droppedPanes, errorNotices, eventToPaint, maxInFlight, refusedCalls, repeatedReads, roundTrips } from './tracebudget';
 
 // A session of ordinary use on a far node's grids, reached through a door on
 // this node's home, run once over a direct hop and once over one that holds
@@ -19,9 +19,10 @@ import { droppedPanes, errorNotices, maxInFlight, refusedCalls, repeatedReads, r
 // of test/boundary/ratchet.txt. The session's own dump then stands in for a
 // person reading it: no refusal, no read repeated with nothing between, no
 // error notice, no pane dropped from a layout, and the reads to a far grid's
-// first paint and the saves in flight per text at the numbers recorded. A
-// failure the session finds today is listed under known, with why, so the
-// spec is green and the list, counted in the same row, is exact.
+// first paint and the saves in flight per text at the numbers recorded, and
+// every event folded in painted within boundMs. A failure the session finds
+// today is listed under known, with why, so the spec is green and the list,
+// counted in the same row, is exact.
 
 const SPEC = path.join(__dirname, 'far-session.json');
 
@@ -273,7 +274,8 @@ for (const delay of [0, recorded.delayMs]) {
       const round = (r: Record<string, number>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Math.round(v)]));
       const trips = roundTrips(lines, s.firstOpen.from, s.firstOpen.to);
       const saves = Math.max(0, ...maxInFlight(lines, 'WriteContent').values());
-      const report = { delay, ms: round(s.ms), reads: round(s.reads), firstOpenRoundTrips: trips, textSavesInFlight: saves };
+      const eventPaintMs = Math.round(Math.max(0, ...eventToPaint(lines).map((p) => p.ms)));
+      const report = { delay, ms: round(s.ms), reads: round(s.reads), firstOpenRoundTrips: trips, textSavesInFlight: saves, eventPaintMs };
       console.log(`[far-session] ${JSON.stringify(report)}`);
       await info.attach('far-session.json', { body: JSON.stringify(report, null, 2), contentType: 'application/json' });
       await info.attach('dump.jsonl', { body: lines.map((l) => JSON.stringify(l)).join('\n'), contentType: 'application/jsonl' });
@@ -291,6 +293,7 @@ for (const delay of [0, recorded.delayMs]) {
       expect.soft(Object.values(s.reads).every(Number.isFinite), 'every read cell painted').toBe(true);
       expect.soft(trips, 'serial reads before a far grid first paints').toBe(recorded.firstOpenRoundTrips);
       expect.soft(saves, 'saves of one text in flight at once').toBe(recorded.textSavesInFlight);
+      expect.soft(eventPaintMs, `an event folded in is painted within ${recorded.boundMs} ms`).toBeLessThan(recorded.boundMs);
 
       const fmt = (xs: unknown[]) => JSON.stringify(xs, null, 1);
       expect.soft(fmt(refusedCalls(lines)), 'no call refused').toBe('[]');

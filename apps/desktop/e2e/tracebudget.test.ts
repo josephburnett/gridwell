@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { TraceLine } from './trace';
 import {
-  attribute, budgetVerdict, CAUSE_MS, droppedPanes, errorNotices, GestureWindow, maxInFlight, refusedCalls,
-  repeatedReads, roundTrips, unattributed,
+  attribute, budgetVerdict, CAUSE_MS, droppedPanes, errorNotices, eventToPaint, GestureWindow, maxInFlight,
+  refusedCalls, repeatedReads, roundTrips, unattributed,
 } from './tracebudget';
 
 let seq = 0;
@@ -154,4 +154,22 @@ test('round trips are the longest chain of reads each asked after the last was a
   assert.equal(roundTrips(lines, 10, 50), 3);
   assert.equal(roundTrips(lines, 10, 32), 2);
   assert.equal(roundTrips(lines, 100, 200), 0);
+});
+
+const crec = (src: string, kind: string, msg: string, ct: number, kv?: Record<string, string>): TraceLine => ({
+  ...rec('client', src, kind, msg, ct, kv),
+  ct,
+});
+
+test("an event's paint is the first draw begun after it was folded in, on the client's clock", () => {
+  const lines = [
+    crec('render', 'draw', 'pointer move', 100, { ms: '8' }),
+    crec('events', 'apply', 'tile changed', 105, { id: 't/1' }),
+    crec('render', 'draw', 'event applied', 130, { ms: '9.5' }),
+    crec('events', 'apply', 'grid changed', 200, { id: 'g/1' }),
+  ];
+  assert.deepEqual(eventToPaint(lines), [
+    { id: 't/1', msg: 'tile changed', ms: 25 },
+    { id: 'g/1', msg: 'grid changed', ms: Infinity },
+  ]);
 });

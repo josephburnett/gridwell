@@ -54,7 +54,8 @@ func TestAnEmptyValueIsNoKey(t *testing.T) {
 func TestDrawReasonsAreDistinct(t *testing.T) {
 	seen := map[string]bool{}
 	for _, why := range []string{WhyAnimation, WhyTransition, WhyGhost, WhyTraceFade,
-		WhyNotice, WhyGridLoaded, WhyContent, WhyPreview, WhyDrag, WhyReask} {
+		WhyNotice, WhyGridLoaded, WhyContent, WhyPreview, WhyMirror, WhyRaster, WhyEvent,
+		WhyDrag, WhyReask, WhySelection, WhyWheel, WhyPointer} {
 		if why == "" {
 			t.Fatal("a draw reason is empty")
 		}

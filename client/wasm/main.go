@@ -1082,7 +1082,7 @@ func (a *App) startSSE() {
 			a.emit(traceevent.EventRecv(ev))
 			if a.c.Apply(ev) {
 				a.emit(traceevent.EventApplied(ev))
-				a.draw()
+				a.scheduleDraw(traceevent.WhyEvent)
 			}
 			// events.Route and events.Owe are the tables; this runs their arms.
 			if g := events.Owe(ev); g != "" {
@@ -1116,7 +1116,7 @@ func (a *App) startSSE() {
 				fr, ok := rpc.ViewOf(f.GetViewCx(), f.GetViewCy(), f.GetViewZoom()).Framing()
 				if ok && a.cacheDoorFraming(f.GetGridId(), fr) {
 					a.emit(traceevent.EventApplied(ev))
-					a.draw()
+					a.scheduleDraw(traceevent.WhyEvent)
 				}
 			}
 			if plan.Health != nil {

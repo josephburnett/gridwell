@@ -12,6 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/client/rasterprev"
 	"github.com/josephburnett/gridwell/client/textedit"
+	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
 // Rendered grid previews: a text tile whose stored text_mode is "rendered"
@@ -70,7 +71,7 @@ func (a *App) drawRenderedPreview(n *gridwellv1.Tile, frame markdown.PreviewFram
 		div.Set("innerHTML", textedit.PresentationHTML(n, body))
 		xhtml := js.Global().Get("XMLSerializer").New().Call("serializeToString", div).String()
 		return markdown.PreviewSVG(xhtml, bucket, renderedPreviewMaxH, k.Scale, a.pal), true
-	}, func() { a.draw() })
+	}, func() { a.scheduleDraw(traceevent.WhyRaster) })
 	sr, ok := r.(*svgRaster)
 	if !ok {
 		return false

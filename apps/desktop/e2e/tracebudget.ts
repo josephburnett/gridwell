@@ -311,3 +311,31 @@ export function roundTrips(lines: TraceLine[], from: number, to: number): number
   });
   return Math.max(0, ...depth);
 }
+
+// Painted is one event the client folded in that changed what it shows, and
+// the ms from folding it in to the end of the first draw that began after:
+// how long the node's answer waited to reach the screen.
+export interface Painted {
+  id: string;
+  msg: string;
+  ms: number;
+}
+
+// eventToPaint reads the client's own clock, the events/apply and render/draw
+// records of one page, so no skew between the clocks enters it. A draw's
+// start is its ct less its kv.ms; an apply with no draw after it is Infinity.
+export function eventToPaint(lines: TraceLine[]): Painted[] {
+  const client = lines.filter((r) => r.origin === 'client' && r.ct !== undefined);
+  const draws = client
+    .filter((r) => r.src === 'render' && r.kind === 'draw')
+    .map((r) => ({ start: r.ct! - Number(r.kv?.ms ?? 0), end: r.ct! }))
+    .sort((a, b) => a.start - b.start);
+  return client
+    .filter((r) => r.src === 'events' && r.kind === 'apply')
+    .map((r) => {
+      // ct is whole ms and a draw's ms is not, so a draw begun in the same
+      // millisecond as the apply counts as after it.
+      const d = draws.find((d) => d.start >= r.ct! - 1);
+      return { id: r.kv?.id ?? '', msg: r.msg, ms: d ? d.end - r.ct! : Infinity };
+    });
+}

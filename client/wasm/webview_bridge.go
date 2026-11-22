@@ -10,6 +10,7 @@ import (
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gesture"
+	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/urlview"
 )
 
@@ -264,7 +265,7 @@ func (a *App) installWebviewListeners() {
 			// An unreadable preview frame is the same as none: the next one
 			// replaces it, and the tile keeps the preview it had until then.
 			if jpeg, _ := decodeBase64(ev.Get("jpegBase64")); len(jpeg) > 0 {
-				a.views.urlPreview.PutWildcard(jsString(ev.Get("tileId")), jpeg, func() { a.draw() })
+				a.views.urlPreview.PutWildcard(jsString(ev.Get("tileId")), jpeg, func() { a.scheduleDraw(traceevent.WhyMirror) })
 			}
 		}},
 		{"onNav", func(ev js.Value) {

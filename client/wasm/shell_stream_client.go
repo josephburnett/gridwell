@@ -597,7 +597,7 @@ func (a *App) mirrorShell(conn *shellStreamConn) {
 	}
 	a.e2e.shellMirrorPasses++
 	if jpeg := snapshotShellCanvas(conn.container); jpeg != nil {
-		a.views.urlPreview.PutWildcard(conn.tileID, jpeg, func() { a.draw() })
+		a.views.urlPreview.PutWildcard(conn.tileID, jpeg, func() { a.scheduleDraw(traceevent.WhyMirror) })
 	}
 }
 
@@ -633,7 +633,7 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 	if jpegBytes := snapshotShellCanvas(conn.container); freeze && jpegBytes != nil {
 		tileID := conn.tileID
 		// A wildcard: the blob id is unknown until SetShellPreview returns.
-		a.views.urlPreview.PutWildcard(tileID, jpegBytes, func() { a.draw() })
+		a.views.urlPreview.PutWildcard(tileID, jpegBytes, func() { a.scheduleDraw(traceevent.WhyMirror) })
 		a.postSetShellPreview(tileID, conn.anchor, slices.Clone(conn.path), jpegBytes)
 	}
 	a.shells.Close(conn.key)

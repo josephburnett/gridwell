@@ -247,7 +247,7 @@ func (a *App) closeURLStream(paneID string, freeze bool) {
 			})
 		}
 		if len(jpeg) > 0 {
-			a.views.urlPreview.PutWildcard(previewKey, jpeg, func() { a.draw() })
+			a.views.urlPreview.PutWildcard(previewKey, jpeg, func() { a.scheduleDraw(traceevent.WhyMirror) })
 		}
 		a.draw()
 	})
