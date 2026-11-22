@@ -26,8 +26,11 @@ type LayoutPane struct {
 
 // layoutOf decodes the layout of workspace tile tileID with the client's own
 // decoder (pane.DecodeLayout), spelling its ids as the tile's are: the blob
-// holds them in the owning node's frame.
+// holds them in the owning node's frame; a tile never arranged has no panes.
 func layoutOf(tileID string, data []byte, version int64) (*Layout, error) {
+	if len(data) == 0 {
+		return &Layout{Version: version, Panes: []LayoutPane{}}, nil
+	}
 	prefix := pane.ChainPrefix(tileID)
 	tree, err := pane.DecodeLayout(data, func(id string) string { return prefix + id }, "")
 	if err != nil {

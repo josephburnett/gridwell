@@ -684,3 +684,21 @@ func TestMCPReadsTheTemplatesGrid(t *testing.T) {
 		t.Fatalf("templates = %+v, want the one copy", grid.Tiles)
 	}
 }
+
+// A workspace tile the + menu made has no layout until it is first entered,
+// and read_tiles answers it with no panes rather than refusing it.
+func TestMCPReadsANeverArrangedWorkspaceAsNoPanes(t *testing.T) {
+	n := newMCPNode(t)
+	s, err := n.agent(t, bearer(testPassword))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws, err := newRouter(n.srv).CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: n.root,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: 0, Y: 0, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := readOne(t, s, ws.GetTile().GetId()); r.Layout == nil || len(r.Layout.Panes) != 0 {
+		t.Fatalf("read_tiles = %+v, want a layout with no panes", r.Layout)
+	}
+}

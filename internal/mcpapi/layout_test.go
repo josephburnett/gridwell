@@ -30,3 +30,12 @@ func TestLayoutOfAnswersThePanesUnderTheTilesChain(t *testing.T) {
 		t.Errorf("a newer blob = %v, want refused", err)
 	}
 }
+
+// A workspace tile never arranged holds no blob: it answers no panes, the
+// state its first descent fills with the default single pane.
+func TestLayoutOfANeverArrangedWorkspaceIsNoPanes(t *testing.T) {
+	l, err := layoutOf("me/5", nil, 1)
+	if err != nil || l.Version != 1 || l.Panes == nil || len(l.Panes) != 0 {
+		t.Fatalf("no blob = %+v, %v; want no panes at version 1", l, err)
+	}
+}
