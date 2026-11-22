@@ -382,6 +382,8 @@ func Nav(g nav.Gesture) Event {
 		e.Kind, e.Msg = "reengage", "engage installed leaves"
 	case nav.GestureReconcileLevel:
 		e.Kind, e.Msg, e.KV = "restore", "reconcile workspace tile", kv("tile", g.TileID)
+	case nav.GestureShowStrip:
+		e.Kind, e.Msg, e.KV = "read", "show the + menu's strip", kv("grid", g.GridID)
 	default:
 		e.Kind, e.Msg = "unknown", "unnamed gesture "+strconv.Itoa(int(g.Kind))
 	}

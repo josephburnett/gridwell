@@ -2,6 +2,10 @@ package traceevent
 
 import (
 	"errors"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"strconv"
 	"testing"
 
@@ -95,8 +99,9 @@ func TestADrawIsOneRecordUnderItsFirstReason(t *testing.T) {
 	}
 }
 
-// Every navigation verb has a direction and a name here. A verb inserted into
-// the closed set fails the count rather than reaching a dump unnamed.
+// Every navigation verb has a direction and a name here. The count is of the
+// constants nav declares, read from its source, so a verb added anywhere in
+// the closed set fails here rather than reaching a dump unnamed.
 func TestEveryGestureIsNamed(t *testing.T) {
 	cases := []struct {
 		g    nav.Gesture
@@ -115,9 +120,11 @@ func TestEveryGestureIsNamed(t *testing.T) {
 		{nav.Gesture{Kind: nav.GestureFollowLink, Door: &pb.Tile{Id: "l7abcde"}}, "push", "follow link"},
 		{nav.Gesture{Kind: nav.GestureEngageLeaves}, "reengage", "engage installed leaves"},
 		{nav.Gesture{Kind: nav.GestureReconcileLevel, TileID: "w7abcde"}, "restore", "reconcile workspace tile"},
+		{nav.Gesture{Kind: nav.GestureShowStrip, GridID: "t7abcde"}, "read", "show the + menu's strip"},
 	}
-	if len(cases) != int(nav.GestureReconcileLevel)+1 {
-		t.Fatalf("%d gestures named, %d declared", len(cases), int(nav.GestureReconcileLevel)+1)
+	declared := gestureKinds(t)
+	if len(cases) != declared {
+		t.Fatalf("%d gestures named, %d declared", len(cases), declared)
 	}
 	for _, c := range cases {
 		e := Nav(c.g)
@@ -125,13 +132,35 @@ func TestEveryGestureIsNamed(t *testing.T) {
 			t.Errorf("gesture %d is %+v, want kind %q msg %q", c.g.Kind, e, c.kind, c.msg)
 		}
 	}
-	if e := Nav(nav.Gesture{Kind: nav.GestureReconcileLevel + 1}); e.Kind != "unknown" {
+	if e := Nav(nav.Gesture{Kind: nav.GestureKind(declared)}); e.Kind != "unknown" {
 		t.Errorf("an unnamed gesture reads %+v", e)
 	}
 	// The door is what a reader follows into the next grid.
 	if got := Nav(cases[0].g).KV["door"]; got != "t7abcde" {
 		t.Errorf("the descent names door %q", got)
 	}
+}
+
+// gestureKinds counts the GestureKind constants nav's source declares.
+func gestureKinds(t *testing.T) int {
+	f, err := parser.ParseFile(token.NewFileSet(), "../nav/gesture.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, d := range f.Decls {
+		g, ok := d.(*ast.GenDecl)
+		if !ok || g.Tok != token.CONST {
+			continue
+		}
+		if first, ok := g.Specs[0].(*ast.ValueSpec); !ok || fmt.Sprint(first.Type) != "GestureKind" {
+			continue
+		}
+		for _, s := range g.Specs {
+			n += len(s.(*ast.ValueSpec).Names)
+		}
+	}
+	return n
 }
 
 // Every drop verdict is named, so a release that did nothing the user
