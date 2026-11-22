@@ -740,11 +740,16 @@ These were decided deliberately. Do not reverse one without a new decision.
   (`store.FreeSlot`). It
   exposes no destroy from the trash, no shells and no config;
   `docs/mcp.md` is the contract; `read_grid` with the id `templates` reads
-  home's templates grid (2026-11-09). It has ten tools (2026-10-18): `sessions`,
-  `read_grid`, `read_tiles`, `find`, `write_text`, `rename`, `move`, `copy`,
-  `delete` and `select`, and every write takes a list and answers a verdict
-  per item in order, each item its own write with its own claim, a refused
-  one stopping none after it. A session answers only where the user is
+  home's templates grid (2026-11-09). It has eleven tools (2026-10-18,
+  2026-11-22): `sessions`, `read_grid`, `read_tiles`, `find`, `write_text`,
+  `create`, `rename`, `move`, `copy`, `delete` and `select`, and every write
+  takes a list and answers a verdict per item in order, each item its own
+  write with its own claim, a refused one stopping none after it. `create`
+  makes a text, url, door or workspace tile as the + menu does, a text
+  through `write_text`'s own create, and refuses a shell, a file and a
+  directory (Joe, 2026-11-22: "The MCP server should be able to do
+  everything I can do", and of these limits, "Let's keep these limitations
+  though"). A session answers only where the user is
   (2026-10-18): `sessions` lists every screen showing the node, newest
   change first, each with its workspace tiles and its panes' places, grids and
   focus, and marks yours the one holding the agent's shell live; it chooses

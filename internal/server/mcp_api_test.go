@@ -211,8 +211,8 @@ func readOne(t *testing.T, s *mcp.ClientSession, id string) mcpapi.TileRead {
 	return r
 }
 
-// The API lists its ten tools and nothing else (docs/mcp.md).
-func TestTheMCPAPIListsItsTenTools(t *testing.T) {
+// The API lists its eleven tools and nothing else (docs/mcp.md).
+func TestTheMCPAPIListsItsElevenTools(t *testing.T) {
 	n := newMCPNode(t)
 	s, err := n.agent(t, bearer(testPassword))
 	if err != nil {
@@ -226,7 +226,7 @@ func TestTheMCPAPIListsItsTenTools(t *testing.T) {
 	for _, tl := range res.Tools {
 		got = append(got, tl.Name)
 	}
-	want := []string{"copy", "delete", "find", "move", "read_grid", "read_tiles", "rename", "select", "sessions", "write_text"}
+	want := []string{"copy", "create", "delete", "find", "move", "read_grid", "read_tiles", "rename", "select", "sessions", "write_text"}
 	if slices.Sort(got); !slices.Equal(got, want) {
 		t.Fatalf("tools = %v, want %v", got, want)
 	}

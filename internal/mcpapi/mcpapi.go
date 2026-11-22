@@ -17,6 +17,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/urlnorm"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
@@ -41,6 +42,9 @@ lately come from find with kind workspace and content_changed {}.
 Templates. ` + templates + `
 
 Gridwell references. ` + references
+
+// createDoc is create's description, which docs/mcp.md says word for word.
+const createDoc = `Creates text, url, door and workspace tiles as the + menu makes them, a list of items applied in order, a verdict per item: each a 1×1 tile in grid, at the first free cell or at or below the cell named in near. A text is born with its body, its name the body's first line; a url needs its address, http or https, a bare host taken as https; a door holds a new grid of its own, its child_grid; a workspace tile has no panes until it is first entered. A url, door or workspace tile given a name has it typed; with none a url follows its page title. On a directory's grid each is a Gridwell tile over it, nothing on disk. A shell, a file and a directory are refused.`
 
 // templates is the section docs/mcp.md says word for word under "Templates".
 const templates = `The + menu's templates are the tiles of home's templates grid, an
@@ -79,6 +83,7 @@ func New(rt namespace.Namespace, node, version string, screens Screens) *mcp.Ser
 	mcp.AddTool(s, &mcp.Tool{Name: "read_tiles", Description: "Read tiles by id, one answer per id in order: its row, and the body of a text tile (with body_version, the claim write_text takes), the address of a url, the tmux a shell names, the grid a door holds, or a workspace tile's layout: each pane's place, the grid the layout names, its content tile and whether it is focused. A link answers its target's content, or dead. An id that cannot be read is that answer's refusal, not the call's."}, d.readTiles)
 	mcp.AddTool(s, &mcp.Tool{Name: "find", Description: "Find tiles by name, body or address, everywhere or within one namespace; each hit carries the doors it sits inside. Filters narrow it and combine: grid (with recurse, the grids inside its doors too), created, modified (any write: a move, a framing, content) and content_changed, each a {from, to} range of RFC 3339 times, either end left open,, selected (only tiles in their grid's selection) and kind (text, url, shell, door or workspace). With a filter the query may be empty: it then lists what passes, newest first, by the time filtered on, else when made; kind workspace with content_changed {} lists the workspaces by when their layout last changed."}, d.find)
 	mcp.AddTool(s, &mcp.Tool{Name: "write_text", Description: "Write text tiles, a list of items applied in order, a verdict per item. An item with id replaces that text tile's whole body (through a link, its target's), claiming the version you read or, with none, the one on disk now. An item with grid and no id creates a 1x1 text tile there, its name the body's first line, at the first free cell or at or below the cell named in near."}, d.writeText)
+	mcp.AddTool(s, &mcp.Tool{Name: "create", Description: createDoc}, d.create)
 	mcp.AddTool(s, &mcp.Tool{Name: "rename", Description: "Rename url, shell, door or workspace tiles, a list of items applied in order, a verdict per item. A text tile's name is its first line, so write_text renames it."}, d.rename)
 	mcp.AddTool(s, &mcp.Tool{Name: "move", Description: "Move or resize tiles, within a grid or to another grid of the same node (a Gridwell tile between home and a directory, a file to another directory), a list of items applied in order, a verdict per item; each claims the placement its tile has now."}, d.move)
 	mcp.AddTool(s, &mcp.Tool{Name: "copy", Description: "Copy tiles into a grid (the tile's own when none is named), at the cell named or beside the tile, a list of items applied in order, a verdict per item. link false is a deep copy, but a directory's door, or a file copied onto a Gridwell grid, lands as a link, and a file into a directory of its node copies on disk; link true is a link: a dashed tile showing the same content, in this namespace or across one."}, d.copy)
@@ -350,12 +355,60 @@ func (d *toolset) createText(ctx context.Context, it writeTextItem) (Verdict, er
 	if it.Version != nil || it.Stamp != "" {
 		return Verdict{}, errors.New("refused: a new tile has nothing to claim; version and stamp go with id")
 	}
-	x, y, err := d.slot(ctx, it.Grid, it.Near.near(), 1, 1)
-	if err != nil {
+	return d.createTile(ctx, createItem{Kind: rpc.KindText, Grid: it.Grid, Near: it.Near, Body: it.Body})
+}
+
+type createItem struct {
+	Kind    string `json:"kind" jsonschema:"what to make, as the + menu makes it: text, url, door or workspace"`
+	Grid    string `json:"grid" jsonschema:"the grid to create the tile in"`
+	Near    *Cell  `json:"near,omitempty" jsonschema:"a cell to land at, or below it in its column when taken"`
+	Name    string `json:"name,omitempty" jsonschema:"a url's, door's or workspace tile's typed name; a text's is its body's first line"`
+	Address string `json:"address,omitempty" jsonschema:"a url's address, which it needs: http or https, a bare host taken as https"`
+	Body    string `json:"body,omitempty" jsonschema:"a text's body, markdown; its first line is the tile's name"`
+}
+
+type createIn struct {
+	Items []createItem `json:"items" jsonschema:"the tiles to create, applied in order"`
+}
+
+// noDisk is why create makes neither of the + menu's disk primitives.
+const noDisk = "refused: the MCP API writes nothing to disk; on a directory's grid create makes a Gridwell tile over it"
+
+func (d *toolset) create(ctx context.Context, _ *mcp.CallToolRequest, in createIn) (*mcp.CallToolResult, WriteOut, error) {
+	return each(in.Items, func(it createItem) (Verdict, error) { return d.createTile(ctx, it) })
+}
+
+// createTile is the create the + menu's swatch for it.Kind sends, a 1x1 tile
+// at the first free cell or at or below near. A new tile claims nothing.
+func (d *toolset) createTile(ctx context.Context, it createItem) (Verdict, error) {
+	k := rpc.KindOf(it.Kind)
+	switch {
+	case it.Kind == "file" || it.Kind == "directory":
+		return Verdict{}, errors.New(noDisk)
+	case k.Tmux:
+		return Verdict{}, errors.New("refused: shells are not reachable through the MCP API")
+	case k == (rpc.KindCaps{}):
+		return Verdict{}, fmt.Errorf("refused: create makes a text, url, door or workspace tile, not %q", it.Kind)
+	case it.Grid == "":
+		return Verdict{}, errors.New("refused: an item names the grid to create the tile in")
+	case it.Address != "" && k.Content != rpc.ContentAddress:
+		return Verdict{}, errors.New("refused: only a url holds an address")
+	case it.Body != "" && k.Content != rpc.ContentBody:
+		return Verdict{}, errors.New("refused: only a text is born with a body")
+	case it.Name != "" && !k.TypedName:
+		return Verdict{}, errors.New("refused: a text's name is its body's first line")
+	}
+	t := &pb.Tile{Kind: it.Kind, W: 1, H: 1, AltText: it.Name, Named: it.Name != ""}
+	var err error
+	if k.Content == rpc.ContentAddress {
+		if t.UrlString, err = urlnorm.Normalize(it.Address); err != nil {
+			return Verdict{}, errors.New("refused: " + err.Error())
+		}
+	}
+	if t.X, t.Y, err = d.slot(ctx, it.Grid, it.Near.near(), 1, 1); err != nil {
 		return Verdict{}, err
 	}
-	return d.landed(d.rt.CreateTile(ctx, &pb.CreateTileRequest{GridId: it.Grid,
-		Tile: &pb.Tile{Kind: rpc.KindText, X: x, Y: y, W: 1, H: 1}, Content: []byte(it.Body)}))
+	return d.landed(d.rt.CreateTile(ctx, &pb.CreateTileRequest{GridId: it.Grid, Tile: t, Content: []byte(it.Body)}))
 }
 
 type renameItem struct {

@@ -7,7 +7,8 @@ import (
 )
 
 // The instructions' sections are the ones docs/mcp.md gives under the same
-// headings, word for word but for the page's code marks.
+// headings, and create's description its row, word for word but for the
+// page's code marks.
 func TestDocsSayTheInstructionsSections(t *testing.T) {
 	doc, err := os.ReadFile("../../docs/mcp.md")
 	if err != nil {
@@ -27,5 +28,8 @@ func TestDocsSayTheInstructionsSections(t *testing.T) {
 		if !strings.Contains(instructions, want) {
 			t.Errorf("the instructions do not carry the %s section", heading)
 		}
+	}
+	if !strings.Contains(words(string(doc)), words(createDoc)) {
+		t.Errorf("docs/mcp.md's create row does not say create's description:\n%s", createDoc)
 	}
 }
