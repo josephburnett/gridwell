@@ -136,10 +136,7 @@ func tileIDs(ctx context.Context, q gridReader, where string, args ...any) ([]in
 	if err != nil {
 		return nil, err
 	}
-	return collect(rows, func(rows *sql.Rows) (int64, error) {
-		var id int64
-		return id, rows.Scan(&id)
-	})
+	return collect(rows, scanID)
 }
 
 // TrashOver sends every Gridwell tile over the directory at path, its
@@ -149,15 +146,7 @@ func (n *FileRows) TrashOver(path string) error {
 	ctx := context.Background()
 	return n.s.withMutation(ctx, "TrashOver", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		cond, args := atOrUnder("g.key", path)
-		rows, err := tx.QueryContext(ctx, `SELECT t.id FROM tiles t JOIN grids g ON g.id = t.grid_id
-			WHERE t.key = '' AND g.key != '' AND `+cond+` ORDER BY t.id`, args...)
-		if err != nil {
-			return err
-		}
-		ids, err := collect(rows, func(rows *sql.Rows) (int64, error) {
-			var id int64
-			return id, rows.Scan(&id)
-		})
+		ids, err := tileIDs(ctx, tx, `key = '' AND grid_id IN (SELECT g.id FROM grids g WHERE g.key != '' AND `+cond+`)`, args...)
 		if err != nil {
 			return err
 		}
