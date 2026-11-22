@@ -311,6 +311,17 @@ export async function createTile(origin: string, gridId: string, kind: string, x
   return ((await res.json()) as { tile: Tile }).tile;
 }
 
+// A url tile's captured preview, as a freeze's capture writes it: no claim,
+// no version bump.
+export async function setURLPreview(origin: string, tileId: string, jpeg: Buffer): Promise<void> {
+  const res = await fetch(`${origin}/${SERVICE}/SetTile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: JSON.stringify({ tileId, tile: { kind: 'url' }, preview: jpeg.toString('base64') }),
+  });
+  if (!res.ok) throw new Error(`SetTile(${tileId}) preview failed: ${res.status} ${await res.text()}`);
+}
+
 // A leaf link: one content tile shown here by its id. The node stores the
 // target as given, so this is also how a spec seeds a link to a gone key.
 export async function createLeafLink(

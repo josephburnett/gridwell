@@ -3,9 +3,9 @@ import * as path from 'node:path';
 import type { Page } from '@playwright/test';
 import { test, expect, homePassword, loginToken } from './fixtures';
 import type { GridwellDriver } from './driver';
-import { createText, createTile } from './oracle';
+import { createText, createTile, setURLPreview } from './oracle';
 import { dumpNow } from './trace';
-import { droppedPanes, errorNotices, eventToPaint, maxInFlight, refusedCalls, repeatedReads, roundTrips } from './tracebudget';
+import { askedAtOnce, droppedPanes, errorNotices, eventToPaint, maxInFlight, QUEUE_MS, queuedCalls, refusedCalls, repeatedReads, roundTrips } from './tracebudget';
 
 // A session of ordinary use on a far node's grids, reached through a door on
 // this node's home, run once over a direct hop and once over one that holds
@@ -19,10 +19,11 @@ import { droppedPanes, errorNotices, eventToPaint, maxInFlight, refusedCalls, re
 // of test/boundary/ratchet.txt. The session's own dump then stands in for a
 // person reading it: no refusal, no read repeated with nothing between, no
 // error notice, no pane dropped from a layout, and the reads to a far grid's
-// first paint and the saves in flight per text at the numbers recorded, and
-// every event folded in painted within boundMs. A failure the session finds
-// today is listed under known, with why, so the spec is green and the list,
-// counted in the same row, is exact.
+// first paint, the saves in flight per text and the calls one turn asks at
+// once (what the page's six sockets to its node must hold) at the numbers
+// recorded, and every event folded in painted within boundMs. A failure the
+// session finds today is listed under known, with why, so the spec is green
+// and the list, counted in the same row, is exact.
 
 const SPEC = path.join(__dirname, 'far-session.json');
 
@@ -34,6 +35,7 @@ interface Recorded {
   known: Record<string, string>;
   firstOpenRoundTrips: number;
   textSavesInFlight: number;
+  callsAskedAtOnce: number;
 }
 
 const recorded = JSON.parse(fs.readFileSync(SPEC, 'utf8')) as Recorded;
@@ -120,6 +122,26 @@ interface Session {
   ms: Record<string, number>;
   reads: Record<string, number>;
   firstOpen: { from: number; to: number };
+}
+
+// PAGES url tiles, each with a captured preview, are more previews than the
+// page's six sockets to its node hold at once.
+const PAGES = 16;
+
+// noiseJPEG is a preview the size of a captured page's, made by the page's
+// own canvas: noise, so the encoder cannot shrink it.
+async function noiseJPEG(win: Page): Promise<Buffer> {
+  const b64 = await win.evaluate(() => {
+    const c = document.createElement('canvas');
+    c.width = 640;
+    c.height = 400;
+    const ctx = c.getContext('2d')!;
+    const img = ctx.createImageData(c.width, c.height);
+    for (let i = 0; i < img.data.length; i++) img.data[i] = (i * 2654435761) >>> 24;
+    ctx.putImageData(img, 0, 0);
+    return c.toDataURL('image/jpeg', 0.85).split(',')[1];
+  });
+  return Buffer.from(b64, 'base64');
 }
 
 async function session(gw: GridwellDriver, win: Page): Promise<Session> {
@@ -245,6 +267,21 @@ async function session(gw: GridwellDriver, win: Page): Promise<Session> {
   await gw.waitIdle();
   await gw.ascendViaCrumb();
 
+  // A far grid of pages opened and left at once: its previews, asked at the
+  // landing, fill the page's sockets, and the ascent's calls wait behind them.
+  const pagesDoor = await createTile(gw.origin, f.gridID, 'door', cx + 4, cy + 2);
+  const jpeg = await noiseJPEG(win);
+  for (let i = 0; i < PAGES; i++) {
+    const t = await createTile(gw.origin, pagesDoor.childGridId!, 'url', i % 4, Math.floor(i / 4));
+    await setURLPreview(gw.origin, t.id, jpeg);
+  }
+  await expect.poll(() => at(cx + 4, cy + 2), { timeout: 15_000 }).toBe(pagesDoor.id);
+  await gw.waitIdle();
+  await gw.descendCell(cx + 4, cy + 2);
+  await win.waitForTimeout(500);
+  await gw.ascendViaCrumb();
+  await gw.waitIdle();
+
   // The workspace tile made above, entered and left.
   ms['enter a workspace'] = await msToPaint(win, 'mouseup', { kind: 'level', depth: 0 }, () => gw.descendCell(cx + 4, cy));
   await expect.poll(() => win.evaluate(() => (window as any).__gridwellTest.workspace().depth)).toBe(1);
@@ -274,8 +311,15 @@ for (const delay of [0, recorded.delayMs]) {
       const round = (r: Record<string, number>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Math.round(v)]));
       const trips = roundTrips(lines, s.firstOpen.from, s.firstOpen.to);
       const saves = Math.max(0, ...maxInFlight(lines, 'WriteContent').values());
-      const eventPaintMs = Math.round(Math.max(0, ...eventToPaint(lines).map((p) => p.ms)));
-      const report = { delay, ms: round(s.ms), reads: round(s.reads), firstOpenRoundTrips: trips, textSavesInFlight: saves, eventPaintMs };
+      const painted = eventToPaint(lines);
+      const eventPaintMs = Math.round(Math.max(0, ...painted.map((p) => p.ms)));
+      const queued = queuedCalls(lines);
+      const callsQueued = queued.filter((q) => q.waitMs > QUEUE_MS).length;
+      const callsInFlight = Math.max(0, ...queued.map((q) => q.inFlight));
+      const atOnce = askedAtOnce(lines);
+      // Reported, not held: a wait moves with the machine's speed.
+      const waited = queued.filter((q) => q.verb !== 'GetTilePreview' && q.waitMs > QUEUE_MS).map((q) => [q.verb, Math.round(q.waitMs), q.inFlight]);
+      const report = { delay, ms: round(s.ms), reads: round(s.reads), firstOpenRoundTrips: trips, textSavesInFlight: saves, eventPaintMs, callsAskedAtOnce: atOnce, callsQueued, callsInFlight, waited };
       console.log(`[far-session] ${JSON.stringify(report)}`);
       await info.attach('far-session.json', { body: JSON.stringify(report, null, 2), contentType: 'application/json' });
       await info.attach('dump.jsonl', { body: lines.map((l) => JSON.stringify(l)).join('\n'), contentType: 'application/jsonl' });
@@ -294,6 +338,7 @@ for (const delay of [0, recorded.delayMs]) {
       expect.soft(trips, 'serial reads before a far grid first paints').toBe(recorded.firstOpenRoundTrips);
       expect.soft(saves, 'saves of one text in flight at once').toBe(recorded.textSavesInFlight);
       expect.soft(eventPaintMs, `an event folded in is painted within ${recorded.boundMs} ms`).toBeLessThan(recorded.boundMs);
+      expect.soft(atOnce, 'calls one turn asks of the six sockets').toBe(recorded.callsAskedAtOnce);
 
       const fmt = (xs: unknown[]) => JSON.stringify(xs, null, 1);
       expect.soft(fmt(refusedCalls(lines)), 'no call refused').toBe('[]');

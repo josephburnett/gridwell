@@ -339,3 +339,66 @@ export function eventToPaint(lines: TraceLine[]): Painted[] {
       return { id: r.kv?.id ?? '', msg: r.msg, ms: d ? d.end - r.ct! : Infinity };
     });
 }
+
+// Queued is one call the client made: the ms from the client sending it to
+// the node starting it, and how many of the client's calls were open at that
+// moment, Subscribe's stream among them. Over HTTP/1.1 a page holds at most
+// six sockets to its node, so a call sent while six are busy waits in the
+// browser for one to free.
+export interface Queued {
+  verb: string;
+  id: string;
+  req: string;
+  waitMs: number;
+  inFlight: number;
+}
+
+// queuedCalls pairs each client call with the node's start of it by request
+// id. The client's t is its ct plus its batch's skew, and that skew includes
+// the trace batch's own wait, so waitMs is a lower bound.
+export function queuedCalls(lines: TraceLine[]): Queued[] {
+  const nodeStart = new Map<string, number>();
+  for (const r of lines) {
+    if (r.origin !== 'node' || r.src !== 'router' || r.kind !== 'rpc' || !r.kv?.req || r.t === undefined) continue;
+    const [verb, phase] = r.msg.split(' ');
+    if (phase === 'start' && verb !== 'Subscribe' && !nodeStart.has(r.kv.req)) nodeStart.set(r.kv.req, r.t);
+  }
+  const calls = clientCalls(lines);
+  const subscribed = lines
+    .filter((r) => r.origin === 'client' && r.kind === 'rpc' && r.msg === 'Subscribe start' && r.t !== undefined)
+    .map((r) => r.t!);
+  const out: Queued[] = [];
+  for (const c of calls) {
+    const at = nodeStart.get(c.req);
+    if (at === undefined || c.verb === 'Subscribe') continue;
+    const open = calls.filter((o) => o !== c && o.verb !== 'Subscribe' && o.start <= c.start && c.start < o.end).length;
+    const streams = subscribed.filter((t) => t <= c.start).length > 0 ? 1 : 0;
+    out.push({ verb: c.verb, id: c.id, req: c.req, waitMs: Math.max(0, at - c.start), inFlight: open + streams });
+  }
+  return out;
+}
+
+// askedAtOnce is the most calls the client sent in one turn of its loop, on
+// its own clock: starts each within ONCE_MS of the last. One paint's asks
+// leave together, so this counts what one paint asks of the six sockets,
+// and unlike a wait it does not move with the machine's speed.
+export function askedAtOnce(lines: TraceLine[]): number {
+  const starts = lines
+    .filter((r) => r.origin === 'client' && r.kind === 'rpc' && r.ct !== undefined && r.msg.endsWith(' start') && r.msg !== 'Subscribe start')
+    .map((r) => r.ct!)
+    .sort((a, b) => a - b);
+  let most = 0;
+  let run = 0;
+  starts.forEach((t, i) => {
+    run = i > 0 && t - starts[i - 1] <= ONCE_MS ? run + 1 : 1;
+    most = Math.max(most, run);
+  });
+  return most;
+}
+
+export const ONCE_MS = 3;
+
+// QUEUE_MS is the wait past which a call counts as queued: far above the
+// node's own accept and the clocks' skew, and below a round trip to a far
+// node.
+export const QUEUE_MS = 50;

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { TraceLine } from './trace';
 import {
-  attribute, budgetVerdict, CAUSE_MS, droppedPanes, errorNotices, eventToPaint, GestureWindow, maxInFlight,
+  askedAtOnce, attribute, budgetVerdict, CAUSE_MS, droppedPanes, errorNotices, eventToPaint, GestureWindow, maxInFlight, queuedCalls,
   refusedCalls, repeatedReads, roundTrips, unattributed,
 } from './tracebudget';
 
@@ -172,4 +172,39 @@ test("an event's paint is the first draw begun after it was folded in, on the cl
     { id: 't/1', msg: 'tile changed', ms: 25 },
     { id: 'g/1', msg: 'grid changed', ms: Infinity },
   ]);
+});
+
+test('a call waits from the client sending it to the node starting it, beside every call then open', () => {
+  const node = (msg: string, t: number, req: string) => rec('node', 'router', 'rpc', msg, t, { req });
+  const lines = [
+    rec('client', 'rpc', 'rpc', 'Subscribe start', 0, { req: 's' }),
+    ...call('GetTilePreview', 'a', 10, 900, 'ok', { id: 't/1' }),
+    ...call('GetTilePreview', 'b', 11, 900, 'ok', { id: 't/2' }),
+    ...call('MoveTile', 'c', 20, 300, 'ok', { id: 't/3' }),
+    node('GetTilePreview start', 12, 'a'),
+    node('GetTilePreview start', 14, 'b'),
+    node('MoveTile start', 280, 'c'),
+  ];
+  assert.deepEqual(
+    queuedCalls(lines).map((q) => [q.verb, q.waitMs, q.inFlight]),
+    [
+      ['GetTilePreview', 2, 1],
+      ['GetTilePreview', 3, 2],
+      ['MoveTile', 260, 3],
+    ],
+  );
+});
+
+test('calls asked at once are the longest run of starts each within ONCE_MS of the last', () => {
+  const lines = [
+    crec('rpc', 'rpc', 'Subscribe start', 0, { req: 's' }),
+    crec('rpc', 'rpc', 'GetGrid start', 1, { req: 'a' }),
+    crec('rpc', 'rpc', 'GetTilePreview start', 100, { req: 'b' }),
+    crec('rpc', 'rpc', 'GetTilePreview start', 102, { req: 'c' }),
+    crec('rpc', 'rpc', 'GetTilePreview start', 104, { req: 'd' }),
+    crec('rpc', 'rpc', 'GetTilePreview ok', 105, { req: 'b' }),
+    crec('rpc', 'rpc', 'SetView start', 200, { req: 'e' }),
+  ];
+  assert.equal(askedAtOnce(lines), 3);
+  assert.equal(askedAtOnce([]), 0);
 });
