@@ -1,13 +1,15 @@
 package gwerr
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 	"google.golang.org/grpc/codes"
 )
 
-// A code missing from the table falls to Internal on the browser's wire,
+// A code ConnectCode misses falls to Internal on the browser's wire,
 // where a transport failure reads as a verdict and clientsync drops a write
 // it should park.
 func TestCodeTableIsTotal(t *testing.T) {
@@ -29,5 +31,21 @@ func TestCodeTableIsTotal(t *testing.T) {
 	}
 	if ConnectCode(codes.OK) != connect.CodeInternal {
 		t.Errorf("codes.OK must map to Internal (a Connect error is never OK)")
+	}
+}
+
+// Each gRPC code maps to the Connect code of its own name, both ways.
+func TestCodesMapByName(t *testing.T) {
+	for c := codes.Canceled; c <= codes.Unauthenticated; c++ {
+		cc := ConnectCode(c)
+		if got, want := strings.ReplaceAll(cc.String(), "_", ""), strings.ToLower(c.String()); got != want {
+			t.Errorf("gRPC %v maps to Connect %v", c, cc)
+		}
+		if back := codeOf(connect.NewError(cc, errors.New("x"))); back != c {
+			t.Errorf("Connect %v reads back as gRPC %v, want %v", cc, back, c)
+		}
+	}
+	if got := codeOf(connect.NewError(connect.Code(0), errors.New("x"))); got != codes.Unknown {
+		t.Errorf("a Connect error with no code reads as %v, want Unknown", got)
 	}
 }
