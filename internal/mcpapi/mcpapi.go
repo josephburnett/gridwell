@@ -44,7 +44,7 @@ Templates. ` + templates + `
 Gridwell references. ` + references
 
 // createDoc is create's description, which docs/mcp.md says word for word.
-const createDoc = `Creates text, url, door and workspace tiles as the + menu makes them, a list of items applied in order, a verdict per item: each a 1×1 tile in grid, at the first free cell or at or below the cell named in near. A text is born with its body, its name the body's first line; a url needs its address, http or https, a bare host taken as https; a door holds a new grid of its own, its child_grid; a workspace tile has no panes until it is first entered. A url, door or workspace tile given a name has it typed; with none a url follows its page title. On a directory's grid each is a Gridwell tile over it, nothing on disk. A shell, a file and a directory are refused.`
+const createDoc = `Creates text, url, door and workspace tiles as the + menu makes them, a list of items applied in order, a verdict per item: each a w×h tile in grid, 1×1 unless w and h say, at the cell named in at, or at the first free cell or at or below the cell named in near; the node refuses a tile over another or a size it does not allow, and at with near. A text is born with its body, its name the body's first line; a url needs its address, http or https, a bare host taken as https; a door holds a new grid of its own, its child_grid; a workspace tile has no panes until it is first entered. A url, door or workspace tile given a name has it typed; with none a url follows its page title. On a directory's grid each is a Gridwell tile over it, nothing on disk. A shell, a file and a directory are refused.`
 
 // templates is the section docs/mcp.md says word for word under "Templates".
 const templates = `The + menu's templates are the tiles of home's templates grid, an
@@ -362,6 +362,9 @@ type createItem struct {
 	Kind    string `json:"kind" jsonschema:"what to make, as the + menu makes it: text, url, door or workspace"`
 	Grid    string `json:"grid" jsonschema:"the grid to create the tile in"`
 	Near    *Cell  `json:"near,omitempty" jsonschema:"a cell to land at, or below it in its column when taken"`
+	At      *Cell  `json:"at,omitempty" jsonschema:"the exact cell of its top-left corner, refused by the node over a tile"`
+	W       int64  `json:"w,omitempty" jsonschema:"its width in cells; 0 is 1"`
+	H       int64  `json:"h,omitempty" jsonschema:"its height in cells; 0 is 1"`
 	Name    string `json:"name,omitempty" jsonschema:"a url's, door's or workspace tile's typed name; a text's is its body's first line"`
 	Address string `json:"address,omitempty" jsonschema:"a url's address, which it needs: http or https, a bare host taken as https"`
 	Body    string `json:"body,omitempty" jsonschema:"a text's body, markdown; its first line is the tile's name"`
@@ -378,8 +381,9 @@ func (d *toolset) create(ctx context.Context, _ *mcp.CallToolRequest, in createI
 	return each(in.Items, func(it createItem) (Verdict, error) { return d.createTile(ctx, it) })
 }
 
-// createTile is the create the + menu's swatch for it.Kind sends, a 1x1 tile
-// at the first free cell or at or below near. A new tile claims nothing.
+// createTile is the create the + menu's swatch for it.Kind sends, a w×h tile
+// at at, or at the first free cell or at or below near; the node judges the
+// placement. A new tile claims nothing.
 func (d *toolset) createTile(ctx context.Context, it createItem) (Verdict, error) {
 	k := rpc.KindOf(it.Kind)
 	switch {
@@ -397,15 +401,19 @@ func (d *toolset) createTile(ctx context.Context, it createItem) (Verdict, error
 		return Verdict{}, errors.New("refused: only a text is born with a body")
 	case it.Name != "" && !k.TypedName:
 		return Verdict{}, errors.New("refused: a text's name is its body's first line")
+	case it.At != nil && it.Near != nil:
+		return Verdict{}, errors.New("refused: an item names at, the exact cell, or near, a cell to land at or below, not both")
 	}
-	t := &pb.Tile{Kind: it.Kind, W: 1, H: 1, AltText: it.Name, Named: it.Name != ""}
+	t := &pb.Tile{Kind: it.Kind, W: cmp.Or(it.W, 1), H: cmp.Or(it.H, 1), AltText: it.Name, Named: it.Name != ""}
 	var err error
 	if k.Content == rpc.ContentAddress {
 		if t.UrlString, err = urlnorm.Normalize(it.Address); err != nil {
 			return Verdict{}, errors.New("refused: " + err.Error())
 		}
 	}
-	if t.X, t.Y, err = d.slot(ctx, it.Grid, it.Near.near(), 1, 1); err != nil {
+	if it.At != nil {
+		t.X, t.Y = it.At.X, it.At.Y
+	} else if t.X, t.Y, err = d.slot(ctx, it.Grid, it.Near.near(), t.W, t.H); err != nil {
 		return Verdict{}, err
 	}
 	return d.landed(d.rt.CreateTile(ctx, &pb.CreateTileRequest{GridId: it.Grid, Tile: t, Content: []byte(it.Body)}))

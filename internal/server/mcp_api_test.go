@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
+	"github.com/josephburnett/gridwell/internal/files"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/mcpapi"
@@ -26,10 +28,13 @@ import (
 )
 
 // mcpNode is a real Server behind the real web API, with a home and a
-// connection, "feed", to a far node's home, which the user can switch off.
+// connection, "feed", to a far node's home, which the user can switch off,
+// and the files over one directory, dir, whose grid is dirGrid.
 type mcpNode struct {
 	srv        *Server
 	url, root  string
+	dir        string
+	dirGrid    string
 	feedRoot   string
 	feedNS     string // the connection's namespace
 	reg        *Sources
@@ -47,9 +52,14 @@ func newMCPNode(t *testing.T) *mcpNode {
 	reg := &Sources{}
 	node, root := registerPrimaryLocaldb(t, reg, home)
 	feedRoot := connectFar(t, reg, home, node, "feed")
+	dir := t.TempDir()
+	if reg.Files, err = files.New(home.Files(), []files.Root{{Path: dir}}, func(*os.File, string) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
 	srv := mustNew(t, reg, Config{ID: node})
 	hs := webAPITest(t, srv.WebHandler())
-	return &mcpNode{srv: srv, url: hs.URL + mcpapi.Path, root: root, feedRoot: feedRoot, feedNS: node + "/feed", reg: reg, connectURL: hs.URL, web: hs.Client()}
+	return &mcpNode{srv: srv, url: hs.URL + mcpapi.Path, root: root, dir: dir, dirGrid: rpc.QualifyID(node, rpc.KeyTileID(dir)),
+		feedRoot: feedRoot, feedNS: node + "/feed", reg: reg, connectURL: hs.URL, web: hs.Client()}
 }
 
 // connectFar declares on reg, over the node's store st, one connection,

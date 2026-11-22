@@ -1,6 +1,8 @@
 package server
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -120,4 +122,92 @@ func TestMCPCreatesOnAFarGridAndADisabledOneRefuses(t *testing.T) {
 		map[string]any{"kind": "url", "grid": n.feedRoot, "address": "https://example.com"},
 		map[string]any{"kind": "door", "grid": n.root}),
 		"disabled:", "ok")
+}
+
+// at places a tile at an exact cell and w and h shape it; with near or no
+// cell store.FreeSlot places a tile of that size, free of every tile.
+func TestMCPCreatePlacesAndShapesATile(t *testing.T) {
+	n := newMCPNode(t)
+	s, err := n.agent(t, bearer(testPassword))
+	if err != nil {
+		t.Fatal(err)
+	}
+	made := items(t, s, "create",
+		map[string]any{"kind": "door", "grid": n.root, "at": map[string]any{"x": 5, "y": 1}, "w": 3, "h": 2},
+		map[string]any{"kind": "text", "grid": n.root, "body": "near", "near": map[string]any{"x": 5, "y": 1}, "w": 2, "h": 2},
+		map[string]any{"kind": "url", "grid": n.root, "address": "example.com", "at": map[string]any{"x": 0, "y": 0}},
+		map[string]any{"kind": "workspace", "grid": n.root, "w": 2, "h": 3})
+	want := [][4]int64{{5, 1, 3, 2}, {5, 3, 2, 2}, {0, 0, 1, 1}, {1, 0, 2, 3}}
+	var g mcpapi.GridOut
+	call(t, s, "read_grid", map[string]any{"id": n.root}, &g)
+	if len(g.Tiles) != len(want) {
+		t.Fatalf("home holds %+v, want the %d tiles made", g.Tiles, len(want))
+	}
+	for i, v := range made {
+		got := landed(t, v)
+		for _, r := range g.Tiles {
+			if r.ID == got.ID {
+				got = r
+			}
+		}
+		if p := [4]int64{got.X, got.Y, got.W, got.H}; p != want[i] {
+			t.Errorf("item %d reads back at %v, want %v", i, p, want[i])
+		}
+	}
+}
+
+// The node judges a placement: one over a tile or of a size it does not
+// allow is refused with its reason, at with near is refused, and each item
+// after a refused one still lands.
+func TestAnMCPCreateRefusesAPlacementTheNodeRefuses(t *testing.T) {
+	n := newMCPNode(t)
+	s, err := n.agent(t, bearer(testPassword))
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := func(x, y int) map[string]any { return map[string]any{"x": x, "y": y} }
+	got := items(t, s, "create",
+		map[string]any{"kind": "door", "grid": n.root, "at": at(0, 0), "w": 2, "h": 2},
+		map[string]any{"kind": "text", "grid": n.root, "body": "over", "at": at(1, 1)},
+		map[string]any{"kind": "door", "grid": n.root, "at": at(4, 0), "near": at(4, 0)},
+		map[string]any{"kind": "door", "grid": n.root, "at": at(4, 0), "w": -1},
+		map[string]any{"kind": "door", "grid": n.root, "h": -2},
+		map[string]any{"kind": "text", "grid": n.root, "body": "free", "at": at(2, 1)})
+	verdicts(t, "create", got, "ok", "conflict:", "refused:", "refused:", "refused:", "ok")
+	for i, want := range map[int]string{1: "overlaps an existing tile", 2: "not both", 3: "must be positive", 4: "must be positive"} {
+		if !strings.Contains(got[i].Verdict, want) {
+			t.Errorf("item %d = %q, want it saying %q", i, got[i].Verdict, want)
+		}
+	}
+}
+
+// A directory's grid and a far node's grid each take a placed, shaped
+// Gridwell tile and refuse one over a tile, a file's included.
+func TestMCPCreatePlacesOnADirectoryAndAFarGrid(t *testing.T) {
+	n := newMCPNode(t)
+	s, err := n.agent(t, bearer(testPassword))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(n.dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var g mcpapi.GridOut
+	call(t, s, "read_grid", map[string]any{"id": n.dirGrid}, &g)
+	if len(g.Tiles) != 1 {
+		t.Fatalf("the directory holds %+v, want its one file", g.Tiles)
+	}
+	file := g.Tiles[0]
+	at := func(x, y int64) map[string]any { return map[string]any{"x": x, "y": y} }
+	for _, grid := range []string{n.dirGrid, n.feedRoot} {
+		got := items(t, s, "create",
+			map[string]any{"kind": "door", "grid": grid, "at": at(3, 3), "w": 2, "h": 3},
+			map[string]any{"kind": "text", "grid": grid, "body": "over", "at": at(4, 5)})
+		verdicts(t, "create on "+grid, got, "ok", "conflict:")
+		if d := landed(t, got[0]); d.X != 3 || d.Y != 3 || d.W != 2 || d.H != 3 {
+			t.Errorf("a door on %s = %+v, want 2x3 at (3,3)", grid, d)
+		}
+	}
+	verdicts(t, "create over a file", items(t, s, "create",
+		map[string]any{"kind": "text", "grid": n.dirGrid, "body": "over", "at": at(file.X, file.Y)}), "conflict:")
 }

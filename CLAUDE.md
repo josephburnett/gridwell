@@ -749,7 +749,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   through `write_text`'s own create, and refuses a shell, a file and a
   directory (Joe, 2026-11-22: "The MCP server should be able to do
   everything I can do", and of these limits, "Let's keep these limitations
-  though"). A session answers only where the user is
+  though"), and takes an exact cell (`at`) and a shape (`w`, `h`), which
+  the node validates as it does a create from the + menu (Joe, 2026-11-22:
+  "An agent should be able to specify the placement and shape as well.
+  Subject to validation of course on the server"). A session answers only where the user is
   (2026-10-18): `sessions` lists every screen showing the node, newest
   change first, each with its workspace tiles and its panes' places, grids and
   focus, and marks yours the one holding the agent's shell live; it chooses
