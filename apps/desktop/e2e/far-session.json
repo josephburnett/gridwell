@@ -1,0 +1,21 @@
+{
+  "delayMs": 100,
+  "boundMs": 100,
+  "waits": {
+    "create door": "drawn when the far node's TileChanged arrives: a create has no optimistic arm (client/wasm/create_tile.go createTile, postTileMutate), so the ghost lands in 110 ms and the cell stays empty for the round trip",
+    "create markdown": "drawn when the far node's TileChanged arrives: a create has no optimistic arm (client/wasm/create_tile.go createTile, postTileMutate), so the ghost lands in 110 ms and the cell stays empty for the round trip",
+    "create url": "drawn when the far node's TileChanged arrives: a create has no optimistic arm (client/wasm/create_tile.go createTile, postTileMutate), so the ghost lands in 110 ms and the cell stays empty for the round trip",
+    "create shell": "drawn when the far node's TileChanged arrives: a create has no optimistic arm (client/wasm/create_tile.go createTile, postTileMutate), so the ghost lands in 110 ms and the cell stays empty for the round trip",
+    "create workspace": "drawn when the far node's TileChanged arrives: a create has no optimistic arm (client/wasm/create_tile.go createTile, postTileMutate), so the ghost lands in 110 ms and the cell stays empty for the round trip",
+    "copy": "drawn when the far node's TileChanged arrives: CopyTile's write is not optimistic (client/wasm/right_button.go, the DropCopy arm)",
+    "link": "drawn when the far node's TileChanged arrives: a link is a create (client/wasm/drop_commit.go commitLinkDrop, createTile)",
+    "delete": "the row stays in the cache until TileRemoved arrives, so the tile reappears when the ghost goes (client/wasm/right_button.go runDeleteTile)",
+    "rename": "the bar shows the old name until RenameTile answers (client/wasm/rename_overlay.go commitRename, PutWriteResponse in then)"
+  },
+  "decided": {},
+  "firstOpenRoundTrips": 1,
+  "textSavesInFlight": 1,
+  "known": {
+    "a far workspace keeps its panes": "entering a far workspace tile raises the layout notice 'a pane views content the workspace's node cannot reach; it will reopen at home' twice: the capture drops the pane (being fixed on branch farcapture)"
+  }
+}

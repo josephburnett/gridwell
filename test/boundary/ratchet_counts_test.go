@@ -635,6 +635,32 @@ func TestTraceBudgetIsZero(t *testing.T) {
 	}
 }
 
+// farSessionFile is the one owner of the far session's waits: the gestures on
+// a far node's rows that apps/desktop/e2e/far-session.spec.ts finds slow over
+// a delayed hop, each with why. The boundary test cannot run the e2e gate, so
+// it reads the list, and the spec, which fails on a slow cell the list does
+// not name and on a named cell that is fast, keeps the list exact.
+const farSessionFile = "apps/desktop/e2e/far-session.json"
+
+// farWaits counts the cells far-session.json lists as waits with no decision
+// behind them, and the known failures beside them; a decided wait is listed
+// under decided and counts nothing.
+func farWaits(t *testing.T, root string) int {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, farSessionFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s struct {
+		Waits map[string]string `json:"waits"`
+		Known map[string]string `json:"known"`
+	}
+	if err := json.Unmarshal(data, &s); err != nil || s.Waits == nil || s.Known == nil {
+		t.Fatalf("%s: want {\"waits\": {cell: why}, \"known\": {failure: why}, ...}: %v", farSessionFile, err)
+	}
+	return len(s.Waits) + len(s.Known)
+}
+
 // productionLines counts the lines of the tree scripts/comment-share.sh reads.
 func productionLines(t *testing.T, root string) int {
 	n := 0
