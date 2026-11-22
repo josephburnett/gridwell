@@ -3,8 +3,8 @@
 package main
 
 // The + menu belongs to the node a pane is inside. A context is one node's
-// source list plus its shells flag, keyed by the pane's grid's node_ns ("" is
-// this node, the boot handshake). Remote contexts are fetched through the
+// source list, its home and its shells flag, keyed by the pane's grid's
+// node_ns ("" is this node, the boot handshake). Remote contexts are fetched through the
 // routed Handshake, and every context is asked again on a health transition
 // (refetchMenus).
 
@@ -12,13 +12,17 @@ import (
 	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/clientsync"
+	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// menuContext is one node's menu: its sources and its shell policy.
+// menuContext is one node's menu: its sources, its home grid and its shell
+// policy.
 type menuContext struct {
 	sources        []*gridwellv1.SourceInfo
+	home           string
 	shellsDisabled bool
 	// fetched marks a completed load; a.fetch.menus owns asking.
 	fetched bool
@@ -42,9 +46,13 @@ func (a *App) gridNodeNS(gridID string) string {
 // menuCtx returns the context for pane p, kicking a background fetch for a
 // remote context not yet loaded. The "" context is a.sources, always present.
 func (a *App) menuCtx(p *pane.Pane) *menuContext {
-	ns := a.paneNodeNS(p)
+	return a.nodeCtx(a.paneNodeNS(p))
+}
+
+// nodeCtx is menuCtx by the node's namespace chain.
+func (a *App) nodeCtx(ns string) *menuContext {
 	if ns == "" {
-		return &menuContext{sources: a.sources, shellsDisabled: !a.caps.Shells, fetched: true}
+		return &menuContext{sources: a.sources, home: a.home, shellsDisabled: !a.caps.Shells, fetched: true}
 	}
 	mc, ok := a.views.menuCtxs[ns]
 	if !ok {
@@ -76,8 +84,13 @@ func (a *App) fetchMenuCtx(ctx context.Context, done func() bool, ns string) {
 	}
 	mc := a.views.menuCtxs[ns]
 	mc.sources = lp.Sources
+	mc.home = rpc.HomeGrid(lp)
 	mc.shellsDisabled = lp.ShellsDisabled
 	mc.fetched = true
+	// An open level's pane waiting for its node's home lands there now.
+	if top := a.ws.Top(); top != nil && a.restoreWorkspaceLeaves(a.tree, top.TileID) {
+		a.runGesture(nav.Gesture{Kind: nav.GestureEngageLeaves})
+	}
 	a.draw()
 }
 

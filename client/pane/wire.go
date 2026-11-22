@@ -31,6 +31,47 @@ func ChainPrefix(tileID string) string {
 	return ns + "/"
 }
 
+// OwnerFrame spells a client-view id in the frame of the node owning workspace
+// tile tileID, false for an id that node cannot name: the rel both encoders of
+// a live tree pass.
+func OwnerFrame(tileID string) func(id string) (string, bool) {
+	prefix := ChainPrefix(tileID)
+	return func(id string) (string, bool) { return strings.CutPrefix(id, prefix) }
+}
+
+// Respelled is the place as the node rel names ids for can hold it (Joe,
+// 2026-11-22: "rewrite the paths of each pane in the layout to get to the
+// same place"): anchored at the lowest grid frame from which rel names every
+// frame up, its door and the frames below it left out, so the pane still
+// shows what it showed. A place rel names whole comes back as it is; false
+// when no frame can anchor it.
+func (s *Stack) Respelled(rel func(string) (string, bool)) (Stack, bool) {
+	named := func(id string) bool {
+		_, ok := rel(id)
+		return id == "" || ok
+	}
+	frames := s.Frames()
+	anchor := -1
+	for i := len(frames) - 1; i >= 0; i-- {
+		f := frames[i]
+		if !f.Content && f.GridID != "" && named(f.GridID) {
+			anchor = i
+		}
+		if !named(f.GridID) || !named(f.Door) {
+			break
+		}
+	}
+	switch anchor {
+	case -1:
+		return Stack{}, false
+	case 0:
+		return s.Copy(), true
+	}
+	kept := frames[anchor:]
+	kept[0].Door = ""
+	return StackOf(kept), true
+}
+
 // The persisted format and the server's reading of it are api/panelayout's;
 // this is the client half, and derives nothing the server also derives.
 const LayoutMediaType = panelayout.LayoutMediaType
@@ -61,9 +102,9 @@ func layoutView(f Frame) (rpc.Framing, bool) {
 }
 
 // EncodeLayout serializes the tree as a LayoutV1 blob. rel maps a client-view
-// id into the owning node's frame, answering false for a leaf looking outside
-// that node's reach; such a leaf serializes as home and its pane id comes back
-// in skipped, so the caller can surface one notice. A nil rel is the identity.
+// id into the owning node's frame; each leaf's place is Respelled into it, and
+// a leaf it cannot respell serializes as home and its pane id comes back in
+// skipped, so the caller can surface one notice. A nil rel is the identity.
 // Identical trees produce identical bytes, so a pure visit never writes.
 func EncodeLayout(t *Tree, rel func(id string) (string, bool)) (data []byte, skipped []string, err error) {
 	if t == nil {
@@ -112,52 +153,40 @@ func encodeNode(n TreeNode, rel func(string) (string, bool), idPrefix string, sk
 	}}, skipped, nil
 }
 
-// encodeLeaf maps one pane's place into the owning node's frame; false means
-// an id was outside it and the leaf was serialized as home. The place is
-// written twice by design: Anchor, Path and TextFocus are what an older
-// Gridwell reads, and Place is omitted wherever
-// ProjectionHolds, so the common blob stays byte-identical to older ones.
+// encodeLeaf writes one pane's place Respelled in the owning node's frame;
+// false means it could not be and the leaf was serialized as home. The place
+// is written twice by design: Anchor, Path and TextFocus are what an older
+// Gridwell reads, and Place is omitted wherever ProjectionHolds, so the common
+// blob stays byte-identical to older ones.
 func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*LayoutPane, bool) {
 	bareID := strings.TrimPrefix(p.ID, idPrefix)
-	ok := true
-	to := func(id string) string {
-		if !ok {
-			return ""
-		}
-		r, in := rel(id)
-		ok = in
-		return r
+	s, ok := p.Respelled(rel)
+	if !ok {
+		return &LayoutPane{ID: bareID}, false
 	}
 	opt := func(id string) string {
-		if id == "" {
-			return ""
-		}
-		return to(id)
+		r, _ := rel(id)
+		return r
 	}
 	var place []LayoutFrame
-	if !p.ProjectionHolds() {
-		frames := p.Frames()
+	frames := s.Frames()
+	if !s.ProjectionHolds() {
 		place = make([]LayoutFrame, len(frames))
 		for i, f := range frames {
 			place[i] = LayoutFrame{Content: f.Content, GridID: opt(f.GridID), Door: opt(f.Door)}
 		}
 	}
-	panchor, ppath := p.AnchorPathAt(p.Depth() - 1)
-	anchor := opt(panchor)
+	panchor, ppath := s.AnchorPathAt(s.Depth() - 1)
 	var path []string
 	if len(ppath) > 0 {
 		path = make([]string, len(ppath))
 		for i, seg := range ppath {
-			path[i] = to(seg)
+			path[i] = opt(seg)
 		}
 	}
-	textFocus := opt(p.ContentID())
-	if !ok {
-		return &LayoutPane{ID: bareID}, false
-	}
 	return &LayoutPane{
-		ID: bareID, Anchor: anchor, Path: path, TextFocus: textFocus, Place: place,
-		Views: encodeViews(p.Frames()), Text: encodeText(p.Frame),
+		ID: bareID, Anchor: opt(panchor), Path: path, TextFocus: opt(s.ContentID()), Place: place,
+		Views: encodeViews(frames), Text: encodeText(s.Frame),
 	}, true
 }
 

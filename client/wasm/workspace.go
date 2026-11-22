@@ -57,7 +57,7 @@ func (a *App) navInstallLevel(e nav.Effect) {
 	pane.MarkSaved(&f, e.Baseline)
 	a.ws.Push(f)
 	a.tree = tree
-	a.restoreWorkspaceLeaves(tree)
+	a.restoreWorkspaceLeaves(tree, f.TileID)
 }
 
 // navReplaceLevel puts the arrangement nav.GestureReconcileLevel read in
@@ -74,7 +74,7 @@ func (a *App) navReplaceLevel(e nav.Effect) {
 	}
 	pane.MarkSaved(top, e.Baseline)
 	a.tree = e.Tree
-	a.restoreWorkspaceLeaves(e.Tree)
+	a.restoreWorkspaceLeaves(e.Tree, top.TileID)
 }
 
 // navPopLevel leaves one level: the parked tree comes back verbatim with
@@ -103,13 +103,10 @@ func (a *App) navPopLevel(e nav.Effect) {
 // descent, and says so: the arrangement the user was looking at is not the
 // one they get.
 func (a *App) captureWorkspaceTree(tileID, idPrefix, originPane string) *pane.Tree {
-	prefix := pane.ChainPrefix(tileID)
-	data, skipped, err := pane.EncodeLayout(a.tree, func(id string) (string, bool) {
-		rest, ok := strings.CutPrefix(id, prefix)
-		return rest, ok
-	})
+	data, skipped, err := pane.EncodeLayout(a.tree, pane.OwnerFrame(tileID))
 	a.reportLayoutSkipped(tileID, skipped)
 	if err == nil {
+		prefix := pane.ChainPrefix(tileID)
 		t, derr := pane.DecodeLayout(data, func(id string) string { return prefix + id }, idPrefix)
 		if derr == nil {
 			return t
@@ -125,27 +122,31 @@ func (a *App) captureWorkspaceTree(tileID, idPrefix, originPane string) *pane.Tr
 	return pane.TreeAtPlace(idPrefix, origin.Anchor(), origin.Path(), origin.View)
 }
 
-// reportLayoutSkipped posts the one notice for panes an encode could not place
-// in the owning node's frame, for the two callers that encode the live tree.
+// reportLayoutSkipped posts the one notice for an encode of the live tree,
+// by either caller, that had a pane its owning node cannot name at all
+// (pane.Stack.Respelled), coalesced on the source key.
 func (a *App) reportLayoutSkipped(tileID string, skipped []string) {
 	if len(skipped) == 0 {
 		return
 	}
-	// A pane looking outside the owning node's reach persists as home. One
-	// coalesced notice on the source key, not one per save.
 	a.reportErr(errsurface.Info, "layout:"+tileID,
-		"a pane views content the workspace's node cannot reach; it will reopen at home")
+		"a pane shows something this workspace's node cannot reach, so the workspace keeps it at that node's home")
 }
 
-// restoreWorkspaceLeaves applies the boot-blank fixup a freshly-installed
-// tree needs: an empty anchor means the node's home grid. Loose, per the
-// urlwalk rule. The leaves' reads and surfaces are nav.GestureEngageLeaves.
-func (a *App) restoreWorkspaceLeaves(tree *pane.Tree) {
+// restoreWorkspaceLeaves places a freshly-installed tree's empty anchors at
+// the home of the node owning workspace tile tileID, from its handshake, so a
+// pane stays blank until that answers and fetchMenuCtx calls this again. It
+// reports whether it placed one; the leaves' reads are nav.GestureEngageLeaves.
+func (a *App) restoreWorkspaceLeaves(tree *pane.Tree, tileID string) bool {
+	home := a.nodeCtx(strings.TrimSuffix(pane.ChainPrefix(tileID), "/")).home
+	placed := false
 	tree.Walk(func(p *pane.Pane) {
-		if p.Anchor() == "" {
-			p.Reset(pane.Frame{GridID: a.home, View: rpc.Saved(zoomtrans.Origin), ViewPending: true})
+		if p.Anchor() == "" && home != "" {
+			p.Reset(pane.Frame{GridID: home, View: rpc.Saved(zoomtrans.Origin), ViewPending: true})
+			placed = true
 		}
 	})
+	return placed
 }
 
 // commitWorkspaceRename posts the user-owned name for the workspace tile at
@@ -196,11 +197,7 @@ func (a *App) flushWorkspaceSave(held func(ok bool)) {
 		go held(true)
 		return
 	}
-	prefix := pane.ChainPrefix(top.TileID)
-	data, skipped, err := pane.EncodeLayout(a.tree, func(id string) (string, bool) {
-		rest, ok := strings.CutPrefix(id, prefix)
-		return rest, ok
-	})
+	data, skipped, err := pane.EncodeLayout(a.tree, pane.OwnerFrame(top.TileID))
 	if err != nil {
 		a.reportErr(errsurface.Error, "layout:"+top.TileID, "workspace layout encode failed: "+err.Error())
 		go held(false)

@@ -886,7 +886,12 @@ These were decided deliberately. Do not reverse one without a new decision.
   they left it (`outbox.SaveQueue.EnqueueAfterHolds`).
   A new workspace tile's capture keeps a pane on a visit as it is, so the
   workspace shows exactly what the window showed (Joe, 2026-11-18: "They
-  should be captured too. Everything should look exactly the same.").
+  should be captured too. Everything should look exactly the same."). A
+  layout is written in its workspace tile's owning node's frame, so a pane
+  whose place passes through frames that node cannot name is respelled from
+  the first frame it can and never dropped, and one it cannot name at all
+  opens at that node's home (Joe, 2026-11-22: "Each pane as a path to RTB.
+  So just pick up the address for the layout from RTB."; `pane.Stack.Respelled`).
 - A crumb is its tile (Joe, 2026-11-10: "That behavior should be
   consistent"; Joe, 2026-11-11: "for every kind: text, shell, grid and
   workspace alike"; Joe, 2026-11-18: "It should right-click out to make a

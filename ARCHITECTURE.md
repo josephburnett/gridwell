@@ -410,7 +410,13 @@ pane and every grid frame's view, so a workspace tile reopens on the pane it was
 left on, each pane where it was at every level (`pane.LayoutFingerprint`
 keys the write). A pan inside a workspace tile writes the blob and never a
 framing row (`pane.FramingOwner.Layout`); a frame the blob has no view for
-starts at its framing row. A text leaf's live scroll is the blob's too once
+starts at its framing row. The blob is written in the frame of the node
+that owns the workspace tile (`pane.OwnerFrame`): each pane's place is
+respelled from the lowest grid frame that node names, the frames below left
+out (`pane.Stack.Respelled`), so a far workspace keeps a pane that reached
+that node through this one; a pane that node cannot name at all is written
+as home, the owning node's, read from its handshake. A text leaf's live
+scroll is the blob's too once
 the user moves it: a settle there takes only the mode to its tile row, and
 an ascent writes the row's whole scroll, where the tile was left. A
 workspace tile swaps the whole
