@@ -98,3 +98,23 @@ func TestBackupUsage(t *testing.T) {
 		t.Errorf("no-arg exit = %d, want 2", code)
 	}
 }
+
+// A node directory with no database is refused before anything is written,
+// so no server.yaml marks the destination as a backup.
+func TestBackupRefusesAMissingDatabase(t *testing.T) {
+	dir, _ := backupTestDir(t)
+	if err := os.Remove(config.DBFile(dir)); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(config.File(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(t.TempDir(), "b")
+	if err := backupDir(dir, config.File(dir), cfg, dest); err == nil || err.Error() != "no database at "+config.DBFile(dir) {
+		t.Fatalf("backup of a node with no database = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "server.yaml")); err == nil {
+		t.Fatal("a refused backup wrote server.yaml")
+	}
+}

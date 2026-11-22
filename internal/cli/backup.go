@@ -63,25 +63,17 @@ func backupDir(dir, cfgPath string, cfg *config.ServerConfig, dest string) error
 		return err
 	}
 
-	// Snapshot the database first and write server.yaml last, so a backup
-	// whose server.yaml exists always has its database.
-	snap := func(src, dst string, required bool) error {
-		if _, err := os.Stat(src); err != nil {
-			if !required && errors.Is(err, fs.ErrNotExist) {
-				return nil
-			}
-			return fmt.Errorf("no database at %s", src)
-		}
-		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
-			return err
-		}
-		return vacuumInto(src, dst)
-	}
 	if cfg.ID == "" {
 		return fmt.Errorf("%s names no id — the node has never served; nothing to back up", cfgPath)
 	}
-	// cache.db is disposable and stays out.
-	if err := snap(config.DBFile(dir), config.DBFile(dest), true); err != nil {
+	// Snapshot the database first and write server.yaml last, so a backup
+	// whose server.yaml exists always has its database. cache.db is
+	// disposable and stays out.
+	db := config.DBFile(dir)
+	if _, err := os.Stat(db); err != nil {
+		return fmt.Errorf("no database at %s", db)
+	}
+	if err := vacuumInto(db, config.DBFile(dest)); err != nil {
 		return err
 	}
 
