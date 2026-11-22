@@ -1183,10 +1183,19 @@ and that is where the worst bugs live.
 | `make check-e2e` | the full app as a black box | any `apps/desktop` change, anything under `client/wasm` or `web/`, the native layer, cross-seam behavior |
 | `make check-web` | the browser-mode client: caps, touch, shells | `client/caps`, `client/touchgest`, `client/wasm/touch.go`, the browser-serving path and its shell API |
 | `make check-connections` | the real binaries through a real ssh tunnel | the files and the dialer, the export, id routing; a dependency or toolchain bump — grpc, x/net, or the go line is every seam at once, so run it locally before pushing, plus the native gates for a desktop (npm) dependency |
+| `make check-far` | a session of ordinary use on a far node's grids, over a direct hop and one delayed 100 ms each way: every gesture timed to its first paint, the session's own dump audited | anything a gesture draws, any read's order, anything that crosses a connection; CI runs it on every push |
 
-A feature is not done when its gates are green. It is done when a trace of
-ordinary use (the Dump logs row) has been read and every refused call,
-repeated ask and odd id in it is either fixed or a decision written here.
+Reading a trace by hand is not a gate (Joe, 2026-11-22: "Yeah, saying a
+feature isn't done until it's observed is just relying on chance. It never
+happens that a session requires that."). `make check-far` runs what that
+reading was for: a scripted session on a far node's grids, through the real
+connection with a fixed delay under it, fails on a refused call, a read
+repeated with nothing between, an error notice, a pane dropped from a
+layout, a gesture drawn on the press that paints over the bound, a gesture
+that waits on the far node and is not listed in `far-session.json` (the
+`far-waits` row), and a change in the serial reads before a far grid's first
+paint or in the saves of one text in flight. A behaviour the session does
+not reach is a step added to it.
 
 If a change touches the native layer or the shim, `make check` passing says
 nothing about it. Run the electron or e2e gate and add a spec. The gates rebuild at
@@ -1210,6 +1219,9 @@ cases `make check` alone proves little.
 - [ ] A test fails before and passes after, across the seam.
 - [ ] For a bug fix, the commit message says why it was not caught.
 - [ ] `make check` is green; the native gates too if I touched that layer.
+- [ ] A change to what a gesture draws, a read's order or what crosses a
+      connection ran `make check-far`, and `far-session.json` changed with it
+      only to name a wait and why, or to drop one that is now drawn.
 - [ ] For a `deps:` bump or a change under the shim, the commit message
       names the gates it ran.
 - [ ] No error is swallowed. Unacknowledged writes park in `client/outbox`

@@ -45,13 +45,17 @@ of a context window.
    or row it cannot fill from those sources is "unspecified", and the
    unspecified list is an input to step 4. The checker never edits it.
 
-3. **Read the trace.** Ask for a fresh dump (the Dump logs row) of a few
-   minutes of real use. Tabulate it: every rpc by verb and outcome, every
-   error code, every repeated ask of one id, every id of the wrong shape,
-   every event followed by a refetch, every write the user did not make,
-   every walk or capture nothing on screen needed, every files or connection
-   log line.
-   Each anomaly is a finding until a decision in CLAUDE.md explains it.
+3. **Read the trace.** The build already reads one: `make check-far`
+   fails on a refused call, a read repeated with nothing between, an error
+   notice, a dropped pane and a slow gesture across a connection, and
+   `trace-budget.spec.ts` on work for nobody, so none of those is hunted
+   here. Read the gate's own dump (its attachment) or a fresh one of real
+   use for what they do not count: every id of the wrong shape, every event
+   followed by a refetch, every write the user did not make, every walk or
+   capture nothing on screen needed, every files or connection log line.
+   Each anomaly is a finding until a decision in CLAUDE.md explains it, and
+   one the gate could have caught becomes a step in its session or an audit
+   in `apps/desktop/e2e/tracebudget.ts`.
 
 4. **Read at the owners.** Three lists name what to read, and each item is
    read at its owner with its callers (grep), never the tree:
