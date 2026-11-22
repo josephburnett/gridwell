@@ -11,6 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
+	"github.com/josephburnett/gridwell/client/shellconn"
 )
 
 // Every notice shown is in the trace, under the source that raised
@@ -298,6 +299,14 @@ func TestStreamClosesSayWhichKind(t *testing.T) {
 	if e := ShellMove("p1", "w1:p1", "t7abcde"); e.Src != "shell" || e.Kind != "move" ||
 		e.KV["pane"] != "w1:p1" || e.KV["from"] != "p1" || e.KV["tile"] != "t7abcde" {
 		t.Errorf("a shell move is %+v", e)
+	}
+	st := shellconn.LocalEchoStats{Made: 3, Confirmed: 2, Wrong: 1, DelayMs: 41.7, Showing: true}
+	if e := LocalEcho("p1", "t7abcde", st, true); e.Msg != "local echo shows" || e.Kind != "local-echo" ||
+		e.KV["made"] != "3" || e.KV["wrong"] != "1" || e.KV["delay_ms"] != "41" {
+		t.Errorf("local echo flip: %+v", e)
+	}
+	if e := LocalEcho("p1", "t7abcde", st, false); e.Msg != "local echo summary" {
+		t.Errorf("local echo summary: %+v", e)
 	}
 	if e := ShellOpen("p1", "t7abcde"); e.Src != "shell" || e.Kind != "open" || e.KV["tile"] != "t7abcde" {
 		t.Errorf("a shell open is %+v", e)

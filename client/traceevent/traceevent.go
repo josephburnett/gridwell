@@ -14,6 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
+	"github.com/josephburnett/gridwell/client/shellconn"
 )
 
 // Event is one record's own fields; the ring stamps the rest.
@@ -314,6 +315,19 @@ func ShellExit(paneID, tileID, message string, tmuxGone, dropped bool) Event {
 // node's event stream is back.
 func ShellRejoin(paneID, tileID string) Event {
 	return Event{Src: SrcShell, Kind: "rejoin", Msg: "rejoins after a drop", KV: kv("pane", paneID, "tile", tileID)}
+}
+
+// LocalEcho is a shell's local echo turning showing on or off, flip, or a
+// summary of its guesses (shellconn.LocalEcho), so a dump says whether it
+// helped.
+func LocalEcho(paneID, tileID string, s shellconn.LocalEchoStats, flip bool) Event {
+	msg := "local echo summary"
+	if flip {
+		msg = map[bool]string{true: "local echo shows", false: "local echo stops showing"}[s.Showing]
+	}
+	return Event{Src: SrcShell, Kind: "local-echo", Msg: msg, KV: kv("pane", paneID, "tile", tileID,
+		"made", strconv.Itoa(s.Made), "confirmed", strconv.Itoa(s.Confirmed), "wrong", strconv.Itoa(s.Wrong),
+		"delay_ms", strconv.Itoa(int(s.DelayMs)))}
 }
 
 // closeMsg: a frozen surface keeps its preview and its address, a closed one is

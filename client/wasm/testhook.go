@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"slices"
@@ -46,6 +47,21 @@ type e2e struct {
 	oneShotsArmed, oneShotsLive, drawsArmed int
 	persistPosts                            map[string]int
 	framingFlushes                          int
+	// localEchoDraws is how many times a local echo overlay was drawn with a
+	// guess in it.
+	localEchoDraws int
+}
+
+// shellHold holds the node's shell output back until a spec releases it, the
+// slow link a local echo spec needs.
+var shellHold struct {
+	on  bool
+	out []heldOutput
+}
+
+type heldOutput struct {
+	key  string
+	data []byte
 }
 
 // window.__gridwellTest, a read-only introspection surface for the Electron
@@ -53,8 +69,8 @@ type e2e struct {
 // but installs nothing unless the page carries ?e2e=1. Accessors read
 // through the same geometry helpers the input handlers hit-test against, so
 // a spec learns where to click while the server's GetGrid stays the
-// independent oracle for what was created. shellVisitURL, setTransitionMs and
-// setBackstopMs are the three that mutate, and panic ends the program.
+// independent oracle for what was created. shellVisitURL, the set* hooks and
+// the shell output hold mutate, and panic ends the program.
 func (a *App) installTestHook() {
 	query := js.Global().Get("location").Get("search").String()
 	if !strings.Contains(query, "e2e=1") {
@@ -148,6 +164,22 @@ func (a *App) installTestHook() {
 		}),
 		"traces":        js.FuncOf(a.thTraces),
 		"shellRenderer": js.FuncOf(a.thShellRenderer),
+		"localEcho":     js.FuncOf(a.thLocalEcho),
+		"shellCapture":  js.FuncOf(a.thShellCapture),
+		// Mutate: holdShellOutput keeps every shell's output from its
+		// terminal, and releaseShellOutput writes what was held, in order.
+		"holdShellOutput": js.FuncOf(func(js.Value, []js.Value) any {
+			shellHold.on = true
+			return nil
+		}),
+		"releaseShellOutput": js.FuncOf(func(js.Value, []js.Value) any {
+			held := shellHold.out
+			shellHold.on, shellHold.out = false, nil
+			for _, h := range held {
+				a.onShellData(h.key, h.data)
+			}
+			return len(held)
+		}),
 		"zoomKeyRelays": js.FuncOf(func(js.Value, []js.Value) any { return a.e2e.zoomKeyRelays }),
 		// Whether a left border-drag resize is armed, polled instead of
 		// sleeping between the forwarded press and the canvas half of the
@@ -340,6 +372,39 @@ func (a *App) thShellFeed(_ js.Value, args []js.Value) any {
 	}
 	conn.term.Call("write", args[0].String())
 	return true
+}
+
+// thLocalEcho is the focused shell's local echo: its stats, the text its
+// overlay draws now, and the draws with a guess since boot. null for no live
+// shell.
+func (a *App) thLocalEcho(js.Value, []js.Value) any {
+	conn := a.shellConnFor(a.tree.Focus)
+	if conn == nil || conn.echo == nil {
+		return nil
+	}
+	s := conn.echo.Stats()
+	drawn := ""
+	if conn.echoNode.Get("style").Get("display").String() != "none" {
+		drawn = conn.echoNode.Get("textContent").String()
+	}
+	return map[string]any{"showing": s.Showing, "delayMs": s.DelayMs, "made": s.Made,
+		"confirmed": s.Confirmed, "wrong": s.Wrong, "pending": conn.echo.Pending(),
+		"drawn": drawn, "draws": a.e2e.localEchoDraws,
+		"inScreen": conn.echoNode.Get("parentNode").Get("className").String()}
+}
+
+// thShellCapture is what a capture of the focused shell reads, the same
+// snapshotShellCanvas a freeze and a mirror take, as a data URL.
+func (a *App) thShellCapture(js.Value, []js.Value) any {
+	conn := a.shellConnFor(a.tree.Focus)
+	if conn == nil {
+		return nil
+	}
+	jpeg := snapshotShellCanvas(conn.container)
+	if jpeg == nil {
+		return nil
+	}
+	return "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(jpeg)
 }
 
 // thShellRenderer returns the focused shell's renderer kind, "" for none. The

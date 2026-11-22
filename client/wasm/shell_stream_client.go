@@ -72,6 +72,17 @@ type shellStreamConn struct {
 
 	lastCols, lastRows uint16
 
+	// echo is this attachment's local echo: echoRow the guesses' row's
+	// marker, echoNode the overlay drawing echoShown from column echoFirst,
+	// echoDue the deadline a timer is armed for.
+	echo      *shellconn.LocalEcho
+	echoRow   js.Value
+	echoNode  js.Value
+	echoShown shellconn.LocalEchoOverlay
+	echoFirst int
+	echoDue   float64
+	onParsed  js.Func
+
 	// lastFit* are the last fit()'s inputs, box and font size: fitting every draw
 	// lets box wobble churn resizes, each a SIGWINCH.
 	lastFitW, lastFitH float64
@@ -301,6 +312,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID, key string) {
 	conn.renderAddon, conn.rendererKind = renderAddon, rendererKind
 	conn.onMouse, conn.mouseFns, conn.touchFns = onMouse, mouseFns, touchFns
 	conn.lastCols, conn.lastRows = uint16(cols), uint16(rows)
+	a.openLocalEcho(conn)
 
 	conn.onLinkActivate = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) >= 2 && args[1].Type() == js.TypeString {
@@ -380,6 +392,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID, key string) {
 
 	conn.onData = js.FuncOf(func(_ js.Value, args []js.Value) any {
 		a.shells.Write(conn.key, []byte(args[0].String()))
+		a.localEchoKey(conn, args[0].String())
 		return nil
 	})
 	term.Call("onData", conn.onData)
@@ -393,6 +406,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID, key string) {
 		}
 		conn.lastCols, conn.lastRows = cols, rows
 		a.shells.Resize(conn.key, int(cols), int(rows))
+		a.resetLocalEcho(conn)
 		return nil
 	})
 	term.Call("onResize", conn.onResize)
@@ -402,6 +416,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID, key string) {
 		if slices.Contains(a.mirrors.shell, conn.paneID) {
 			conn.mirror.Arm(cadence.ShellMirrorMs)
 		}
+		a.placeLocalEcho(conn)
 		return nil
 	})
 	term.Call("onRender", conn.onRender)
@@ -494,6 +509,7 @@ func (a *App) moveShellStream(fromID string, to *pane.Pane) {
 	from.shellConn = nil
 	conn.placeIn(to)
 	a.local(to.ID).shellConn = conn
+	a.resetLocalEcho(conn)
 	a.emit(traceevent.ShellMove(fromID, to.ID, conn.tileID))
 	shellConsole("move pane=%s→%s tile=%s", fromID, to.ID, conn.tileID)
 	a.syncShellOverlayPosition()
@@ -517,6 +533,10 @@ func (a *App) shellConnOfTmux(key string) *shellStreamConn {
 // onShellData routes PTY output to the tmux's terminal as a Uint8Array.
 func (a *App) onShellData(key string, data []byte) {
 	conn := a.shellConnOfTmux(key)
+	if shellHold.on {
+		shellHold.out = append(shellHold.out, heldOutput{key, slices.Clone(data)})
+		return
+	}
 	if conn == nil || conn.closed {
 		return
 	}
@@ -588,6 +608,7 @@ func (a *App) parkShellOverlay(conn *shellStreamConn) {
 	}
 	conn.shown = false
 	conn.container.Get("style").Set("display", "none")
+	a.resetLocalEcho(conn)
 }
 
 // termTheme is xterm's palette, the canvas's three roles. A frozen preview
@@ -671,10 +692,11 @@ func (a *App) releaseShellStream(paneID string, conn *shellStreamConn) {
 	if pl, ok := a.localIf(paneID); ok && pl.shellConn == conn {
 		pl.shellConn = nil
 	}
+	a.closeLocalEcho(conn)
 	// Dispose first, so xterm's listeners do not fire on a removed element.
 	releaseAll(conn.onData, conn.onResize, conn.onMouse, conn.onLinkProvide,
 		conn.onLinkActivate, conn.onLinkHover, conn.onLinkLeave, conn.onOSCURL,
-		conn.onRender)
+		conn.onRender, conn.onParsed)
 	releaseAll(conn.mouseFns...)
 	releaseAll(conn.touchFns...)
 	if a.touchDownTarget.Truthy() && a.touchDownTarget.Equal(conn.container) {
