@@ -4,99 +4,33 @@ package namespace
 // internal/server's ConnectionHandler, which serves the node's router to a
 // connecting node. That export is the connection API, never a second router.
 
-import (
-	"context"
+import pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
-	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-)
-
-// Server adapts a Namespace to the gridwell.v1 gRPC service.
-func Server(ns Namespace) pb.GridwellServer { return &grpcServer{ns: ns} }
+// Server adapts a Namespace to the gridwell.v1 gRPC service. Every unary verb
+// has the same signature on both, so the embedded Namespace answers it; the
+// stream verbs below translate their shapes.
+func Server(ns Namespace) pb.GridwellServer { return &grpcServer{Namespace: ns} }
 
 type grpcServer struct {
-	pb.UnimplementedGridwellServer
-	ns Namespace
+	Namespace
+	unimplemented
 }
 
-func (g *grpcServer) Info(ctx context.Context, req *pb.InfoRequest) (*pb.InfoResponse, error) {
-	return g.ns.Info(ctx, req)
-}
-
-func (g *grpcServer) Probe(ctx context.Context, req *pb.ProbeRequest) (*pb.ProbeResponse, error) {
-	return g.ns.Probe(ctx, req)
-}
-
-func (g *grpcServer) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
-	return g.ns.Handshake(ctx, req)
-}
-
-func (g *grpcServer) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {
-	return g.ns.GetGrid(ctx, req)
-}
-
-func (g *grpcServer) GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.TileResponse, error) {
-	return g.ns.GetTile(ctx, req)
-}
-
-func (g *grpcServer) GetTilePreview(ctx context.Context, req *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
-	return g.ns.GetTilePreview(ctx, req)
-}
-
-func (g *grpcServer) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindResponse, error) {
-	return g.ns.Find(ctx, req)
-}
-
-func (g *grpcServer) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {
-	return g.ns.CreateTile(ctx, req)
-}
-
-func (g *grpcServer) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.TileResponse, error) {
-	return g.ns.SetTile(ctx, req)
-}
-
-func (g *grpcServer) MoveTile(ctx context.Context, req *pb.MoveTileRequest) (*pb.TileResponse, error) {
-	return g.ns.MoveTile(ctx, req)
-}
-
-func (g *grpcServer) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.TileResponse, error) {
-	return g.ns.CopyTile(ctx, req)
-}
-
-func (g *grpcServer) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
-	return g.ns.DeleteTile(ctx, req)
-}
-
-func (g *grpcServer) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*pb.SetFramingResponse, error) {
-	return g.ns.SetFraming(ctx, req)
-}
-
-func (g *grpcServer) SetSelection(ctx context.Context, req *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
-	return g.ns.SetSelection(ctx, req)
-}
-
-func (g *grpcServer) ShellTmuxAlive(ctx context.Context, req *pb.ShellTmuxAliveRequest) (*pb.ShellTmuxAliveResponse, error) {
-	return g.ns.ShellTmuxAlive(ctx, req)
-}
-
-func (g *grpcServer) PasteShell(ctx context.Context, req *pb.PasteShellRequest) (*pb.PasteShellResponse, error) {
-	return g.ns.PasteShell(ctx, req)
-}
-
-func (g *grpcServer) SetView(ctx context.Context, req *pb.SetViewRequest) (*pb.SetViewResponse, error) {
-	return g.ns.SetView(ctx, req)
-}
+// unimplemented sits a level below Namespace, so its methods lose to the
+// Namespace's and only gRPC's embedding guard reaches grpcServer from it.
+type unimplemented struct{ pb.UnimplementedGridwellServer }
 
 func (g *grpcServer) ReadContent(req *pb.ReadContentRequest, stream pb.Gridwell_ReadContentServer) error {
-	return g.ns.ReadContent(stream.Context(), req, stream.Send)
+	return g.Namespace.ReadContent(stream.Context(), req, stream.Send)
 }
 
 func (g *grpcServer) ServeContent(req *pb.ServeContentRequest, stream pb.Gridwell_ServeContentServer) error {
-	return g.ns.ServeContent(stream.Context(), req, stream.Send)
+	return g.Namespace.ServeContent(stream.Context(), req, stream.Send)
 }
 
 func (g *grpcServer) Subscribe(req *pb.SubscribeRequest, stream pb.Gridwell_SubscribeServer) error {
 	sent := false
-	return g.ns.Subscribe(stream.Context(), req, func(ev *pb.Event) error {
+	return g.Namespace.Subscribe(stream.Context(), req, func(ev *pb.Event) error {
 		if ev == nil && sent {
 			// The first event already carried the header.
 			return nil
@@ -110,7 +44,7 @@ func (g *grpcServer) Subscribe(req *pb.SubscribeRequest, stream pb.Gridwell_Subs
 }
 
 func (g *grpcServer) WriteContent(stream pb.Gridwell_WriteContentServer) error {
-	resp, err := g.ns.WriteContent(stream.Context(), stream.Recv)
+	resp, err := g.Namespace.WriteContent(stream.Context(), stream.Recv)
 	if err != nil {
 		return err
 	}
@@ -118,5 +52,5 @@ func (g *grpcServer) WriteContent(stream pb.Gridwell_WriteContentServer) error {
 }
 
 func (g *grpcServer) OpenShell(stream pb.Gridwell_OpenShellServer) error {
-	return g.ns.OpenShell(stream.Context(), stream.Recv, stream.Send)
+	return g.Namespace.OpenShell(stream.Context(), stream.Recv, stream.Send)
 }

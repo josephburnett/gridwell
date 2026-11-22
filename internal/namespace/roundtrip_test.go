@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -417,4 +418,29 @@ func (headerOnly) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send fu
 	}
 	<-ctx.Done()
 	return nil
+}
+
+// Every unary verb of the method set reaches the namespace across the
+// connection API, none falling through to gRPC's Unimplemented.
+func TestEveryUnaryVerbCrosses(t *testing.T) {
+	ns := loopback(t, &fake{tile: richTile()})
+	ctxType := reflect.TypeFor[context.Context]()
+	nst := reflect.TypeFor[namespace.Namespace]()
+	v := reflect.ValueOf(ns)
+	crossed := 0
+	for i := range nst.NumMethod() {
+		m := nst.Method(i)
+		if m.Type.NumIn() != 2 || m.Type.In(0) != ctxType || m.Type.In(1).Kind() != reflect.Pointer || m.Type.NumOut() != 2 {
+			continue
+		}
+		out := v.MethodByName(m.Name).Call([]reflect.Value{
+			reflect.ValueOf(context.Background()), reflect.New(m.Type.In(1).Elem())})
+		if err, _ := out[1].Interface().(error); err != nil {
+			t.Errorf("%s: %v", m.Name, err)
+		}
+		crossed++
+	}
+	if crossed < 17 {
+		t.Errorf("only %d unary verbs found", crossed)
+	}
 }
