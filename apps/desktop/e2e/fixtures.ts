@@ -1,6 +1,7 @@
 import { test as base, _electron as electron, ElectronApplication, Page } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import * as net from 'node:net';
 import { spawn, ChildProcess } from 'node:child_process';
 import { GridwellDriver } from './driver';
 import { setOracleAuth } from './oracle';
@@ -66,6 +67,30 @@ async function spawnFarNode(label: string): Promise<FarNode> {
     }
     await new Promise((r) => setTimeout(r, 50));
   }
+}
+
+// A byte relay in front of a far node's connection socket that holds every
+// chunk ms before passing it on, each way, as a slow tunnel does. The node
+// dials it as it dials any socket and the far node serves its own connection
+// API behind it, so no API is served or dialed a way the node never does; it
+// only stands where ssh's forward stands.
+function delayRelay(listen: string, target: string, ms: number): Promise<net.Server> {
+  const relay = net.createServer((near) => {
+    const far = net.connect(target);
+    const end = () => {
+      near.destroy();
+      far.destroy();
+    };
+    for (const [from, to] of [[near, far], [far, near]] as const) {
+      from.on('data', (b) => setTimeout(() => to.destroyed || to.write(b), ms));
+      from.on('close', () => setTimeout(end, ms));
+      from.on('error', end);
+    }
+  });
+  return new Promise((resolve, reject) => {
+    relay.once('error', reject);
+    relay.listen(listen, () => resolve(relay));
+  });
 }
 
 async function stopFarNode(n: FarNode): Promise<void> {
@@ -143,6 +168,9 @@ type Fixtures = {
   // Far nodes to boot and connect directly, one row each in the + menu: the
   // second writable space a cross-namespace spec needs.
   extraNodes: string[];
+  // Set with test.use({ farDelayMs: n }) to put n ms each way on every far
+  // node's hop (delayRelay); 0 dials each far node's socket directly.
+  farDelayMs: number;
   extraYaml: string;
   // Set with test.use({ forceDeviceScaleFactor: 2 }) for a window at a Retina
   // display's pixel density; 0 keeps the display's own.
@@ -188,6 +216,7 @@ export async function keyboardHeld(app: ElectronApplication, win: Page): Promise
 export const test = base.extend<Fixtures>({
   filesRoots: [[], { option: true }],
   extraNodes: [[], { option: true }],
+  farDelayMs: [0, { option: true }],
   extraYaml: ['', { option: true }],
   forceDeviceScaleFactor: [0, { option: true }],
   fontconfig: ['', { option: true }],
@@ -208,20 +237,28 @@ export const test = base.extend<Fixtures>({
     { auto: true },
   ],
 
-  home: async ({ filesRoots, extraNodes, extraYaml }, use) => {
+  home: async ({ filesRoots, extraNodes, farDelayMs, extraYaml }, use) => {
     // Far nodes come up before the local node, so its boot-time connect learns
     // each landing synchronously. They go down after the app closes, because
     // this fixture's teardown runs after electronApp's.
     const far: FarNode[] = [];
     for (const label of extraNodes) far.push(await spawnFarNode(label));
+    const relays: net.Server[] = [];
     let yaml = extraYaml;
     if (far.length) {
       yaml += 'connections:\n';
       for (const n of far) {
-        yaml += `    - name: ${n.label}\n      label: ${n.label}\n      addr: ${path.join(n.home, 'federation.sock')}\n`;
+        let addr = path.join(n.home, 'federation.sock');
+        if (farDelayMs > 0) {
+          const relayed = path.join(n.home, 'delayed.sock');
+          relays.push(await delayRelay(relayed, addr, farDelayMs));
+          addr = relayed;
+        }
+        yaml += `    - name: ${n.label}\n      label: ${n.label}\n      addr: ${addr}\n`;
       }
     }
     await use(seedHome(filesRoots, yaml));
+    for (const r of relays) r.close();
     for (const n of far) await stopFarNode(n);
   },
 
