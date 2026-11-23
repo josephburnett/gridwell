@@ -1193,7 +1193,7 @@ connection with a fixed delay under it, fails on a refused call, a read
 repeated with nothing between, an error notice, a pane dropped from a
 layout, a gesture drawn on the press that paints over the bound, a gesture
 that waits on the far node and is not listed in `far-session.json` (the
-`far-waits` row), and a change in the serial reads before a far grid's first
+list is empty, held there by `TestFarWaitsIsZero`), and a change in the serial reads before a far grid's first
 paint or in the saves of one text in flight. A behaviour the session does
 not reach is a step added to it.
 
