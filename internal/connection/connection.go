@@ -416,7 +416,7 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	}
 	if s.switchedOff(name) {
 		s.mu.Unlock()
-		return nil, gwerr.Unheard("connection: connection %q: %s", name, rpc.DisabledDetail)
+		return nil, gwerr.UnheardDisabled(name, fmt.Sprintf("connection: connection %q: %s", name, rpc.DisabledDetail))
 	}
 	kv := map[string]string{"conn": name}
 	trace.Emit("connection", "dial", "dial", kv)

@@ -19,6 +19,19 @@ func SourceDisabled(namespace, reason string) error {
 	return st.Err()
 }
 
+// UnheardDisabled is the transport's answer to a call on a connection the
+// user disabled, which it never asks: unheard and Unavailable, so it reads as
+// dark and a cache in front serves what it holds, and carrying the
+// pb.SourceDisabled detail, so a reader tells it from an outage and says
+// nothing of it.
+func UnheardDisabled(namespace, reason string) error {
+	st, err := status.New(codes.Unavailable, reason).WithDetails(&pb.SourceDisabled{Namespace: namespace})
+	if err != nil {
+		return Unheard("%s", reason)
+	}
+	return unheard{st.Err()}
+}
+
 // IsSourceDisabled reports that err is SourceDisabled's answer. A plain
 // FailedPrecondition (a stale save) carries no detail and is not one.
 func IsSourceDisabled(err error) bool {
