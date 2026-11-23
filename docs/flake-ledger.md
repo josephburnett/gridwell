@@ -42,10 +42,10 @@ Two rules:
 ## Open: no mechanism yet
 
 Same columns, and a row leaves this section only by naming its mechanism.
-None is open.
 
 | Spec | What flaked | Standing hypothesis | State |
 |---|---|---|---|
+| `apps/desktop/e2e/url-takeover-move.spec.ts` | 2026-11-22, CI run 45103019291 at `8415af33`: right after the spec's `scrollTo(0, 400)` the live page read `scrollY` 1970, with its mark and typed field kept, so the same document; the retry passed | none standing. Ruled out on this box: the page still loading (Electron's `executeJavaScript` ran every injection, even one sent at `dom-ready` or the instant the view was placed, on the `complete` document at the min-width zoom), the zoom reapplied at `did-finish-load` after the scroll, a resize, and focus (no scroll or resize event follows the `scrollTo` in any run) | not reproduced: passed 30 of 30 idle and 10 of 10 loaded on this branch, and 30 of 30 loaded with 22 instrumented probes before it. The check now records every scroll and resize after the `scrollTo` with the viewport, zoom, document height and focused element, and says them in its failure message |
 
 ## Environment-only failures (not spec flakes)
 

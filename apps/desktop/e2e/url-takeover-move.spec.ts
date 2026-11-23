@@ -73,12 +73,25 @@ test('a url taken over by a workspace tile moves there and back without a reload
          document.body.insertAdjacentHTML('afterbegin', '<input id=gwin>');
          document.getElementById('gwin').value = 'half-typed';
          document.body.style.minHeight = '5000px';
-         window.scrollTo(0, 400);`,
+         window.scrollTo(0, 400);
+         window.__gwLayout = [];
+         for (const kind of ['scroll', 'resize']) {
+           addEventListener(kind, () => __gwLayout.push([kind, Math.round(performance.now()), scrollY, innerWidth,
+             innerHeight, devicePixelRatio, document.documentElement.scrollHeight, document.activeElement?.id ?? '']));
+         }`,
       ),
     left.id,
   );
   const state = ['kept', 'half-typed', 400];
-  expect(await pageState(electronApp, left.id)).toEqual(state);
+  // 2026-11-22, CI run 45103019291: the scroll read 1970 here once and never
+  // locally (docs/flake-ledger.md, open); what moved it is in the message.
+  const layout = () =>
+    electronApp.evaluate(
+      (_e, id) => (globalThis as any).__gwRegistry.webContentsFor(id).executeJavaScript('JSON.stringify(window.__gwLayout)'),
+      left.id,
+    );
+  const first = await pageState(electronApp, left.id);
+  expect(first, `scroll and resize since the scrollTo: ${await layout()}`).toEqual(state);
 
   // Everything the placement traced is in before the baseline, so a record
   // after it is the round trip's.
