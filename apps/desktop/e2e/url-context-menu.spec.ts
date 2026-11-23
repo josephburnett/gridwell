@@ -16,7 +16,11 @@ const PAGE =
     `<!doctype html><meta charset=utf8><title>gwe2ectx</title>` +
       `<style>html,body{margin:0;height:100%}</style><body>page</body>` +
       `<script>window.__gwMenus = []; document.addEventListener('contextmenu', ` +
-      `(e) => __gwMenus.push(e.clientX + ',' + e.clientY))</script>`,
+      `(e) => __gwMenus.push(e.clientX + ',' + e.clientY));` +
+      // When each event reached the page and when it was made, for a failure
+      // to say whether the page was late to it.
+      `window.__gwEvents = []; for (const k of ['pointerdown', 'mousemove', 'mouseup', 'contextmenu']) ` +
+      `addEventListener(k, (e) => __gwEvents.push([k, Math.round(performance.now()), Math.round(e.timeStamp)]), true)</script>`,
   );
 
 // Each move is [x, y]; the press is at the first point, the release at the last.
@@ -55,7 +59,11 @@ async function rightClick(electronApp: any, paneId: string, points: number[][]) 
         }
         // Long enough for a second contextmenu or a popup that should not come.
         await new Promise<void>((res) => setTimeout(res, 300));
-        return { menus: await wc.executeJavaScript('window.__gwMenus'), popups };
+        return {
+          menus: await wc.executeJavaScript('window.__gwMenus'),
+          events: JSON.stringify(await wc.executeJavaScript('window.__gwEvents')),
+          popups,
+        };
       } finally {
         Menu.prototype.popup = origPopup;
         await reg.remove(a.paneId);
@@ -81,6 +89,10 @@ test('a jittery right-click (5px movement, fast release) still reaches the page'
 }) => {
   await window.title();
   const seen = await rightClick(electronApp, 'e2e-jitter', [[100, 100], [105, 100]]);
-  expect(seen.menus, 'a jittery click was swallowed as a drag').toEqual(['105,100']);
+  // menus came back [] here under load (docs/flake-ledger.md, open); the
+  // events say when the page saw each and when it was made.
+  expect(seen.menus, `a jittery click was swallowed as a drag; events [kind, seen, made]: ${seen.events}`).toEqual([
+    '105,100',
+  ]);
   expect(seen.popups, 'Gridwell popped a menu over the page').toBe(0);
 });
