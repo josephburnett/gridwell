@@ -1,0 +1,36 @@
+# Every control the page takes a press on, the one list of them. A row is a
+# control: its name, how it is brought on screen, what a press on it does, and
+# whether a finger and a mouse do the same (same, or differs: with the
+# CLAUDE.md decision that says how). sites are the press installs that serve
+# it, as TestEveryControlIsARow spells them from client/wasm and
+# web/index.html: every install is some row's, and every site a row names is
+# installed. web-every-control.spec.ts presses every row with a finger at a
+# phone's size and with a mouse at a desktop's, and asserts what the row says
+# a press does and that the client is still running. A listener that hears
+# every press for bookkeeping is a row too, its devices "not a control: <why>",
+# and has no case. The canvas is one element and draws many controls; the
+# rows here press the ones a notice or the bar's circle draws, and the device
+# axis (client/touchgest/deviceaxis_test.go) holds the canvas's pure verdicts.
+#
+# name | on screen | a press does | devices | sites
++ circle | the bar of a grid pane | opens the + menu | same | input.go installCanvasInput a.canvas mousedown; input.go installCanvasInput a.canvas contextmenu; input.go installCanvasInput a.win mouseup; touch.go installTouchInput a.canvas installOverlayTouch
+notice row | Dump logs from the circle menu puts up an info notice with no button | dismisses the notice | same | input.go installCanvasInput a.canvas mousedown; touch.go installTouchInput a.canvas installOverlayTouch
+notice Reload | the build notice, when the page's calls name another build | reloads the page | same | input.go installCanvasInput a.canvas mousedown; touch.go installTouchInput a.canvas installOverlayTouch
+notice Disable | the health notice of a connection that will not answer | disables the connection, and its health event takes the notice down | same | input.go installCanvasInput a.canvas mousedown; touch.go installTouchInput a.canvas installOverlayTouch
+text toggle | #gw-text-toggle, in the circle's place on a text descent | flips the text between raw and rendered | same | text_overlay.go newBarButton btn mousedown; text_overlay.go newBarButton btn contextmenu; text_overlay.go newBarButton btn installOverlayTouch
+info toggle | #gw-info-toggle, beside the text toggle on a file's descent | opens the file's information, and the next press closes it | same | text_overlay.go newBarButton btn mousedown; text_overlay.go newBarButton btn contextmenu; text_overlay.go newBarButton btn installOverlayTouch
+see more | #gw-file-see-more, under a file's information | opens the hex view, and the next press closes it | same | file_view.go ensureFileView v.root installOverlayMouse; file_view.go ensureFileView v.root installTextareaTouch
+editor | #gw-text-editor, over a text descent shown raw | puts the caret where it lands, and the editor holds the keyboard | same | text_overlay.go ensureFileTextarea ta <textarea>; text_overlay.go ensureFileTextarea ta installOverlayMouse; text_overlay.go ensureFileTextarea ta installTextareaTouch; text_overlay.go ensureFileTextarea ta mouseup
+task checkbox | #gw-rendered-view input, a task of a text descent shown rendered | flips the task in the body, and the body is saved | same | rendered_overlay.go ensureRenderedView div click; rendered_overlay.go ensureRenderedView div installOverlayMouse
+rendered link | #gw-rendered-view a, an https link of a text descent shown rendered | opens the address as a visit in a pane below | same | rendered_overlay.go ensureRenderedView div click; rendered_overlay.go ensureRenderedView div installOverlayMouse
+terminal | .gw-shell-host, a live shell's descent beside a grid pane | moves pane focus to the shell, and the terminal holds the keyboard | same | shell_stream_client.go openShellStream container installOverlayMouse; shell_stream_client.go openShellStream container installOverlayTouch; shell_stream_client.go openShellStream container mouseup; shell_stream_client.go openShellStream container click
+circle menu row | #gw-circle-menu [data-gw-choice], the circle's right press in a browser | runs the row: light switches the theme | same | circle_menu.go openDOMChoiceMenu row mousedown
+circle menu outside | #gw-circle-menu, with the press on the canvas outside it | closes the menu and changes nothing | same | circle_menu.go openDOMChoiceMenu a.win mousedown
+rename input | #gw-rename-input, the right press on a door descent's name in the bar | keeps the rename open, and the input holds the keyboard | same | rename_overlay.go openNameInputAt in <input>
+rename outside | #gw-rename-input, with the press on the canvas outside it | commits the typed name | same | keyboard.go installKeyboard a.win pointerdown
+entry input | #gw-url-input, in the entry modal a new url tile's first descent opens | puts the caret in it, and the input holds the keyboard | same | index.html #gw-url-input <input>
+entry cancel | #gw-url-cancel, in the entry modal | closes the modal and makes nothing | same | index.html #gw-url-cancel <button>; url_modal.go openEntryModal cancelBtn click
+entry create | #gw-url-submit, in the entry modal with an address typed | gives the url tile that asked the typed address | same | index.html #gw-url-submit <button>; url_modal.go openEntryModal form submit
+entry backdrop | #gw-url-modal, outside the modal's card | closes the modal and makes nothing | same | url_modal.go openEntryModal modal mousedown
+entry suggestion | #gw-url-suggest li, another url tile's address offered in the entry modal | gives the url tile that asked the suggested address | same | url_modal.go openEntryModal suggestEl mousedown
+press bookkeeping | every press, at the window | marks a press in flight and applies the keyboard's owner at its end | not a control: it hears every press, whatever it lands on | keyboard.go installKeyboard a.win pointerdown; keyboard.go installKeyboard a.win pointerup; keyboard.go installKeyboard a.win pointercancel

@@ -1181,7 +1181,7 @@ and that is where the worst bugs live.
 | `make check` | Go + TS logic; compiles wasm, executes none of it | every commit |
 | `make check-electron` | the `WebContentsView` bridge under xvfb | the live url path, `webviews.ts`, the preload |
 | `make check-e2e` | the full app as a black box | any `apps/desktop` change, anything under `client/wasm` or `web/`, the native layer, cross-seam behavior |
-| `make check-web` | the browser-mode client: caps, touch, shells | `client/caps`, `client/touchgest`, `client/wasm/touch.go`, the browser-serving path and its shell API |
+| `make check-web` | the browser-mode client: caps, touch, shells, and every control in `test/boundary/controls.txt` pressed by a finger and a mouse | `client/caps`, `client/touchgest`, `client/wasm/touch.go`, any control the page takes a press on, the browser-serving path and its shell API |
 | `make check-connections` | the real binaries through a real ssh tunnel | the files and the dialer, the export, id routing; a dependency or toolchain bump — grpc, x/net, or the go line is every seam at once, so run it locally before pushing, plus the native gates for a desktop (npm) dependency |
 | `make check-far` | a session of ordinary use on a far node's grids, over a direct hop and one delayed 100 ms each way: every gesture timed to its first paint, the session's own dump audited | anything a gesture draws, any read's order, anything that crosses a connection; CI runs it on every push |
 
@@ -1227,6 +1227,9 @@ cases `make check` alone proves little.
 - [ ] No error is swallowed. Unacknowledged writes park in `client/outbox`
       and nothing user-made is dropped without a server verdict.
 - [ ] Nothing the user can change lives only on the client.
+- [ ] A new control the page takes a press on is a row in
+      `test/boundary/controls.txt`, with its case in
+      `web-every-control.spec.ts`.
 - [ ] This is one logical change, and the comments in the files I touched
       are true and meet the comment standard.
 - [ ] Things stay as the user left them.
