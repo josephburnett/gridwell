@@ -353,6 +353,12 @@ func TestTheDeadVerdict(t *testing.T) {
 	if ReadSurfaces(OutcomeDead) || ReadSurfaces(OutcomeOK) || !ReadSurfaces(OutcomeRejected) || !ReadSurfaces(OutcomeTransport) {
 		t.Error("a read surfaces every failure except the dead verdict")
 	}
+	// A disabled source reads as dark with no notice standing (CLAUDE.md,
+	// 2026-10-09): its chip says it is off, so a body read it refuses says
+	// nothing more.
+	if ReadSurfaces(OutcomeDisabled) {
+		t.Error("a read a disabled source refused surfaced a notice")
+	}
 	if got, want := ReactPreview(deadAnswer(), false), (PreviewReaction{Latch: inflight.Dead}); got != want {
 		t.Errorf("ReactPreview(dead) = %+v, want %+v", got, want)
 	}

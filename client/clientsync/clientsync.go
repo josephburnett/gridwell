@@ -32,7 +32,7 @@ const (
 	// so nothing was heard and nothing is said; only reads are cancelled
 	// (inflight.Reads.CancelIf), by a caller that asks again.
 	OutcomeAbandoned
-	// OutcomeDisabled is a write to a source the user disabled
+	// OutcomeDisabled is a call to a source the user disabled
 	// (gwerr.IsSourceDisabled): a verdict that holds until the node
 	// restarts, so nothing parks or retries it.
 	OutcomeDisabled
@@ -97,10 +97,11 @@ func Unheard(o Outcome) bool {
 }
 
 // ReadSurfaces reports whether a read's failure goes on the notice row: every
-// failure but the dead verdict, which drawing the link dead carries alone, and the
-// client's own cancel, which is no failure.
+// failure but the dead verdict, which drawing the link dead carries alone, the
+// client's own cancel, which is no failure, and a disabled source's refusal,
+// which its chip already says.
 func ReadSurfaces(o Outcome) bool {
-	return o != OutcomeOK && o != OutcomeDead && o != OutcomeAbandoned
+	return o != OutcomeOK && o != OutcomeDead && o != OutcomeAbandoned && o != OutcomeDisabled
 }
 
 // PlaceReadSurfaces reports whether a by-id tile read's latch goes on the
