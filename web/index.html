@@ -218,6 +218,22 @@
         }
       }
 
+      // In a browser, with no main to trace the death and tail the console,
+      // the node's trace keeps it and the end of stderr, a panic's stack:
+      // client/exit records of at most tracewire.MaxMsg, in order by kv i,
+      // the first naming the browser as the client's boot record does.
+      const exitTraceChars = 16000;
+      function traceExit(code, text) {
+        const lines = [];
+        for (let i = 0; i * 1000 < text.length; i++) {
+          const kv = { code: String(code), i: String(i) };
+          if (i === 0) kv.ua = navigator.userAgent;
+          lines.push(JSON.stringify({ origin: "client", src: "client", kind: "exit",
+            msg: text.substring(i * 1000, (i + 1) * 1000), kv }));
+        }
+        fetch("/trace", { method: "POST", body: lines.join("\n"), keepalive: true }).catch(() => {});
+      }
+
       try {
         let loaded;
         try {
@@ -234,6 +250,7 @@
         const decoder = new TextDecoder("utf-8");
         const pending = {};
         let firstErr = "";
+        let errTail = "";
         globalThis.fs.writeSync = (fd, buf) => {
           pending[fd] = (pending[fd] || "") + decoder.decode(buf);
           const nl = pending[fd].lastIndexOf("\n");
@@ -243,6 +260,7 @@
             if (fd === 2) {
               console.error(text);
               firstErr = firstErr || text.split("\n")[0];
+              errTail = (errTail + text + "\n").slice(-exitTraceChars);
             } else console.log(text);
           }
           return buf.length;
@@ -262,6 +280,7 @@
         boot.classList.add("failed");
         msg.textContent = "gridwell stopped: " + reason;
         if (window.gridwell) window.gridwell.reportExit({ code, reason });
+        else traceExit(code, errTail || reason);
       } catch (e) {
         boot.classList.add("failed");
         msg.textContent = "gridwell failed to load: " + (e && e.message ? e.message : e);
