@@ -145,6 +145,10 @@ func (a *App) installKeyboard() {
 	})
 	a.win.Call("addEventListener", "pointerup", up, capture)
 	a.win.Call("addEventListener", "pointercancel", up, capture)
+	// A finger's tap the page does not cancel ends its pointer events before
+	// the mouse events it is retold as, whose mousedown runs the control and
+	// the browser's own focus change, so the press ends again at their mouseup.
+	a.win.Call("addEventListener", "mouseup", up, capture)
 	a.win.Call("addEventListener", "focusin", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if a.kb.pressing {
 			return nil
