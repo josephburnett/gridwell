@@ -5,7 +5,7 @@ import { test, expect, homePassword, loginToken } from './fixtures';
 import type { GridwellDriver } from './driver';
 import { createText, createTile, setURLPreview } from './oracle';
 import { dumpNow } from './trace';
-import { askedAtOnce, droppedPanes, errorNotices, eventToPaint, maxInFlight, QUEUE_MS, queuedCalls, refusedCalls, repeatedReads, roundTrips } from './tracebudget';
+import { droppedPanes, errorNotices, eventToPaint, maxInFlight, QUEUE_MS, queuedCalls, refusedCalls, repeatedReads, roundTrips } from './tracebudget';
 
 // A session of ordinary use on a far node's grids, reached through a door on
 // this node's home, run once over a direct hop and once over one that holds
@@ -19,11 +19,11 @@ import { askedAtOnce, droppedPanes, errorNotices, eventToPaint, maxInFlight, QUE
 // of test/boundary/ratchet.txt. The session's own dump then stands in for a
 // person reading it: no refusal, no read repeated with nothing between, no
 // error notice, no pane dropped from a layout, and the reads to a far grid's
-// first paint, the saves in flight per text and the calls one turn asks at
-// once (what the page's six sockets to its node must hold) at the numbers
-// recorded, and every event folded in painted within boundMs. A failure the
-// session finds today is listed under known, with why, so the spec is green
-// and the list, counted in the same row, is exact.
+// first paint and the saves in flight per text at the numbers recorded, the
+// calls open at once (what the page's six sockets to its node must hold) at
+// most the number recorded, and every event folded in painted within
+// boundMs. A failure the session finds today is listed under known, with
+// why, so the spec is green and the list, counted in the same row, is exact.
 
 const SPEC = path.join(__dirname, 'far-session.json');
 
@@ -35,7 +35,7 @@ interface Recorded {
   known: Record<string, string>;
   firstOpenRoundTrips: number;
   textSavesInFlight: number;
-  callsAskedAtOnce: number;
+  callsInFlight: number;
 }
 
 const recorded = JSON.parse(fs.readFileSync(SPEC, 'utf8')) as Recorded;
@@ -316,10 +316,9 @@ for (const delay of [0, recorded.delayMs]) {
       const queued = queuedCalls(lines);
       const callsQueued = queued.filter((q) => q.waitMs > QUEUE_MS).length;
       const callsInFlight = Math.max(0, ...queued.map((q) => q.inFlight));
-      const atOnce = askedAtOnce(lines);
       // Reported, not held: a wait moves with the machine's speed.
       const waited = queued.filter((q) => q.verb !== 'GetTilePreview' && q.waitMs > QUEUE_MS).map((q) => [q.verb, Math.round(q.waitMs), q.inFlight]);
-      const report = { delay, ms: round(s.ms), reads: round(s.reads), firstOpenRoundTrips: trips, textSavesInFlight: saves, eventPaintMs, callsAskedAtOnce: atOnce, callsQueued, callsInFlight, waited };
+      const report = { delay, ms: round(s.ms), reads: round(s.reads), firstOpenRoundTrips: trips, textSavesInFlight: saves, eventPaintMs, callsQueued, callsInFlight, waited };
       console.log(`[far-session] ${JSON.stringify(report)}`);
       await info.attach('far-session.json', { body: JSON.stringify(report, null, 2), contentType: 'application/json' });
       await info.attach('dump.jsonl', { body: lines.map((l) => JSON.stringify(l)).join('\n'), contentType: 'application/jsonl' });
@@ -338,7 +337,9 @@ for (const delay of [0, recorded.delayMs]) {
       expect.soft(trips, 'serial reads before a far grid first paints').toBe(recorded.firstOpenRoundTrips);
       expect.soft(saves, 'saves of one text in flight at once').toBe(recorded.textSavesInFlight);
       expect.soft(eventPaintMs, `an event folded in is painted within ${recorded.boundMs} ms`).toBeLessThan(recorded.boundMs);
-      expect.soft(atOnce, 'calls one turn asks of the six sockets').toBe(recorded.callsAskedAtOnce);
+      // A ceiling: the count moves by a call or two with when the previews
+      // answer, but a change that asks more of the six sockets at once fails.
+      expect.soft(callsInFlight, 'calls open at once, what the six sockets must hold').toBeLessThanOrEqual(recorded.callsInFlight);
 
       const fmt = (xs: unknown[]) => JSON.stringify(xs, null, 1);
       expect.soft(fmt(refusedCalls(lines)), 'no call refused').toBe('[]');

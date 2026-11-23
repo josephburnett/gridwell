@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { TraceLine } from './trace';
 import {
-  askedAtOnce, attribute, budgetVerdict, CAUSE_MS, droppedPanes, errorNotices, eventToPaint, GestureWindow, maxInFlight, queuedCalls,
+  attribute, budgetVerdict, CAUSE_MS, droppedPanes, errorNotices, eventToPaint, GestureWindow, maxInFlight, queuedCalls,
   refusedCalls, repeatedReads, roundTrips, unattributed,
 } from './tracebudget';
 
@@ -193,18 +193,4 @@ test('a call waits from the client sending it to the node starting it, beside ev
       ['MoveTile', 260, 3],
     ],
   );
-});
-
-test('calls asked at once are the longest run of starts each within ONCE_MS of the last', () => {
-  const lines = [
-    crec('rpc', 'rpc', 'Subscribe start', 0, { req: 's' }),
-    crec('rpc', 'rpc', 'GetGrid start', 1, { req: 'a' }),
-    crec('rpc', 'rpc', 'GetTilePreview start', 100, { req: 'b' }),
-    crec('rpc', 'rpc', 'GetTilePreview start', 102, { req: 'c' }),
-    crec('rpc', 'rpc', 'GetTilePreview start', 104, { req: 'd' }),
-    crec('rpc', 'rpc', 'GetTilePreview ok', 105, { req: 'b' }),
-    crec('rpc', 'rpc', 'SetView start', 200, { req: 'e' }),
-  ];
-  assert.equal(askedAtOnce(lines), 3);
-  assert.equal(askedAtOnce([]), 0);
 });

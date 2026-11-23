@@ -378,26 +378,6 @@ export function queuedCalls(lines: TraceLine[]): Queued[] {
   return out;
 }
 
-// askedAtOnce is the most calls the client sent in one turn of its loop, on
-// its own clock: starts each within ONCE_MS of the last. One paint's asks
-// leave together, so this counts what one paint asks of the six sockets,
-// and unlike a wait it does not move with the machine's speed.
-export function askedAtOnce(lines: TraceLine[]): number {
-  const starts = lines
-    .filter((r) => r.origin === 'client' && r.kind === 'rpc' && r.ct !== undefined && r.msg.endsWith(' start') && r.msg !== 'Subscribe start')
-    .map((r) => r.ct!)
-    .sort((a, b) => a - b);
-  let most = 0;
-  let run = 0;
-  starts.forEach((t, i) => {
-    run = i > 0 && t - starts[i - 1] <= ONCE_MS ? run + 1 : 1;
-    most = Math.max(most, run);
-  });
-  return most;
-}
-
-export const ONCE_MS = 3;
-
 // QUEUE_MS is the wait past which a call counts as queued: far above the
 // node's own accept and the clocks' skew, and below a round trip to a far
 // node.
