@@ -104,17 +104,17 @@ func ReadSurfaces(o Outcome) bool {
 	return o != OutcomeOK && o != OutcomeDead && o != OutcomeAbandoned && o != OutcomeDisabled
 }
 
-// PlaceReadSurfaces reports whether a by-id tile read's latch goes on the
+// PlaceReadSurfaces reports whether a by-id tile read's failure goes on the
 // notice row. A place has no dead preview, so dead surfaces like any refusal; an
-// outage is the grid read's to name.
-func PlaceReadSurfaces(v inflight.Verdict) bool {
-	return v == inflight.Refused || v == inflight.Dead
+// outage is the grid read's to name, and a disabled source's chip says it.
+func PlaceReadSurfaces(o Outcome) bool {
+	return ReadSurfaces(o) && o != OutcomeTransport || o == OutcomeDead
 }
 
 // TargetReadSurfaces is PlaceReadSurfaces for a link's target read: the link
 // draws dead, so only a refusal that is not the dead verdict is said.
-func TargetReadSurfaces(v inflight.Verdict) bool {
-	return v == inflight.Refused
+func TargetReadSurfaces(o Outcome) bool {
+	return ReadSurfaces(o) && o != OutcomeTransport
 }
 
 // Reaction is what a mutation's outcome calls for; success is the zero value.

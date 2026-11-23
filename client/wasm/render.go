@@ -945,10 +945,7 @@ func (a *App) landBody(tileID string, data []byte, basis rpc.ContentBasis, asked
 	o := clientsync.Of(err)
 	a.fetch.contents.Settle(tileID, clientsync.ReactRead(o))
 	if err != nil {
-		// Say why, unless drawing it dead already does.
-		if clientsync.ReadSurfaces(o) {
-			a.surfaceRPCError("ReadContent", err)
-		}
+		a.surfaceReadError("ReadContent", err)
 		return err
 	}
 	a.c.PutFetchedContent(tileID, data, basis, asked)

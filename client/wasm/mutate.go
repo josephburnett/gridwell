@@ -69,8 +69,16 @@ type write struct {
 	afterHolds bool
 }
 
-// surfaceRPCError puts a failed RPC on the notice row. clientsync's
-// tables never route a conflict here.
+// surfaceReadError is a failed read's one way onto the notice row: only what
+// clientsync.ReadSurfaces says is told.
+func (a *App) surfaceReadError(label string, err error) {
+	if clientsync.ReadSurfaces(clientsync.Of(err)) {
+		a.surfaceRPCError(label, err)
+	}
+}
+
+// surfaceRPCError puts a failed RPC on the notice row; a read's goes through
+// surfaceReadError. clientsync's tables never route a conflict here.
 func (a *App) surfaceRPCError(label string, err error) {
 	if err == nil {
 		return

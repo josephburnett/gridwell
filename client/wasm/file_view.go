@@ -136,7 +136,7 @@ func (a *App) readFileInfo(v *fileView, id string, asked fileinfo.Asked) {
 	}
 	v.table.Set("textContent", "")
 	if err != nil {
-		a.surfaceRPCError("ReadContent", err)
+		a.surfaceReadError("ReadContent", err)
 		return
 	}
 	v.info = info

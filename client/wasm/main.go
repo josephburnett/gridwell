@@ -856,7 +856,7 @@ func (a *App) fetchLinkTarget(tileID string) {
 	a.readTileByID(tileID, clientsync.TargetReadSurfaces)
 }
 
-func (a *App) readTileByID(tileID string, surfaces func(inflight.Verdict) bool) {
+func (a *App) readTileByID(tileID string, surfaces func(clientsync.Outcome) bool) {
 	if !namesRow(tileID) {
 		return
 	}
@@ -880,7 +880,7 @@ func (a *App) readTileByID(tileID string, surfaces func(inflight.Verdict) bool) 
 		v := clientsync.ReactRead(o)
 		a.fetch.tiles.Settle(tileID, v)
 		switch {
-		case surfaces(v):
+		case surfaces(o):
 			// The asker is a crumb, a descent or a link's target, which would
 			// otherwise say nothing.
 			detail := "the row is gone"

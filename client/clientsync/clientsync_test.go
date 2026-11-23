@@ -398,14 +398,16 @@ func TestReactPreviewTable(t *testing.T) {
 // A pane standing in a tile that is gone is not drawn dead: the grid draws a
 // dead link, but a place draws an empty box, so there the verdict is said.
 func TestAPlaceReadSaysTheDeadVerdict(t *testing.T) {
-	for v, want := range map[inflight.Verdict]bool{
-		inflight.Answered:    false,
-		inflight.Unreachable: false,
-		inflight.Refused:     true,
-		inflight.Dead:        true,
+	for o, want := range map[Outcome]bool{
+		OutcomeOK:        false,
+		OutcomeTransport: false,
+		OutcomeAbandoned: false,
+		OutcomeDisabled:  false,
+		OutcomeRejected:  true,
+		OutcomeDead:      true,
 	} {
-		if got := PlaceReadSurfaces(v); got != want {
-			t.Errorf("PlaceReadSurfaces(%v) = %v, want %v", v, got, want)
+		if got := PlaceReadSurfaces(o); got != want {
+			t.Errorf("PlaceReadSurfaces(%v) = %v, want %v", o, got, want)
 		}
 	}
 }
@@ -413,14 +415,16 @@ func TestAPlaceReadSaysTheDeadVerdict(t *testing.T) {
 // A link whose target is gone draws dead and says nothing: the read that
 // found it out is a link's, not a place's.
 func TestATargetReadSaysNothingOfTheDeadVerdict(t *testing.T) {
-	for v, want := range map[inflight.Verdict]bool{
-		inflight.Answered:    false,
-		inflight.Unreachable: false,
-		inflight.Refused:     true,
-		inflight.Dead:        false,
+	for o, want := range map[Outcome]bool{
+		OutcomeOK:        false,
+		OutcomeTransport: false,
+		OutcomeAbandoned: false,
+		OutcomeDisabled:  false,
+		OutcomeRejected:  true,
+		OutcomeDead:      false,
 	} {
-		if got := TargetReadSurfaces(v); got != want {
-			t.Errorf("TargetReadSurfaces(%v) = %v, want %v", v, got, want)
+		if got := TargetReadSurfaces(o); got != want {
+			t.Errorf("TargetReadSurfaces(%v) = %v, want %v", o, got, want)
 		}
 	}
 }

@@ -197,7 +197,7 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 		r := clientsync.ReactPreview(err, len(jpeg) == 0)
 		a.fetch.previews.Settle(tileID, r.Latch)
 		if r.Surface {
-			a.surfaceRPCError("GetTilePreview", err)
+			a.surfaceReadError("GetTilePreview", err)
 		}
 		if r.Settle {
 			a.views.urlPreview.PutEmpty(tileID, blobID)
