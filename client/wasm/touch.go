@@ -20,7 +20,6 @@ import (
 // touch-action is none so the browser does not claim the gesture and swallow
 // the touchmove stream.
 func (a *App) installTouchInput() {
-	a.touch = touchgest.New()
 	// One retained callback, because a js.Func made per press leaks. Armed
 	// blindly on every touchstart; the machine ignores a firing that does not
 	// land on a still-held press.

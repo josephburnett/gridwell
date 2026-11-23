@@ -98,6 +98,32 @@ test('touch: tapping the previous crumb ascends a text descent (#222)', async ({
   expect(p.textFocus, 'crumb tap ascended').toBe('');
 });
 
+// The bar's DOM buttons take a finger through the same translation as the
+// canvas. The rendered/raw toggle is made by the boot draw, before the canvas
+// input is installed, so a tap on it is the cell that reads the touch machine
+// from an element made first.
+test('touch: a tap on the rendered/raw toggle flips a text descent both ways', async ({ gw, window }) => {
+  await gw.enterSource('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  await gw.openMenu();
+  await gw.dragCreate('markdown', cx, cy);
+  const pt = await gw.cellCenter(f.id, cx, cy);
+  await window.touchscreen.tap(pt.x, pt.y);
+  await gw.waitIdle();
+  expect((await gw.focused()).textMode, 'a new text opens raw').toBe('text');
+
+  const menu = await gw.menu();
+  await window.touchscreen.tap(menu.plusX, menu.plusY);
+  await gw.waitIdle();
+  expect((await gw.focused()).textMode, 'the tap rendered it').toBe('rendered');
+  await window.touchscreen.tap(menu.plusX, menu.plusY);
+  await gw.waitIdle();
+  expect((await gw.focused()).textMode, 'and the next tap shows it raw again').toBe('text');
+  await expect(window.locator('#gw-boot.failed')).toHaveCount(0);
+});
+
 test('touch: drag moves a tile; two-finger tap ascends a descent', async ({ gw, window }) => {
   await installEchoGate(window);
   await gw.enterSource('home');

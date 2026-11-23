@@ -140,9 +140,9 @@ type App struct {
 	gate         *nodebuild.Gate
 	buildVerdict *nodebuild.Verdict
 
-	// touchDownTarget is where synthetic MouseDowns route; fingerPress is
-	// true while one is dispatched, so the press it starts knows a finger
-	// made it. Both owned by touch.go.
+	// touch is made with the App, as the first draw makes elements a finger
+	// reaches (installOverlayTouch); touchDownTarget is where synthetic MouseDowns
+	// route; fingerPress marks a press a finger made. All owned by touch.go.
 	touch           *touchgest.Machine
 	touchTimerCb    js.Func
 	touchDownTarget js.Value
@@ -624,6 +624,7 @@ func main() {
 		subscriptionKick:  make(chan struct{}, 1),
 		locals:            map[string]*paneLocal{},
 		menu:              menu.New(),
+		touch:             touchgest.New(),
 		errs:              errsurface.New(),
 		tr:                tr,
 		caps:              caps.Derive(bridgeCaps(), false),
