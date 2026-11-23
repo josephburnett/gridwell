@@ -306,6 +306,28 @@ const routePlaceholder = "0"
 type forward struct {
 	ns     string
 	client namespace.Namespace
+	s      *Server
+}
+
+// answer is a forwarded call's error as this node gives it: a call the user
+// cut by disabling the connection while it was in flight answers as one
+// asked after (disabledAnswer), not as the closing transport's cancel.
+func (f *forward) answer(err error) error {
+	if err == nil {
+		return nil
+	}
+	f.s.mu.Lock()
+	off := f.s.switchedOff(f.ns)
+	f.s.mu.Unlock()
+	if off {
+		return disabledAnswer(f.ns)
+	}
+	return err
+}
+
+// disabledAnswer is every call's answer on a connection the user disabled.
+func disabledAnswer(name string) error {
+	return gwerr.UnheardDisabled(name, fmt.Sprintf("connection: connection %q: %s", name, rpc.DisabledDetail))
 }
 
 // route resolves the connection an id chains through: the first segment names
@@ -337,7 +359,7 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 	if err != nil {
 		return nil, "", err
 	}
-	return &forward{ns: first, client: lc.client}, rest, nil
+	return &forward{ns: first, client: lc.client, s: s}, rest, nil
 }
 
 // dialConfig resolves a declared connection to a dial.Config with host-side
@@ -416,7 +438,7 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	}
 	if s.switchedOff(name) {
 		s.mu.Unlock()
-		return nil, gwerr.UnheardDisabled(name, fmt.Sprintf("connection: connection %q: %s", name, rpc.DisabledDetail))
+		return nil, disabledAnswer(name)
 	}
 	kv := map[string]string{"conn": name}
 	trace.Emit("connection", "dial", "dial", kv)
@@ -614,7 +636,7 @@ func (s *Server) Handshake(ctx context.Context, req *gridwellv1.HandshakeRequest
 	}
 	resp, err := fw.client.Handshake(ctx, &gridwellv1.HandshakeRequest{Namespace: rest})
 	if err != nil {
-		return nil, err
+		return nil, fw.answer(err)
 	}
 	return rpc.TransitQualifySourceList(first, resp), nil
 }
@@ -632,7 +654,8 @@ func (s *Server) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 		}
 		return nil, err
 	}
-	return fw.client.Probe(ctx, &gridwellv1.ProbeRequest{TileId: local})
+	resp, err := fw.client.Probe(ctx, &gridwellv1.ProbeRequest{TileId: local})
+	return resp, fw.answer(err)
 }
 
 // forwardVerb is every non-streaming verb: route the id, build the far node's
@@ -649,7 +672,7 @@ func forwardVerb[Req, Resp any](ctx context.Context, s *Server, ref string,
 	}
 	resp, err := call(fw.client, ctx, build(local, rpc.InboundHop(ref, "", true)))
 	if err != nil {
-		return zero, err
+		return zero, fw.answer(err)
 	}
 	return qualify(fw.ns, resp), nil
 }
@@ -677,7 +700,7 @@ func (s *Server) liveHops() []forward {
 	defer s.mu.Unlock()
 	hops := make([]forward, 0, len(s.live))
 	for ns, lc := range s.live {
-		hops = append(hops, forward{ns, lc.client})
+		hops = append(hops, forward{ns, lc.client, s})
 	}
 	slices.SortFunc(hops, func(a, b forward) int { return cmp.Compare(a.ns, b.ns) })
 	return hops
@@ -773,7 +796,7 @@ func (s *Server) ReadContent(ctx context.Context, req *gridwellv1.ReadContentReq
 	if err != nil {
 		return err
 	}
-	return fw.client.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: local, Info: req.Info}, send)
+	return fw.answer(fw.client.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: local, Info: req.Info}, send))
 }
 
 func (s *Server) ServeContent(ctx context.Context, req *gridwellv1.ServeContentRequest, send func(*gridwellv1.ServeContentChunk) error) error {
@@ -783,7 +806,7 @@ func (s *Server) ServeContent(ctx context.Context, req *gridwellv1.ServeContentR
 	}
 	bound := proto.CloneOf(req)
 	bound.TileId = local
-	return fw.client.ServeContent(ctx, bound, send)
+	return fw.answer(fw.client.ServeContent(ctx, bound, send))
 }
 
 func (s *Server) WriteContent(ctx context.Context, recv func() (*gridwellv1.WriteContentRequest, error)) (*gridwellv1.TileResponse, error) {
@@ -804,7 +827,7 @@ func (s *Server) WriteContent(ctx context.Context, recv func() (*gridwellv1.Writ
 	rewritten.TileId = local
 	resp, err := fw.client.WriteContent(ctx, namespace.Rebound(rewritten, recv))
 	if err != nil {
-		return nil, err
+		return nil, fw.answer(err)
 	}
 	return qualifyAnswer(fw.ns, resp), nil
 }
@@ -821,7 +844,7 @@ func (s *Server) OpenShell(ctx context.Context, recv func() (*gridwellv1.OpenShe
 	// Copy before rewriting the bind: the caller still owns `first`.
 	rewritten := proto.Clone(first).(*gridwellv1.OpenShellRequest)
 	rewritten.TileId = local
-	return fw.client.OpenShell(ctx, namespace.Rebound(rewritten, recv), send)
+	return fw.answer(fw.client.OpenShell(ctx, namespace.Rebound(rewritten, recv), send))
 }
 
 // Subscribe streams every connection's prefixed remote events and their

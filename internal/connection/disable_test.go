@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
@@ -56,5 +57,45 @@ func TestDisableStopsOnceAndOnlyADeclaredConnection(t *testing.T) {
 	}
 	if dials.Load() != before {
 		t.Error("a read through a disabled connection dialed")
+	}
+}
+
+// heldClient holds every body read until its connection closes, and then
+// fails it as a closing gRPC client does.
+type heldClient struct {
+	movingClient
+	asked  chan struct{}
+	closed chan struct{}
+}
+
+func (c heldClient) ReadContent(context.Context, *gridwellv1.ReadContentRequest, func(*gridwellv1.ContentChunk) error) error {
+	c.asked <- struct{}{}
+	<-c.closed
+	return gwerr.Unheard("grpc: the client connection is closing")
+}
+
+// A call in flight when the user disables its connection answers as one
+// asked after: the disabled verdict, unheard, never the closing transport's
+// cancel, which a reader would take for an outage and tell.
+func TestACallTheDisableCutsAnswersTheDisabledVerdict(t *testing.T) {
+	far := heldClient{movingClient: movingClient{root: new(string)}, asked: make(chan struct{}), closed: make(chan struct{})}
+	s, err := New(openStore(t), func(dial.Config) (namespace.Namespace, func(), error) {
+		return far, func() { close(far.closed) }, nil
+	}, "", []config.ConnectionConfig{{Name: "rtb", Label: "RTB", Addr: "/s"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	read := make(chan error, 1)
+	go func() {
+		read <- s.ReadContent(context.Background(), &gridwellv1.ReadContentRequest{TileId: "rtb/rnode1/7"},
+			func(*gridwellv1.ContentChunk) error { return nil })
+	}()
+	<-far.asked
+	if err := s.Disable("rtb"); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-read; !gwerr.IsSourceDisabled(err) || !gwerr.IsUnheard(err) {
+		t.Errorf("the cut read answered %v, want the disabled verdict, unheard", err)
 	}
 }
