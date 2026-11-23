@@ -420,3 +420,25 @@ export async function createText(origin: string, gridId: string, x: number, y: n
   await updateText(origin, t.id, Number(t.version ?? 0), body);
   return getTile(origin, t.id);
 }
+
+// A capture writeback: the preview a url or shell tile froze on, as another
+// screen's ascent writes it.
+export async function capturePreview(origin: string, tileId: string, kind: string, jpeg: Buffer): Promise<void> {
+  const res = await fetch(`${origin}/${SERVICE}/SetTile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: JSON.stringify({ tileId, tile: { kind }, preview: jpeg.toString('base64') }),
+  });
+  if (!res.ok) throw new Error(`SetTile(${tileId}) capture failed: ${res.status} ${await res.text()}`);
+}
+
+// A tile's preview read as another screen's paint reads it.
+export async function getTilePreview(origin: string, tileId: string): Promise<Buffer> {
+  const res = await fetch(`${origin}/${SERVICE}/GetTilePreview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: JSON.stringify({ tileId }),
+  });
+  if (!res.ok) throw new Error(`GetTilePreview(${tileId}) failed: ${res.status} ${await res.text()}`);
+  return Buffer.from(((await res.json()) as { jpeg?: string }).jpeg ?? '', 'base64');
+}

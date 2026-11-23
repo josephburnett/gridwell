@@ -53,7 +53,7 @@ var cacheMigrations = []dbformat.Migration{
 
 // emptyCache deletes every cached answer, keeping the tables.
 func emptyCache(ctx context.Context, tx *sql.Tx) error {
-	for _, table := range []string{"sourcelists", "grids", "tiles", "content", "contentstamps", "previews", "servecontent"} {
+	for _, table := range []string{"sourcelists", "grids", "tiles", "content", "contentstamps", "previews", "previewkeys", "servecontent"} {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table); err != nil {
 			return fmt.Errorf("empty %s: %w", table, err)
 		}
@@ -98,6 +98,12 @@ CREATE TABLE IF NOT EXISTS previews (
     tile_id    TEXT PRIMARY KEY,
     jpeg       BLOB NOT NULL,
     fetched_at INTEGER NOT NULL
+);
+-- The key (Tile.preview_blob_id) a cached preview was asked under, beside
+-- its row in previews. Additive, like contentstamps.
+CREATE TABLE IF NOT EXISTS previewkeys (
+    tile_id TEXT PRIMARY KEY,
+    blob_id INTEGER NOT NULL
 );
 -- The /content/ API's bounded body cache. Added without a version bump:
 -- schemaDDL runs at every Open and the table is additive, which is the
@@ -161,6 +167,13 @@ type Layer struct {
 	// setDark is the one writer.
 	darkMu sync.Mutex
 	dark   map[string]bool
+
+	// streams is how many subscriptions this layer folds events from, and
+	// untold the sources whose last health said their changes are not told
+	// (EventSourceHealth.told); see told.
+	toldMu  sync.Mutex
+	streams int
+	untold  map[string]bool
 
 	order foldOrder
 }
@@ -645,7 +658,7 @@ func gridTileIDs(ctx context.Context, tx *sql.Tx, gridID string) ([]string, erro
 
 // tileKeyed is every table that keeps something under a tile id beside its
 // tiles row. Each is keyed by the id alone, so no body is shared between tiles.
-var tileKeyed = []string{"content", "contentstamps", "previews", "servecontent"}
+var tileKeyed = []string{"content", "contentstamps", "previews", "previewkeys", "servecontent"}
 
 // forgetUnnamed drops everything in tileKeyed under each id no tiles row names.
 // Every writer that removes tile rows calls it in the same transaction, after
@@ -788,10 +801,33 @@ func (c *Layer) deleteTile(ctx context.Context, tileID string) {
 	})
 }
 
+// GetTilePreview serves the preview the cached row names when this layer
+// holds it under that key and the row is kept current, since a key names one
+// set of bytes (Tile.preview_blob_id); anything else asks the source.
 func (c *Layer) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
+	resp, held, err := c.preview(ctx, in)
+	how := "asked"
+	if held {
+		how = "held"
+	}
+	trace.Emit("sourcecache", "preview", "preview "+how, map[string]string{"id": in.TileId, "how": how})
+	return resp, err
+}
+
+// preview is GetTilePreview without its trace record, which the prefetch walk
+// leaves to its own.
+func (c *Layer) preview(ctx context.Context, in *pb.GetTilePreviewRequest) (resp *pb.GetTilePreviewResponse, held bool, err error) {
+	key := c.rowPreviewKey(ctx, in.TileId)
+	if key != 0 && c.told(rpc.UUIDOf(in.TileId)) {
+		var jpeg []byte
+		if c.db.QueryRowContext(ctx, `SELECT p.jpeg FROM previews p JOIN previewkeys k ON k.tile_id = p.tile_id
+			WHERE p.tile_id = ? AND k.blob_id = ?`, in.TileId, key).Scan(&jpeg) == nil {
+			return &pb.GetTilePreviewResponse{Jpeg: jpeg}, true, nil
+		}
+	}
 	r := c.order.begin()
 	defer r.end()
-	resp, err := c.Namespace.GetTilePreview(ctx, in)
+	resp, err = c.Namespace.GetTilePreview(ctx, in)
 	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		if jpeg := resp.GetJpeg(); len(jpeg) > 0 {
@@ -800,18 +836,80 @@ func (c *Layer) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest
 					ON CONFLICT(tile_id) DO UPDATE SET jpeg=excluded.jpeg, fetched_at=excluded.fetched_at`,
 					in.TileId, jpeg, now())
 				c.noteCache("store preview", werr)
+				// Keyed as the row read before the ask: an answer newer than
+				// the row is stored under the older key, which the row moves
+				// past when it is told, so it is asked again.
+				_, werr = c.db.ExecContext(ctx, `INSERT INTO previewkeys (tile_id, blob_id) VALUES (?, ?)
+					ON CONFLICT(tile_id) DO UPDATE SET blob_id=excluded.blob_id`, in.TileId, key)
+				c.noteCache("store preview key", werr)
 			})
 		}
-		return resp, nil
+		return resp, false, nil
 	}
 	if !gwerr.IsUnheard(err) {
-		return nil, err
+		return nil, false, err
 	}
 	var jpeg []byte
 	if serr := c.db.QueryRowContext(ctx, `SELECT jpeg FROM previews WHERE tile_id = ?`, in.TileId).Scan(&jpeg); serr != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return &pb.GetTilePreviewResponse{Jpeg: jpeg}, nil
+	return &pb.GetTilePreviewResponse{Jpeg: jpeg}, false, nil
+}
+
+// rowPreviewKey is the preview key the cached row of tileID names, 0 when
+// there is no row.
+func (c *Layer) rowPreviewKey(ctx context.Context, tileID string) int64 {
+	var tb []byte
+	if c.db.QueryRowContext(ctx, `SELECT proto FROM tiles WHERE id = ?`, tileID).Scan(&tb) != nil {
+		return 0
+	}
+	t := &pb.Tile{}
+	if proto.Unmarshal(tb, t) != nil {
+		return 0
+	}
+	return t.GetPreviewBlobId()
+}
+
+// told is whether this layer's rows of source are kept current: a stream it
+// folds is open, the source answers, and its last health did not say its
+// changes go untold.
+func (c *Layer) told(source string) bool {
+	c.toldMu.Lock()
+	ok := c.streams > 0 && !c.untold[source]
+	c.toldMu.Unlock()
+	return ok && !c.isDark(source)
+}
+
+// noteTold applies one health event's told, and openStream and closeStream
+// count the streams folded; with none, nothing keeps a row current.
+func (c *Layer) noteTold(h *pb.EventSourceHealth) {
+	if h.Told == nil && h.GetHealthy() {
+		return
+	}
+	c.toldMu.Lock()
+	defer c.toldMu.Unlock()
+	if h.GetHealthy() && h.GetTold() {
+		delete(c.untold, h.GetUuid())
+		return
+	}
+	if c.untold == nil {
+		c.untold = map[string]bool{}
+	}
+	c.untold[h.GetUuid()] = true
+}
+
+func (c *Layer) openStream() {
+	c.toldMu.Lock()
+	c.streams++
+	c.toldMu.Unlock()
+}
+
+func (c *Layer) closeStream() {
+	c.toldMu.Lock()
+	if c.streams--; c.streams == 0 {
+		clear(c.untold)
+	}
+	c.toldMu.Unlock()
 }
 
 // ReadContent tees the live stream, storing only at a clean end. An unheard
@@ -904,6 +1002,8 @@ func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send fun
 	// Every (re)subscription warms every source; one connection coming back
 	// is setDark's trigger instead.
 	c.kickPrefetch("")
+	c.openStream()
+	defer c.closeStream()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// Two goroutines relay the two streams; the caller's send is not
@@ -973,6 +1073,7 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 		// connection segment is a far node's source, not the machine. No
 		// announce: the event itself is relayed onward.
 		c.setDark(p.SourceHealth.GetUuid(), !p.SourceHealth.GetHealthy(), p.SourceHealth.GetDetail(), false, nil)
+		c.noteTold(p.SourceHealth)
 	}
 }
 

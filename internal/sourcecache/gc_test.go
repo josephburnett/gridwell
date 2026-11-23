@@ -65,6 +65,7 @@ func TestATileRowLeavingFreesOnlyWhatNoRowNames(t *testing.T) {
 			`INSERT INTO content (tile_id, media_type, version, data, fetched_at) VALUES (?, 'text/plain', 1, x'61', 0)`,
 			`INSERT INTO contentstamps (tile_id, stamp) VALUES (?, 's')`,
 			`INSERT INTO previews (tile_id, jpeg, fetched_at) VALUES (?, x'00', 0)`,
+			`INSERT INTO previewkeys (tile_id, blob_id) VALUES (?, 7)`,
 			`INSERT INTO servecontent (tile_id, subpath, status, media_type, data, fetched_at) VALUES (?, '', 200, 'text/html', x'00', 0)`,
 		} {
 			if _, err := cc.db.Exec(q, id); err != nil {

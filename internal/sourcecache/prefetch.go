@@ -214,7 +214,7 @@ func (w *walker) walkTile(t *pb.Tile, listing string) bool {
 	}
 	// A 0 key is no preview (pb.Tile.preview_blob_id), so there is nothing to ask.
 	if t.GetPreviewBlobId() != 0 {
-		if _, err := w.c.GetTilePreview(w.ctx, &pb.GetTilePreviewRequest{TileId: t.GetId()}); err != nil && gwerr.IsUnheard(err) {
+		if _, _, err := w.c.preview(w.ctx, &pb.GetTilePreviewRequest{TileId: t.GetId()}); err != nil && gwerr.IsUnheard(err) {
 			return false
 		}
 	}

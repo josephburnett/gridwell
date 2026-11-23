@@ -7,5 +7,6 @@
   "firstOpenRoundTrips": 1,
   "textSavesInFlight": 1,
   "callsInFlight": 17,
+  "revisitPreviewTrips": 0,
   "known": {}
 }

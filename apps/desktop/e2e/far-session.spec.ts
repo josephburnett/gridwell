@@ -3,9 +3,9 @@ import * as path from 'node:path';
 import type { Page } from '@playwright/test';
 import { test, expect, homePassword, loginToken } from './fixtures';
 import type { GridwellDriver } from './driver';
-import { createText, createTile, setURLPreview } from './oracle';
+import { capturePreview, createText, createTile, getTilePreview, setURLPreview } from './oracle';
 import { dumpNow } from './trace';
-import { droppedPanes, errorNotices, eventToPaint, maxInFlight, QUEUE_MS, queuedCalls, refusedCalls, repeatedReads, roundTrips } from './tracebudget';
+import { droppedPanes, errorNotices, eventToPaint, maxInFlight, previewAnswers, QUEUE_MS, queuedCalls, refusedCalls, repeatedReads, roundTrips } from './tracebudget';
 
 // A session of ordinary use on a far node's grids, reached through a door on
 // this node's home, run once over a direct hop and once over one that holds
@@ -38,7 +38,11 @@ interface Recorded {
   firstOpenRoundTrips: number;
   textSavesInFlight: number;
   callsInFlight: number;
+  revisitPreviewTrips: number;
 }
+
+// PREVIEW is an 8 by 8 JPEG, a preview any client decodes.
+const PREVIEW = Buffer.from('/9j/2wCEABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2MBERISGBUYLxoaL2NCOEJjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY//AABEIAAgACAMBIgACEQEDEQH/xAGiAAABBQEBAQEBAQAAAAAAAAAAAQIDBAUGBwgJCgsQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+gEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoLEQACAQIEBAMEBwUEBAABAncAAQIDEQQFITEGEkFRB2FxEyIygQgUQpGhscEJIzNS8BVictEKFiQ04SXxFxgZGiYnKCkqNTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqCg4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2dri4+Tl5ufo6ery8/T19vf4+fr/2gAMAwEAAhEDEQA/AKVFFFch9Cf/2Q==', 'base64');
 
 const recorded = JSON.parse(fs.readFileSync(SPEC, 'utf8')) as Recorded;
 
@@ -126,6 +130,7 @@ interface Session {
   firstOpen: { from: number; to: number };
   // pressedPending is whether a create was still pending when pressed.
   pressedPending: boolean;
+  revisit: { from: number; to: number; tiles: number };
 }
 
 // PAGES url tiles, each with a captured preview, are more previews than the
@@ -309,7 +314,21 @@ async function session(gw: GridwellDriver, win: Page, delay: number): Promise<Se
   ms['split'] = await msToPaint(win, 'mouseup', { kind: 'panes', more: n + 1 }, () => gw.splitFocusedPaneVertical());
   await gw.waitIdle();
 
-  return { ms, reads, firstOpen: { from, to }, pressedPending };
+  // A url and a shell with previews, read once, then read again as another
+  // screen's paint would: the node holds what the far node sent the first time.
+  const shown: string[] = [];
+  for (const [i, kind] of ['url', 'shell'].entries()) {
+    const t = await createTile(gw.origin, f.gridID, kind, cx + 7 + i, cy);
+    await capturePreview(gw.origin, t.id, kind, PREVIEW);
+    await getTilePreview(gw.origin, t.id);
+    shown.push(t.id);
+  }
+  await gw.waitIdle();
+  const again = Date.now();
+  for (const id of shown) expect(await getTilePreview(gw.origin, id), 'the preview read again is the one captured').toEqual(PREVIEW);
+  const revisit = { from: again, to: Date.now(), tiles: shown.length };
+
+  return { ms, reads, firstOpen: { from, to }, pressedPending, revisit };
 }
 
 // direct is the no-delay run's times, which the delayed run compares against;
@@ -335,7 +354,8 @@ for (const delay of [0, recorded.delayMs]) {
       const callsInFlight = Math.max(0, ...queued.map((q) => q.inFlight));
       // Reported, not held: a wait moves with the machine's speed.
       const waited = queued.filter((q) => q.verb !== 'GetTilePreview' && q.waitMs > QUEUE_MS).map((q) => [q.verb, Math.round(q.waitMs), q.inFlight]);
-      const report = { delay, ms: round(s.ms), reads: round(s.reads), firstOpenRoundTrips: trips, textSavesInFlight: saves, eventPaintMs, callsQueued, callsInFlight, waited };
+      const previews = previewAnswers(lines, s.revisit.from, s.revisit.to);
+      const report = { delay, ms: round(s.ms), reads: round(s.reads), firstOpenRoundTrips: trips, textSavesInFlight: saves, eventPaintMs, callsQueued, callsInFlight, waited, revisitPreviews: previews };
       console.log(`[far-session] ${JSON.stringify(report)}`);
       await info.attach('far-session.json', { body: JSON.stringify(report, null, 2), contentType: 'application/json' });
       await info.attach('dump.jsonl', { body: lines.map((l) => JSON.stringify(l)).join('\n'), contentType: 'application/jsonl' });
@@ -360,6 +380,8 @@ for (const delay of [0, recorded.delayMs]) {
       // A ceiling: the count moves by a call or two with when the previews
       // answer, but a change that asks more of the six sockets at once fails.
       expect.soft(callsInFlight, 'calls open at once, what the six sockets must hold').toBeLessThanOrEqual(recorded.callsInFlight);
+      expect.soft(previews.asked, 'previews read again that the node asked the far node for').toBe(recorded.revisitPreviewTrips);
+      expect.soft(previews.held, 'previews read again that the node served from what it holds').toBeGreaterThanOrEqual(s.revisit.tiles - recorded.revisitPreviewTrips);
 
       const fmt = (xs: unknown[]) => JSON.stringify(xs, null, 1);
       expect.soft(fmt(refusedCalls(lines)), 'no call refused').toBe('[]');

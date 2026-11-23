@@ -382,3 +382,15 @@ export function queuedCalls(lines: TraceLine[]): Queued[] {
 // node's own accept and the clocks' skew, and below a round trip to a far
 // node.
 export const QUEUE_MS = 50;
+// previewAnswers counts, between from and to, the previews the node's cache
+// asked a far node for and those it served from what it holds
+// (sourcecache.Layer.GetTilePreview).
+export function previewAnswers(lines: TraceLine[], from: number, to: number): { asked: number; held: number } {
+  const n = { asked: 0, held: 0 };
+  for (const r of lines) {
+    if (r.origin !== 'node' || r.src !== 'sourcecache' || r.kind !== 'preview' || r.t === undefined || r.t < from || r.t > to) continue;
+    if (r.kv?.how === 'asked') n.asked++;
+    if (r.kv?.how === 'held') n.held++;
+  }
+  return n;
+}
