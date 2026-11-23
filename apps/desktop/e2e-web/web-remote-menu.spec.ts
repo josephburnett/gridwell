@@ -399,7 +399,7 @@ test('a menu read the network swallows does not latch the remote menu empty', as
     await route.continue();
   });
 
-  await gw.openMenu();
+  await gw.openMenu(false); // its read is in the hole, so it never settles
   const menu = await window.evaluate(() => (window as any).__gridwellTest.menu());
   expect(menu.open, 'the remote pane has its menu open').toBe(true);
   // The strip still holds this node's templates, so it unfolds, with no swatch.

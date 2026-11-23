@@ -387,7 +387,8 @@ export class GridwellDriver {
 
   // Clicks the focused pane's + button. It no-ops when the menu is already
   // open, since + is a toggle and a second open must not close it.
-  async openMenu(): Promise<void> {
+  // settled false is for a spec that holds the menu's own read open.
+  async openMenu(settled = true): Promise<void> {
     const menu = await this.menu();
     if (menu.open) return;
     await this.win.mouse.click(menu.plusX, menu.plusY);
@@ -396,7 +397,7 @@ export class GridwellDriver {
     });
     // A far node's primitives move once its policy lands, so an item's point
     // is read after the menu's own read.
-    await this.waitIdle();
+    if (settled) await this.waitIdle();
   }
 
   // Clicks the chevron strip, the gesture every swatch sits behind because a
