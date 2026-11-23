@@ -394,6 +394,9 @@ export class GridwellDriver {
     await this.win.waitForFunction(() => (window as any).__gridwellTest.menu().open, null, {
       timeout: 5_000,
     });
+    // A far node's primitives move once its policy lands, so an item's point
+    // is read after the menu's own read.
+    await this.waitIdle();
   }
 
   // Clicks the chevron strip, the gesture every swatch sits behind because a

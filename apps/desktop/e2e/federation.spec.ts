@@ -166,3 +166,21 @@ test('a cross-node copy reads no listing back; the relayed event lands the copy'
   expect(reads.of(b.gridID), 'the copy read the far grid back').toBe(0);
   expect(reads.of(a.gridID), 'the copy read the source grid back').toBe(0);
 });
+
+// A far node's + menu offers its shell only once the routed Handshake has
+// said its policy, and the row moves when it does: a press aimed at a
+// primitive is read after that answer, or it lands on the next one. The
+// answer is held here so the window is always open.
+test("a far node's + menu is pressed where it settles", async ({ gw, window }) => {
+  await window.route('**/gridwell.v1.Gridwell/Handshake', async (r) => {
+    if ((r.request().postData() ?? '').includes('second')) await new Promise((res) => setTimeout(res, 1_000));
+    await r.continue();
+  });
+  await gw.enterSource('second');
+  const f = await gw.focused();
+  const [tx, ty] = [Math.round(f.cx), Math.round(f.cy) - 1];
+  await gw.openMenu();
+  expect((await gw.menu()).items.map((i) => i.kind), "the far node's policy is in the menu").toContain('shell');
+  await gw.dragCreate('door', tx, ty);
+  expect(tileAt(await gw.getGrid(f.gridID), 'door', tx, ty), 'the door the press aimed at').toBeTruthy();
+});

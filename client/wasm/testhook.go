@@ -576,8 +576,9 @@ func (a *App) thShellVisitURL(_ js.Value, args []js.Value) any {
 }
 
 // thIdle reports that no transition, drag, fetch, write or input-asked paint is in flight. Specs poll it instead of sleeping, so they never race the zoom
-// animation, the create-then-refetch, or a descent waiting on a row the
-// server has not made yet.
+// animation, the create-then-refetch, a descent waiting on a row the server
+// has not made yet, or a far node's + menu whose primitives its policy has not
+// settled.
 func (a *App) thIdle(js.Value, []js.Value) any {
 	return !a.trans.Any() &&
 		!a.persist.sched.drawAsks.InputAsked() &&
@@ -585,7 +586,8 @@ func (a *App) thIdle(js.Value, []js.Value) any {
 		!a.nav.LevelPending() &&
 		a.dragging == nil &&
 		len(a.fetch.grids.InFlight()) == 0 &&
-		len(a.fetch.tiles.InFlight()) == 0
+		len(a.fetch.tiles.InFlight()) == 0 &&
+		len(a.fetch.menus.InFlight()) == 0
 }
 
 // thIdleDetail names each thIdle component so a stalled wait reports which
@@ -611,6 +613,7 @@ func (a *App) thIdleDetail(js.Value, []js.Value) any {
 		"band":         a.band != nil,
 		"gridInflight": grids,
 		"tileInflight": tiles,
+		"menuInflight": len(a.fetch.menus.InFlight()),
 	}
 }
 
