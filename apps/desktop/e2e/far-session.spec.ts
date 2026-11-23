@@ -147,7 +147,7 @@ async function noiseJPEG(win: Page): Promise<Buffer> {
   return Buffer.from(b64, 'base64');
 }
 
-async function session(gw: GridwellDriver, win: Page): Promise<Session> {
+async function session(gw: GridwellDriver, win: Page, delay: number): Promise<Session> {
   const ms: Record<string, number> = {};
   // A read cell is timed to the paint it feeds, which a descent's transition
   // sits in front of whatever the hop, so it is reported and its serial
@@ -196,20 +196,22 @@ async function session(gw: GridwellDriver, win: Page): Promise<Session> {
   await gw.waitIdle();
 
   // One of each kind, along a row. A row the node has not answered for yet
-  // is drawn but hit by nothing: a right-drag from it before the answer
-  // copies nothing, so no call names an id the node never minted.
+  // is drawn but hit by nothing: over the delayed hop, a right-drag from it
+  // before the answer copies nothing, so no call names an id the node never
+  // minted. Over the direct hop the answer can land before the press.
   const drawnAt = (x: number, y: number): Promise<string> =>
     win.evaluate(([p, x, y]) => (window as any).__gridwellTest.drawnAt(p, x, y), [pane, x, y] as [string, number, number]);
   let pressedPending = false;
   const kinds = ['door', 'markdown', 'url', 'shell', 'workspace'];
   for (let i = 0; i < kinds.length; i++) {
     await gw.openMenu();
-    ms[`create ${kinds[i]}`] = await msToPaint(win, 'mouseup', { kind: 'tile', pane, x: cx + i, y: cy, want: '*' },
-      () => gw.dragCreate(kinds[i], cx + i, cy));
-    if (i === 0 && (await drawnAt(cx, cy)).startsWith('pending-')) {
+    const pressPending = async () => {
+      if (delay === 0 || i > 0 || !(await drawnAt(cx, cy)).startsWith('pending-')) return;
       pressedPending = true;
       await gw.copyTileCell(cx, cy, cx, cy - 1);
-    }
+    };
+    ms[`create ${kinds[i]}`] = await msToPaint(win, 'mouseup', { kind: 'tile', pane, x: cx + i, y: cy, want: '*' },
+      () => gw.dragCreate(kinds[i], cx + i, cy, pressPending));
     await gw.waitIdle();
   }
   expect.soft(await at(cx, cy - 1), 'a press on a pending row copies nothing').toBe('');
@@ -319,7 +321,7 @@ for (const delay of [0, recorded.delayMs]) {
     test(`ordinary use across a connection, ${delay} ms each way`, async ({ gw, home, window }, info) => {
       test.setTimeout(240_000);
       const token = await loginToken(gw.origin, homePassword(home));
-      const s = await session(gw, window);
+      const s = await session(gw, window, delay);
       const { lines } = await dumpNow(window, gw.origin, token);
       const round = (r: Record<string, number>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Math.round(v)]));
       const trips = roundTrips(lines, s.firstOpen.from, s.firstOpen.to);

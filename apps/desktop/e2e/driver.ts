@@ -461,11 +461,13 @@ export class GridwellDriver {
 
   // Drags a primitive swatch ("door", "markdown", "url", "shell") onto a cell
   // of the focused pane.
-  async dragCreate(kind: string, cx: number, cy: number): Promise<void> {
+  // released runs between the release and the wait for idle, while the
+  // create is still unanswered.
+  async dragCreate(kind: string, cx: number, cy: number, released?: () => Promise<void>): Promise<void> {
     const menu = await this.menu();
     const item = menu.items.find((i) => !i.isSwatch && i.kind === kind);
     if (!item) throw new Error(`no menu primitive ${kind}; have ${menu.items.map((i) => i.kind)}`);
-    await this.dragSwatchToCell(item, cx, cy);
+    await this.dragSwatchToCell(item, cx, cy, released);
   }
 
   // Drops a link, where clickSwatch descends.
@@ -486,13 +488,13 @@ export class GridwellDriver {
     await this.dragSwatchToScreen(item, x, y);
   }
 
-  private async dragSwatchToCell(item: MenuItem, cx: number, cy: number): Promise<void> {
+  private async dragSwatchToCell(item: MenuItem, cx: number, cy: number, released?: () => Promise<void>): Promise<void> {
     const f = await this.focused();
     const target = await this.cellCenter(f.id, cx, cy);
-    await this.dragSwatchToScreen(item, target.x, target.y);
+    await this.dragSwatchToScreen(item, target.x, target.y, released);
   }
 
-  private async dragSwatchToScreen(item: MenuItem, x: number, y: number): Promise<void> {
+  private async dragSwatchToScreen(item: MenuItem, x: number, y: number, released?: () => Promise<void>): Promise<void> {
     const sx = item.x + item.w / 2;
     const sy = item.y + item.h / 2;
 
@@ -502,6 +504,7 @@ export class GridwellDriver {
     await m.move(sx + 10, sy + 10); // past the 4px threshold: the drag arms
     await m.move(x, y, { steps: 8 });
     await m.up();
+    await released?.();
     await this.waitIdle();
   }
 
