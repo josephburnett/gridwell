@@ -9,6 +9,9 @@ package main
 // tile, which the machine reads, so no call site switches on a kind.
 
 import (
+	"maps"
+	"slices"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
@@ -156,6 +159,7 @@ func (a *App) navWorldCommon() nav.World {
 		TransitionMs:    totalTransitionMs,
 		ZoomDistFactor:  zoomDistFactor,
 		TextSideInset:   textSideInset,
+		TextScale:       textFixedScale,
 		Animating:       map[string]bool{},
 		MenuOpenOn:      a.menu.PaneID(),
 		Caps:            a.caps,
@@ -203,6 +207,9 @@ func (a *App) navWorldForDescend(tile *gridwellv1.Tile) *nav.DoorWorld {
 		IsLink:   isLinkTile(tile),
 		ReadOnly: a.tileReadOnly(tile),
 	}
+	if g, ok := a.c.Grid(tile.ChildGridId); ok {
+		d.Child = a.gridRows(tile.ChildGridId, g)
+	}
 	if tile.ChildGridId != "" || !rpc.IsDoorKind(tile.Kind) {
 		return d
 	}
@@ -220,6 +227,16 @@ func (a *App) navWorldForDescend(tile *gridwellv1.Tile) *nav.DoorWorld {
 		d.Health = &nav.Notice{Severity: sev, Source: source, Message: message}
 	}
 	return d
+}
+
+// gridRows is a held grid as the machine reads it, its tiles by id.
+func (a *App) gridRows(id string, g *cache.Grid) *nav.GridRows {
+	writable, _ := a.gridWritable(id)
+	rows := &nav.GridRows{Writable: writable}
+	for _, tid := range slices.Sorted(maps.Keys(g.Tiles)) {
+		rows.Tiles = append(rows.Tiles, g.Tiles[tid])
+	}
+	return rows
 }
 
 // navWorldForAscend resolves the frame being left: the content row, the

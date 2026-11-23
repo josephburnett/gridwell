@@ -48,6 +48,9 @@ type DoorWorld struct {
 	// when there is none or the question does not arise.
 	Health   *Notice
 	ReadOnly bool // tileReadOnly for the door row
+	// Child is the grid the door opens as the cache holds it, nil when not
+	// held.
+	Child *GridRows
 }
 
 // LeaveWorld is the frame being left, resolved against the row that owns it.
@@ -165,6 +168,8 @@ type World struct {
 	TransitionMs   float64
 	ZoomDistFactor float64
 	TextSideInset  float64
+	// TextScale is a text preview's scale before its content zoom.
+	TextScale float64
 
 	Animating  map[string]bool // trans.Active per pane
 	MenuOpenOn string          // the pane the + menu is open on, "" for none

@@ -20,6 +20,7 @@ import (
 	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
@@ -823,24 +824,6 @@ func clearTileDash(c js.Value) { c.Call("setLineDash", jsArray()) }
 
 const bannerFontFamily = `ui-sans-serif, system-ui, -apple-system, sans-serif`
 
-// bannerGeom clamps the banner font to 9 to 16 screen px; the text preview
-// reads the same formula.
-func bannerGeom(h, ih float64) (fontPx, bannerH float64, shown bool) {
-	const minFontPx = 9.0
-	const maxFontPx = 16.0
-	fontPx = h * 0.14
-	if fontPx < minFontPx {
-		fontPx = minFontPx
-	}
-	if fontPx > maxFontPx {
-		fontPx = maxFontPx
-	}
-	if fontPx*1.4 > ih {
-		return fontPx, 0, false
-	}
-	return fontPx, fontPx + 4, true
-}
-
 // drawTileBannerLabel letters the name in the family's line, so label and
 // frame read as one.
 func (a *App) drawTileBannerLabel(n *gridwellv1.Tile, x, y, w, h float64, fam theme.Family) {
@@ -861,7 +844,7 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 	if iw <= 0 || ih <= 0 {
 		return
 	}
-	fontPx, bannerH, shown := bannerGeom(h, ih)
+	fontPx, bannerH, shown := markdown.BannerGeom(h, ih)
 	if !shown {
 		return
 	}

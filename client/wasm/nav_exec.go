@@ -28,8 +28,12 @@ func (a *App) runNav(plan nav.Plan) {
 }
 
 // runNavEffects executes a plan's effects in order and draws. There is no
-// redraw effect: the executor always draws once after a plan.
+// redraw effect: the executor always draws once after a plan. The plan is one
+// paint's worth of asks, so its bodies leave with that draw's as one read
+// (inflight.Batch).
 func (a *App) runNavEffects(plan nav.Plan) {
+	a.fetch.bodies.Begin()
+	defer func() { a.readBodies(a.fetch.bodies.End()) }()
 	for _, e := range plan.Effects {
 		a.runNavEffect(e)
 	}
@@ -92,7 +96,9 @@ func (a *App) runNavEffect(e nav.Effect) {
 			p.TextZoom = a.textScaleFor(p) // base times content zoom
 		}
 	case nav.EffFetchGrid:
-		a.fetchGrid(a.navGridID(e))
+		a.fetchGridFor(a.navGridID(e), e.Preview)
+	case nav.EffFetchPreview:
+		a.fetchURLPreview(e.TileID, e.BlobID)
 	case nav.EffFetchTileContent, nav.EffReadTileContent:
 		a.fetchTileContent(e.TileID, e.Kind == nav.EffReadTileContent)
 	case nav.EffDropTileContent:
@@ -307,8 +313,11 @@ func (a *App) navAwait(e nav.Effect) {
 					case <-ctx.Done():
 					}
 				}
-				_, ok := a.c.Grid(id)
-				return nav.Result{OK: ok}
+				g, ok := a.c.Grid(id)
+				if !ok {
+					return nav.Result{}
+				}
+				return nav.Result{OK: true, Grid: a.gridRows(id, g)}
 			})
 	case nav.RequestReadContent:
 		id := e.Request.ID

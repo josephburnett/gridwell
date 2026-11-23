@@ -31,6 +31,7 @@ const SPEC = path.join(__dirname, 'far-session.json');
 interface Recorded {
   delayMs: number;
   boundMs: number;
+  readBoundMs: number;
   waits: Record<string, string>;
   decided: Record<string, string>;
   known: Record<string, string>;
@@ -149,9 +150,10 @@ async function noiseJPEG(win: Page): Promise<Buffer> {
 
 async function session(gw: GridwellDriver, win: Page, delay: number): Promise<Session> {
   const ms: Record<string, number> = {};
-  // A read cell is timed to the paint it feeds, which a descent's transition
-  // sits in front of whatever the hop, so it is reported and its serial
-  // reads pinned rather than held to the bound.
+  // A read cell is timed from the press to the paint it feeds, which a
+  // descent's transition sits in front of whatever the hop, so it is held to
+  // readBoundMs, the transition plus boundMs: a read that waits for the
+  // landing to start shows as one round trip past it.
   const reads: Record<string, number> = {};
   const m = win.mouse;
 
@@ -276,7 +278,7 @@ async function session(gw: GridwellDriver, win: Page, delay: number): Promise<Se
   await expect.poll(() => at(cx + 3, cy + 2), { timeout: 15_000 }).toBe(inner.id);
   await gw.waitIdle();
   const from = Date.now();
-  reads['open a far grid'] = await msToPaint(win, 'mouseup', { kind: 'painted', id: body.id, text: marker },
+  reads['open a far grid: body painted'] = await msToPaint(win, 'mousedown', { kind: 'painted', id: body.id, text: marker },
     () => gw.descendCell(cx + 3, cy + 2));
   const to = Date.now();
   await gw.waitIdle();
@@ -341,13 +343,15 @@ for (const delay of [0, recorded.delayMs]) {
       // A wait is what the hop adds, not what a busy machine adds: over the
       // delayed hop a cell is slow when it is over the bound and at least the
       // hop's one-way delay slower than the direct run just measured it.
-      if (delay === 0) direct = s.ms;
-      const added = (k: string) => (delay > 0 && direct && k in direct ? s.ms[k] - direct[k] : Infinity);
-      const slow = Object.keys(s.ms).filter((k) => !(s.ms[k] < recorded.boundMs) && !(added(k) < recorded.delayMs)).sort();
+      if (delay === 0) direct = { ...s.ms, ...s.reads };
+      const added = (k: string, v: number) => (delay > 0 && direct && k in direct ? v - direct[k] : Infinity);
+      const over = (cells: Record<string, number>, bound: number) =>
+        Object.keys(cells).filter((k) => !(cells[k] < bound) && !(added(k, cells[k]) < recorded.delayMs));
+      const slow = [...over(s.ms, recorded.boundMs), ...over(s.reads, recorded.readBoundMs)].sort();
       const named = { ...recorded.waits, ...recorded.decided };
       const listed = delay > 0 ? Object.keys(named).sort() : [];
-      expect.soft(slow, `cells at or over ${recorded.boundMs} ms: list a wait in far-session.json with why, or draw it on the gesture; drop a listed cell that is now fast`).toEqual(listed);
-      for (const k of Object.keys(named)) expect.soft(s.ms, `listed cell ${k} was not measured`).toHaveProperty([k]);
+      expect.soft(slow, `cells at or over ${recorded.boundMs} ms, or read cells at or over ${recorded.readBoundMs} ms: list a wait in far-session.json with why, or draw it on the gesture; drop a listed cell that is now fast`).toEqual(listed);
+      for (const k of Object.keys(named)) expect.soft({ ...s.ms, ...s.reads }, `listed cell ${k} was not measured`).toHaveProperty([k]);
       expect.soft(Object.values(s.reads).every(Number.isFinite), 'every read cell painted').toBe(true);
       if (delay > 0) expect.soft(s.pressedPending, 'a create over the slow hop is pressed while pending').toBe(true);
       expect.soft(trips, 'serial reads before a far grid first paints').toBe(recorded.firstOpenRoundTrips);

@@ -20,6 +20,9 @@ const (
 	GuardPaneUntouched
 	// GuardLevelOpen: the window is still inside this workspace tile. TileID.
 	GuardLevelOpen
+	// GuardLanding: the pane is still animating, or stands on this grid.
+	// PaneID, Anchor (the grid).
+	GuardLanding
 )
 
 // Guard is one precondition.
@@ -45,6 +48,9 @@ func (g Guard) holds(w World) bool {
 	case GuardPaneUntouched:
 		p, ok := w.Pane(g.PaneID)
 		return ok && p.Stack.Depth() == 1 && p.Stack.Anchor() == g.Anchor
+	case GuardLanding:
+		p, ok := w.Pane(g.PaneID)
+		return ok && (w.Animating[p.ID] || p.GridID == g.Anchor)
 	case GuardLevelOpen:
 		return w.LevelTop != nil && w.LevelTop.TileID == g.TileID
 	}

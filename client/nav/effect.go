@@ -62,12 +62,15 @@ const (
 
 	// EffFetchGrid warms a grid: GridID, or PaneID for the grid this pane's
 	// place names, which only the executor can resolve. Planned only through
-	// planner.fetchGrid.
+	// planner.fetchGrid, and for a door's preview by landingReads.
 	EffFetchGrid
 	EffFetchTileContent // warms a tile's body: TileID
-	EffReadTileContent  // reads a body even when one is held, shown until the answer: TileID
-	EffDropTileContent  // drops a cached body before refetching it: ContentID
-	EffAwait            // starts an async read to resume with: Token, Request
+	// EffFetchPreview warms a url or shell tile's preview: TileID, the
+	// content id, and BlobID, the key the row names.
+	EffFetchPreview
+	EffReadTileContent // reads a body even when one is held, shown until the answer: TileID
+	EffDropTileContent // drops a cached body before refetching it: ContentID
+	EffAwait           // starts an async read to resume with: Token, Request
 
 	EffOpenMenu // reopens the + menu and clears the frame flag: PaneID
 	EffCloseMenu
@@ -105,6 +108,10 @@ type Effect struct {
 	TileID     string
 	GridID     string
 	ContentID  string
+	// Preview marks an EffFetchGrid for a door's preview, and BlobID is an
+	// EffFetchPreview's key.
+	Preview bool
+	BlobID  int64
 	// Tile is by value: an ephemeral scratch tile is in no cached grid.
 	Tile *gridwellv1.Tile
 
@@ -194,6 +201,8 @@ type Result struct {
 	Version int64
 	// Err is a failed read's text, stripped of the wire prefix.
 	Err string
+	// Grid is a RequestGetGrid's grid as it landed in the cache.
+	Grid *GridRows
 	// Dead is a failed read whose verdict was that the id's path ends in
 	// nothing (clientsync.OutcomeDead).
 	Dead bool

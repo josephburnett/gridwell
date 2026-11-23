@@ -94,6 +94,7 @@ func (m *Machine) descendGrid(p PaneView, door *gridwellv1.Tile, w World, pl *pl
 		mid.Cy = float64(door.Y) + float64(door.H)/2
 	}
 	pl.fetchGrid(w, door.ChildGridId)
+	m.readLanding(p, door.ChildGridId, final, w, pl)
 
 	child := base.Copy()
 	child.Push(next)
@@ -122,6 +123,27 @@ func (m *Machine) descendGrid(p PaneView, door *gridwellv1.Tile, w World, pl *pl
 			DurationMs: durations[1],
 		},
 	}})
+}
+
+// readLanding starts the reads the landing paint of gridID at final makes,
+// now from the rows the cache holds current, or once the grid's read lands.
+func (m *Machine) readLanding(p PaneView, gridID string, final zoomtrans.Endpoints, w World, pl *planner) {
+	view, err := rpc.NewFraming(final.Cx, final.Cy, final.Zoom)
+	if err != nil {
+		return
+	}
+	at := landing{Rect: p.Rect, View: view}
+	if w.current(gridID) {
+		pl.landingReads(w, w.Door.Child, at)
+		return
+	}
+	tok := m.mint(cont{
+		Guard:   Guard{Kind: GuardLanding, PaneID: p.ID, Anchor: gridID},
+		Step:    stepLandingReads,
+		PaneID:  p.ID,
+		Landing: at,
+	})
+	pl.add(Effect{Kind: EffAwait, Token: tok, Request: Request{Kind: RequestGetGrid, ID: gridID}})
 }
 
 // descendContent plans one pan-and-zoom into a content tile, pushing the frame

@@ -64,6 +64,27 @@ func PreviewRasterDraw(frame PreviewFrame, rasterW, rasterH, rasterScale, x, y, 
 	}, true
 }
 
+// bannerMaxFontPx is the largest a name's banner letters; the band is 4 px
+// taller.
+const bannerMaxFontPx = 16.0
+
+// BannerGeom clamps a tile's banner font to 9 to 16 screen px for a tile h
+// tall with ih inside its border; the text preview reads the same formula.
+func BannerGeom(h, ih float64) (fontPx, bannerH float64, shown bool) {
+	fontPx = min(max(h*0.14, 9), bannerMaxFontPx)
+	if fontPx*1.4 > ih {
+		return fontPx, 0, false
+	}
+	return fontPx, fontPx + 4, true
+}
+
+// PreviewBodyShown is whether a text preview h px tall shows a body line under
+// whatever banner it wears, so its paint reads the body: known from the size
+// alone, before the banner is laid out.
+func PreviewBodyShown(h, scale float64) bool {
+	return PreviewContentVisible(h-bannerMaxFontPx-4, scale)
+}
+
 // PreviewContentVisible drops to the alt-text banner alone below one body line
 // of space, mirroring the door's previewCell >= 0.5 gate. availH is the inner
 // height minus the banner.

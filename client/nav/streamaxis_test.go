@@ -95,6 +95,31 @@ func streamAxis() []streamRow {
 			return New().Do(enterGesture("pane1", level), w)
 		},
 		asked: awaits(RequestGetTile),
+	}, streamRow{
+		name: "descending into a held grid: its landing read from the rows held",
+		fn:   "readLanding",
+		hold: holdGrids("g2"),
+		plan: func(t *testing.T, current map[string]bool) Plan {
+			door, body := descentDoor(t)
+			w := landingWorld()
+			w.Door = &DoorWorld{Child: &GridRows{Tiles: []*gridwellv1.Tile{body}}}
+			w.Current = current
+			return New().Do(descendGesture("pane1", door), w)
+		},
+		asked: awaits(RequestGetGrid),
+	}, streamRow{
+		name: "a landing's door previewing a held grid",
+		fn:   "landingReads",
+		hold: holdGrids("g3"),
+		plan: func(t *testing.T, current map[string]bool) Plan {
+			d := &gridwellv1.Tile{Id: "d1", Kind: rpc.KindDoor, GridId: "g2", W: 2, H: 2, ChildGridId: "g3"}
+			w := landingWorld()
+			w.Current = current
+			var pl planner
+			pl.landingReads(w, &GridRows{Tiles: []*gridwellv1.Tile{d}}, atOrigin(t))
+			return pl.plan()
+		},
+		asked: asksGrid,
 	})
 }
 

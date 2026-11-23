@@ -104,13 +104,13 @@ func TestDescendPlans(t *testing.T) {
 		name: "door",
 		door: door,
 		want: []EffectKind{EffCancelTransition, EffFlushFraming, EffFetchGrid,
-			EffStartTransition},
+			EffAwait, EffStartTransition},
 	}, {
 		name: "link tile",
 		door: link,
 		dw:   DoorWorld{IsLink: true},
 		want: []EffectKind{EffCancelTransition, EffFlushFraming, EffCloseMenu,
-			EffFetchGrid, EffStartTransition},
+			EffFetchGrid, EffAwait, EffStartTransition},
 	}, {
 		name:    "content text",
 		door:    text,

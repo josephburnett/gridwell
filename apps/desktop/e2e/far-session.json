@@ -1,6 +1,7 @@
 {
   "delayMs": 100,
   "boundMs": 100,
+  "readBoundMs": 450,
   "waits": {},
   "decided": {},
   "firstOpenRoundTrips": 1,

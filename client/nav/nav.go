@@ -78,6 +78,7 @@ type cont struct {
 	// Restore continuations leave PaneID empty; see awaitGrid.
 	Restore *restoreData
 	Level   *levelData
+	Landing landing
 }
 
 // step is the closed set of things the machine does when an answer lands.
@@ -106,6 +107,7 @@ const (
 	// the layout would resolve a gone tile.
 	stepRetireVisit
 	stepReconcileLevel // installs the arrangement on disk over a refused one
+	stepLandingReads   // asks a descent's second layer once its grid is held
 )
 
 func (m *Machine) mint(c cont) Token {
@@ -289,6 +291,10 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 		m.levelRecentre(c, r, w, &pl)
 	case stepReconcileLevel:
 		m.reconciledLevel(c, r, &pl)
+	case stepLandingReads:
+		if r.OK {
+			pl.landingReads(w, r.Grid, c.Landing)
+		}
 	case stepLinkTarget:
 		if r.Dead {
 			// The link now draws dead, which says it all, and the descent has
