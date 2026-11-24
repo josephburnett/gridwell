@@ -434,7 +434,9 @@ A debounced settle persister does the same without waiting for an ascent.
 A pane's centre is drawn at its rect's middle. A boundary the user drags, an
 edge split or a divider, moves every grid frame's centre and its settled view
 with it (`pane.Tree.Reframe`, measured from the press by `pane.StayPut`), so
-the grid stays where it was on screen and nothing is written; a window resize
+the grid stays where it was on screen and nothing is written; an edge split's
+new pane is reframed from its source's rect, so it shows what it covers, unless
+it copied a content frame and ascends; a window resize
 and the split below change no view, so the centre stays in the middle.
 
 **Content.** A cache entry ({bytes, base, dirty}, keyed by tile id) owns a

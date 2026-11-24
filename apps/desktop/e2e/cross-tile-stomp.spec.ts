@@ -38,9 +38,11 @@ test('collapsing a text-descended pane never saves another tile\'s buffer into i
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  // The center cell stays empty, so focus clicks land on no tile.
+  // The center cell stays empty, so focus clicks land on no tile; bravo is
+  // where the new pane will be, which shows what its rect covers.
+  const [bx] = await gw.newPaneCell();
   const alphaID = await seedTile(gw, f.gridID, cx - 1, cy, 'alpha alpha');
-  const bravoID = await seedTile(gw, f.gridID, cx + 1, cy, 'bravo bravo');
+  const bravoID = await seedTile(gw, f.gridID, bx + 1, cy, 'bravo bravo');
 
   // The singleton ends bound to bravo, the last text descent.
   await gw.splitFocusedPaneVertical();
@@ -55,7 +57,7 @@ test('collapsing a text-descended pane never saves another tile\'s buffer into i
 
   const panesAfter = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   await gw.focusPane(panesAfter[1]);
-  await gw.descendCell(cx + 1, cy);
+  await gw.descendCell(bx + 1, cy);
   await expect
     .poll(async () => gw.textareaValue(), { timeout: 10_000 })
     .toBe('bravo bravo');

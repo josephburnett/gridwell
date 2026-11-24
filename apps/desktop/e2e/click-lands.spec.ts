@@ -166,9 +166,9 @@ test('one click on an unfocused live url pane hands its page the keyboard, and i
 // gesture it would start waits for the layout to settle (gesture.PressReach).
 test('one click on an unfocused grid pane focuses it while another pane descends', async ({ gw, window }) => {
   await gw.enterSource('home');
-  const f = await gw.focused();
-  const cx = Math.round(f.cx);
-  const cy = Math.round(f.cy) + 1;
+  // In the new pane, which shows what its rect covers (pane.StayPut).
+  const [cx, cy0] = await gw.newPaneCell();
+  const cy = cy0 + 1;
   await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   await gw.splitFocusedPaneVertical();

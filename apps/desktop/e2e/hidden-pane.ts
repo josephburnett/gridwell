@@ -49,22 +49,24 @@ export async function hiddenPaneScenario(gw: GridwellDriver, window: any, token:
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
+  // The door where the split's new pane will be: it shows what its rect covers.
+  const [dx] = await gw.newPaneCell();
 
   await gw.openMenu();
   await gw.dragCreate('workspace', wx, wy);
   await gw.openMenu();
-  await gw.dragCreate('door', wx + 1, wy);
+  await gw.dragCreate('door', dx, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy)!;
-  const door = tileAt(await gw.getGrid(rootGrid), 'door', wx + 1, wy)!;
+  const door = tileAt(await gw.getGrid(rootGrid), 'door', dx, wy)!;
   expect(pt && door, 'workspace tile and door persisted').toBeTruthy();
 
   // Give the door a saved view of its own, outside the workspace tile.
-  await gw.descendCell(wx + 1, wy);
+  await gw.descendCell(dx, wy);
   await gw.wheelAtFocusedCenter(-300);
   const framed = await gw.focused();
   await gw.middleClickCell(Math.round(framed.cx), Math.round(framed.cy));
   const savedView = async () => {
-    const t = tileAt(await gw.getGrid(rootGrid), 'door', wx + 1, wy) as any;
+    const t = tileAt(await gw.getGrid(rootGrid), 'door', dx, wy) as any;
     return { cx: Number(t?.viewCx ?? 0), cy: Number(t?.viewCy ?? 0), zoom: Number(t?.viewZoom ?? 0) };
   };
   await expect.poll(async () => (await savedView()).zoom, { message: 'the ascent framed the door' })
@@ -74,7 +76,7 @@ export async function hiddenPaneScenario(gw: GridwellDriver, window: any, token:
   await gw.descendCell(wx, wy);
   await expect.poll(() => workspaceDepth(window)).toBe(1);
   await gw.splitFocusedPaneVertical();
-  await gw.descendCell(wx + 1, wy);
+  await gw.descendCell(dx, wy);
   const inDoor = await gw.focused();
   expect(inDoor.gridID, 'one pane is inside the door').toBe(door.childGridId);
   const onRoot = (await gw.panes()).find((p) => p.id !== inDoor.id)!;

@@ -32,8 +32,12 @@ async function twoPanes(gw: GridwellDriver, origin: string, body: string, descen
   const grid = f.gridID;
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  const text = await createText(origin, grid, cx, cy, body);
+  // The text in the new pane's middle, which shows what its rect covers
+  // (pane.StayPut).
+  const [tx, ty] = await gw.newPaneCell();
+  const text = await createText(origin, grid, tx, ty, body);
   const pasted = await createText(origin, grid, cx + 1, cy, 'the referenced body');
+  await gw.waitClientTileAt(f.id, tx, ty, text.id);
   await gw.splitFocusedPaneVertical();
   const bId = (await gw.focused()).id;
   await descend((await gw.panes()).find((p: PaneInfo) => p.id === bId)!);
@@ -170,12 +174,16 @@ test('a paste inside a workspace tile moves the focus its layout keeps', async (
   // The pane inside shows the grid the workspace tile sits on, so the texts
   // go on the row below it.
   const grid = (await gw.focused()).gridID;
+  // The text where the split's new pane will be, which shows what its rect
+  // covers (pane.StayPut).
   const [cx, cy] = [wx, wy + 1];
-  const text = await createText(origin, grid, cx, cy, BODY);
+  const [tx] = await gw.newPaneCell();
+  const text = await createText(origin, grid, tx, cy, BODY);
   const pasted = await createText(origin, grid, cx + 1, cy, 'the referenced body');
+  await gw.waitClientTileAt((await gw.focused()).id, tx, cy, text.id);
   await gw.splitFocusedPaneVertical();
   const bId = (await gw.focused()).id;
-  await gw.descendCell(cx, cy);
+  await gw.descendCell(tx, cy);
   await expect.poll(() => gw.textareaValue(), { timeout: 10_000 }).toBe(BODY);
   const b = (await gw.panes()).find((p: PaneInfo) => p.id === bId)!;
   const aId = (await gw.panes()).find((p: PaneInfo) => p.id !== bId)!.id;

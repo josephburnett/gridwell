@@ -23,7 +23,9 @@ const paneById = async (gw: any, id: string) => (await gw.panes()).find((p: any)
 const checkedIn = (s: string) => (s.match(/gw-task-done/g) ?? []).length;
 
 // Two panes on the home grid, the left descended into a text tile holding
-// body, the right focused, so the left paints on canvas.
+// body and focused. The left descends before the split, so the right, the
+// copy of a content frame, ascends onto the view the left had and shows the
+// tile.
 async function splitOnText(gw: any, body: string) {
   await gw.enterSource('home');
   const f = await gw.focused();
@@ -32,12 +34,13 @@ async function splitOnText(gw: any, body: string) {
   await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const tile = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
-  await gw.splitFocusedPaneVertical();
-  const [left, right] = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
-  await gw.focusPane(left);
   await gw.descendCell(cx, cy);
   await gw.pasteText(body);
   await expect.poll(() => gw.getTileContent(tile.id), { timeout: 10_000 }).toBe(body);
+  await gw.splitFocusedPaneVertical();
+  const [left, right] = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
+  await gw.waitClientTileAt(right.id, cx, cy, tile.id);
+  await gw.focusPane(left);
   return { left, right, tile };
 }
 

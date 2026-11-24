@@ -63,14 +63,16 @@ test("a text's crumb right-dropped on a live shell pastes its reference and the 
   const cy = Math.round(f.cy);
   const body = 'a text to point at\n';
   const text = await createText(origin, grid, cx, cy, body);
-  const shell = await createTile(origin, grid, 'shell', cx + 1, cy);
-  await gw.waitClientTileAt(f.id, cx + 1, cy, shell.id);
+  // In the new pane, which shows what its rect covers (pane.StayPut).
+  const [sx] = await gw.newPaneCell();
+  const shell = await createTile(origin, grid, 'shell', sx, cy);
+  await gw.waitClientTileAt(f.id, sx, cy, shell.id);
 
   // B on the shell, live, with `echo ` typed; A on the text.
   await gw.splitFocusedPaneVertical();
   const bId = (await gw.focused()).id;
   const aId = (await gw.panes()).find((p) => p.id !== bId)!.id;
-  await gw.descendCell(cx + 1, cy);
+  await gw.descendCell(sx, cy);
   await gw.shellAttached();
   await window.keyboard.type('echo ');
   await gw.focusPane(await pane(gw, aId));
@@ -174,8 +176,10 @@ test("an outer level's band right-dropped on a shell pastes its reference, and o
   const cy = Math.round(f.cy);
   const outer = await createTile(origin, grid, 'workspace', cx, cy);
   const inner = await createTile(origin, grid, 'workspace', cx + 1, cy);
-  const shell = await createTile(origin, grid, 'shell', cx, cy + 1);
-  await gw.waitClientTileAt(f.id, cx, cy + 1, shell.id);
+  // In the new pane, which shows what its rect covers (pane.StayPut).
+  const [sx] = await gw.newPaneCell();
+  const shell = await createTile(origin, grid, 'shell', sx, cy + 1);
+  await gw.waitClientTileAt(f.id, sx, cy + 1, shell.id);
   const depth = async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth;
 
   // Two levels deep: into the outer workspace tile, then the inner one.
@@ -191,7 +195,7 @@ test("an outer level's band right-dropped on a shell pastes its reference, and o
   await gw.splitFocusedPaneVertical();
   const bId = (await gw.focused()).id;
   const aId = (await gw.panes()).find((p) => p.id !== bId)!.id;
-  await gw.descendCell(cx, cy + 1);
+  await gw.descendCell(sx, cy + 1);
   await gw.shellAttached();
   await window.keyboard.type('echo ');
   await gw.focusPane(await pane(gw, aId));
@@ -365,7 +369,9 @@ async function ghostFollows(window: Page, gw: GridwellDriver, origin: string, gr
 }
 
 // Two panes on home's grid with tile kind at its center; A descended into it.
-async function descendedInto(gw: GridwellDriver, origin: string, kind: string) {
+// A descends before the split, so B, the copy of a content frame, ascends onto
+// the view A had and shows the tile too. inside runs in A before the split.
+async function descendedInto(gw: GridwellDriver, origin: string, kind: string, inside?: () => Promise<void>) {
   await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
@@ -373,11 +379,13 @@ async function descendedInto(gw: GridwellDriver, origin: string, kind: string) {
   const cy = Math.round(f.cy);
   const tile = kind === 'text' ? await createText(origin, grid, cx, cy, 'a text to carry\n') : await createTile(origin, grid, kind, cx, cy);
   await gw.waitClientTileAt(f.id, cx, cy, tile.id);
+  await gw.descendCell(cx, cy);
+  if (inside) await inside();
   await gw.splitFocusedPaneVertical();
   const bId = (await gw.focused()).id;
-  const aId = (await gw.panes()).find((p) => p.id !== bId)!.id;
+  const aId = f.id;
+  await gw.waitClientTileAt(bId, cx, cy, tile.id);
   await gw.focusPane(await pane(gw, aId));
-  await gw.descendCell(cx, cy);
   return { grid, cx, cy, tile: tile.id, aId, bId };
 }
 
@@ -398,13 +406,16 @@ test("a text's crumb drag shows the text on the cursor, over the bar, its own pa
 test("a live url's crumb drag shows the url on the cursor, and the page comes back", async ({ electronApp, gw, window }) => {
   const origin = new URL(window.url()).origin;
   const marker = 'gwe2ecrumbghost';
-  const d = await descendedInto(gw, origin, 'url');
-  await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
-  await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?${marker}=1`);
-  await window.locator('#gw-url-form').evaluate((fm: HTMLFormElement) => fm.requestSubmit());
   const live = () =>
     electronApp.evaluate(({ webContents }, m) => webContents.getAllWebContents().filter((w) => w.getURL().includes(m)).length, marker);
-  await expect.poll(live, { timeout: 15_000 }).toBe(1);
+  const d = await descendedInto(gw, origin, 'url', async () => {
+    await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
+    await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?${marker}=1`);
+    await window.locator('#gw-url-form').evaluate((fm: HTMLFormElement) => fm.requestSubmit());
+    await expect.poll(live, { timeout: 15_000 }).toBe(1);
+    await gw.waitIdle();
+  });
+  await expect.poll(live, { message: 'the split kept the page' }).toBe(1);
   await gw.waitIdle();
   const shown = () => window.evaluate(() => (window as any).__gridwellTest.urlViews());
   const views = await shown();
@@ -415,8 +426,7 @@ test("a live url's crumb drag shows the url on the cursor, and the page comes ba
 
 test("a live shell's crumb drag shows the shell on the cursor", async ({ gw, window }) => {
   const origin = new URL(window.url()).origin;
-  const d = await descendedInto(gw, origin, 'shell');
-  await gw.shellAttached();
+  const d = await descendedInto(gw, origin, 'shell', () => gw.shellAttached());
   await ghostFollows(window, gw, origin, d.grid, d.tile, d.aId, d.bId, d.cx, d.cy);
 });
 
@@ -435,8 +445,10 @@ test("a level's band drag shows its workspace tile on the cursor", async ({ gw, 
   await gw.splitFocusedPaneVertical();
   const bId = (await gw.focused()).id;
   const aId = (await gw.panes()).find((p) => p.id !== bId)!.id;
-  await gw.waitClientTileAt(bId, cx, cy, ws.id);
+  // The split slices the pane (pane.StayPut), so the original shows the tile
+  // and the new one, which the bar rides, is the pane the drag starts over.
+  await gw.waitClientTileAt(aId, cx, cy, ws.id);
   await expect.poll(async () => Number((await getTile(origin, ws.id)).version ?? 0), { message: 'the split is in the layout' }).toBeGreaterThan(0);
   await gw.waitIdle();
-  await ghostFollows(window, gw, origin, grid, ws.id, aId, bId, cx, cy);
+  await ghostFollows(window, gw, origin, grid, ws.id, bId, aId, cx, cy);
 });

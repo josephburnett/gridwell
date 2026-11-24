@@ -38,16 +38,18 @@ test('a shell taken over moves with its terminal and socket, never reattaching',
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  // Split first: splitting a descended pane would ascend it.
-  await gw.splitFocusedPaneVertical();
-  const [left, right] = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
-  await gw.focusPane(left);
+  // Live, then split: the shell stays in the left pane, and the right, the
+  // copy of a content frame, ascends onto the grid the left had.
   await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.shellAttached();
+  await gw.splitFocusedPaneVertical();
+  const [left, right] = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
+  await gw.focusPane(left);
   const tile = (await shellViews())[left.id];
   expect(tile, 'the left pane holds the live shell').toBeTruthy();
+  await gw.waitClientTileAt(right.id, cx, cy, tile);
 
   const marker = `gw-moved-${Math.random().toString(36).slice(2, 8)}`;
   await window.keyboard.type(`printf '%s\\n' ${marker}`);

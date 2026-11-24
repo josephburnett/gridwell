@@ -108,14 +108,16 @@ test('split pane: focus switch between two text descents preserves both tiles', 
   const cx = Math.round(f0.cx);
   const cy = Math.round(f0.cy);
 
-  // Flanking the center vertically: visible in half-width panes, with the
-  // pane-center pixel left clear for focus clicks.
+  // Off each pane's centre row, so the pane-center pixel is left clear for
+  // focus clicks; t2 where the new pane will be, which shows what its rect
+  // covers (pane.StayPut).
+  const [tx] = await gw.newPaneCell();
   await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy - 1);
   await gw.openMenu();
-  await gw.dragCreate('markdown', cx, cy + 1);
+  await gw.dragCreate('markdown', tx, cy + 1);
   const t1 = tileAt(await gw.getGrid(grid), 'text', cx, cy - 1)!;
-  const t2 = tileAt(await gw.getGrid(grid), 'text', cx, cy + 1)!;
+  const t2 = tileAt(await gw.getGrid(grid), 'text', tx, cy + 1)!;
   expect(t1, 'first text tile created').toBeTruthy();
   expect(t2, 'second text tile created').toBeTruthy();
 
@@ -135,7 +137,7 @@ test('split pane: focus switch between two text descents preserves both tiles', 
   // paints it rather than the overlay. A cross-pane hide decision would blank
   // that pane.
   await gw.focusPane(rightPane);
-  await gw.descendCell(cx, cy + 1);
+  await gw.descendCell(tx, cy + 1);
   await expect.poll(async () => {
     const ta = await gw.textareaInfo();
     return ta != null && ta.paneID === rightPane.id;

@@ -46,12 +46,8 @@ test('a link to a copy takes over the tmux of its source, and the source takes i
   const cy = Math.round(f.cy);
   const shellAt = async (x: number, y: number) => tileAt(await gw.getGrid(grid), 'shell', x, y);
 
-  await gw.splitFocusedPaneVertical();
-  const [left, right] = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
-  const pane = async (id: string) => (await gw.panes()).find((p: any) => p.id === id)!;
-
-  // The source, live in the left pane.
-  await gw.focusPane(left);
+  // The source, live, then split: it stays in the left pane, and the right,
+  // the copy of a content frame, ascends onto the grid the left had.
   await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy);
@@ -62,6 +58,10 @@ test('a link to a copy takes over the tmux of its source, and the source takes i
   const markerRow = async () => (await shellText()).split('\n').some((l) => l.trim() === marker);
   await expect.poll(markerRow, { timeout: 10_000 }).toBe(true);
   const source = (await shellAt(cx, cy))!;
+  await gw.splitFocusedPaneVertical();
+  const [left, right] = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
+  const pane = async (id: string) => (await gw.panes()).find((p: any) => p.id === id)!;
+  await gw.waitClientTileAt(right.id, cx, cy, source.id);
 
   // A copy of it, and a link to the copy, from the right pane.
   await gw.focusPane(await pane(right.id));

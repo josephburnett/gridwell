@@ -710,6 +710,19 @@ export class GridwellDriver {
     await this.rightDragScreen(p.x + p.w - 5, y, p.x + p.w * 0.6, y);
   }
 
+  // The cell at the middle of the new pane splitFocusedPaneVertical ('v') or
+  // splitFocusedPaneHorizontal ('h') will make of the focused pane, rounded as
+  // a spec rounds a pane's centre. An edge split slices the pane
+  // (pane.StayPut), so a tile placed there before the split is in the new pane.
+  async newPaneCell(dir: 'v' | 'h' = 'v'): Promise<[number, number]> {
+    const p = await this.focused();
+    const [x, y] = [Math.round(p.cx), Math.round(p.cy)];
+    const cell = (await this.cellCenter(p.id, x + 1, y)).x - (await this.cellCenter(p.id, x, y)).x;
+    return dir === 'v'
+      ? [Math.round(p.cx + (p.w * 0.3) / cell), Math.round(p.cy)]
+      : [Math.round(p.cx), Math.round(p.cy + (p.h * 0.3) / cell)];
+  }
+
   // Right-drags inward from the pane's bottom edge band, the new pane taking
   // the bottom 40%.
   async splitFocusedPaneHorizontal(): Promise<void> {

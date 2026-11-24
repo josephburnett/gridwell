@@ -663,8 +663,10 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 	a.tree.Reframe(planted, a.rootLayoutRect())
 	a.emit(traceevent.PaneSplit(np.ID, p.ID))
 	// A new pane is a copy of the source, deliberately: a split means another
-	// view of where I am. A content frame is the exception, because there is one
-	// native view or PTY attachment per tile and pane, so it ascends one level.
+	// view of where I am, Reframe showing it the part of the source's view its
+	// rect covers. A content frame is the exception, because there is one native
+	// view or PTY attachment per tile and pane, so it ascends one level and lands
+	// as any ascent does.
 	if np != nil && np.ContentID() != "" {
 		a.ascend(np, 1, true)
 	}

@@ -63,11 +63,14 @@ test('a drop onto a rendered text is refused with the reason, worn under the bad
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  const text = await createText(origin, f.gridID, cx, cy, '# rendered\n');
+  // The text in the new pane, which shows what its rect covers (pane.StayPut).
+  const [tx] = await gw.newPaneCell();
+  const text = await createText(origin, f.gridID, tx, cy, '# rendered\n');
   const moved = await createText(origin, f.gridID, cx + 1, cy, 'dragged');
+  await gw.waitClientTileAt(f.id, tx, cy, text.id);
   await gw.splitFocusedPaneVertical();
   const bId = (await gw.focused()).id;
-  await gw.descendCell(cx, cy);
+  await gw.descendCell(tx, cy);
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).toBe(text.id);
   await expect.poll(() => gw.textareaValue(), { timeout: 10_000 }).toBe('# rendered\n');
   await gw.toggleTextMode();

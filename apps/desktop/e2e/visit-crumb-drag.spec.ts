@@ -367,9 +367,6 @@ test('a workspace visit right-dragged off its boundary crumb is kept with its la
   await gw.enterSource('home');
   const home = await gw.focused();
   const scratch = await gw.scratchGridID('home');
-  const cx = Math.round(home.cx);
-  const cy = Math.round(home.cy);
-  const text = await createText(origin, home.gridID, cx - 2, cy, 'a text inside');
 
   await visitTemplate(window, gw, ((await gw.getGrid(tg)).tiles ?? [])[0].id);
   const depth = async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth;
@@ -377,9 +374,14 @@ test('a workspace visit right-dragged off its boundary crumb is kept with its la
   const ws = ((await gw.getGrid(scratch)).tiles ?? []).find((t) => t.kind === 'workspace')!;
   expect(ws, 'the visit is on the scratch grid').toBeTruthy();
 
-  // Two panes inside, one in the text, so the layout holds it.
+  // Two panes inside, one in the text, so the layout holds it. The text is
+  // where the split's new pane will be, which shows what its rect covers
+  // (pane.StayPut).
+  const [tx, ty] = await gw.newPaneCell();
+  const text = await createText(origin, home.gridID, tx, ty, 'a text inside');
+  await gw.waitClientTileAt((await gw.focused()).id, tx, ty, text.id);
   await gw.splitFocusedPaneVertical();
-  await gw.descendCell(cx - 2, cy);
+  await gw.descendCell(tx, ty);
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).toBe(text.id);
   await expect.poll(async () => (await gw.getTileContent(ws.id)).includes(text.id), { timeout: 10_000 }).toBe(true);
   const inner = await gw.focused();

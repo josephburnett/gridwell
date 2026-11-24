@@ -41,12 +41,6 @@ test('a copy of a live shell attaches its tmux: one client, one exit for both', 
   const cy = Math.round(f.cy);
   const shellAt = async (x: number, y: number) => tileAt(await gw.getGrid(grid), 'shell', x, y);
 
-  // Split first: splitting a descended pane would ascend it.
-  await gw.splitFocusedPaneVertical();
-  const [left, right] = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
-  const pane = async (id: string) => (await gw.panes()).find((p: any) => p.id === id)!;
-
-  await gw.focusPane(left);
   await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy);
@@ -57,6 +51,13 @@ test('a copy of a live shell attaches its tmux: one client, one exit for both', 
   const markerRow = async () => (await shellText()).split('\n').some((l) => l.trim() === marker);
   await expect.poll(markerRow, { timeout: 10_000 }).toBe(true);
   const source = (await shellAt(cx, cy))!;
+
+  // Split the live pane: the left keeps the shell, and the right, the copy of
+  // a content frame, ascends onto the grid the left had and shows the tile.
+  await gw.splitFocusedPaneVertical();
+  const [left, right] = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
+  const pane = async (id: string) => (await gw.panes()).find((p: any) => p.id === id)!;
+  await gw.waitClientTileAt(right.id, cx, cy, source.id);
 
   // Right-drag the live shell in the other pane: the copy names its tmux.
   await gw.focusPane(await pane(right.id));

@@ -1120,7 +1120,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   copy carries it (`pane.Frame.FramingWrite`). A boundary the user drags,
   an edge split's or a divider's, the corner grab, the crush and a finger's
   included, covers or uncovers and leaves every grid in the pane where it
-  was on screen, writing no framing; a window resize and the split below a
+  was on screen, writing no framing, and an edge split's new pane shows
+  the part of the old view its rect covers, so the screen is the same with
+  a boundary through it (Joe, 2026-11-24: "the new pand boundary to
+  essentially "slice" the pane at the poine where it lands. So I see the
+  same thing (no movement) but with a pane boundary in the middle."); a
+  split of a pane inside a content tile showed no grid, so its new pane
+  ascends and lands as any ascent does; a window resize and the split below a
   ctrl-click or a link opens keep the centre in the middle (Joe, 2026-11-22:
   "the original is then recentered which moves things out of view. i want
   it to stay put."; chose "Split and divider drag", and for the split below

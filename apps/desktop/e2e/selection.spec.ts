@@ -209,7 +209,11 @@ test('inside a workspace tile the selection is the grid row\'s, every pane on th
 
   await shiftClick(gw, window, wx + 2, wy);
   await expectSelection(gw, window, inner.id, f.gridID, [a.id], 'shift-click inside');
-  await gw.splitFocusedPaneHorizontal();
+  // A split slices the pane (pane.StayPut), so the boundary goes through the
+  // tile's middle and both panes draw it.
+  const mid = await gw.cellCenter(inner.id, wx + 2, wy);
+  const p0 = await gw.focused();
+  await gw.rightDragScreen(p0.x + p0.w * 0.3, p0.y + p0.h - 5, p0.x + p0.w * 0.3, mid.y);
   const panes = await gw.panes();
   expect(panes, 'two panes inside').toHaveLength(2);
   for (const p of panes) {

@@ -41,11 +41,12 @@ test('a swatch dropped into another pane that shows a grid lands there', async (
 test('a swatch dropped over a pane descended into a tile creates nothing', async ({ gw }) => {
   await gw.enterSource('home');
   const home = await gw.focused();
-  const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
+  // In the new pane, which shows what its rect covers (pane.StayPut).
+  const [tx] = await gw.newPaneCell();
   await gw.openMenu();
-  await gw.dragCreate('markdown', cx, cy);
+  await gw.dragCreate('markdown', tx, cy);
   const before = await gw.getGrid(home.gridID);
   expect((before.tiles ?? []).length, 'the text tile landed').toBe(1);
 
@@ -56,7 +57,7 @@ test('a swatch dropped over a pane descended into a tile creates nothing', async
   const [left, right] = panes;
 
   await gw.focusPane(right);
-  await gw.descendCell(cx, cy);
+  await gw.descendCell(tx, cy);
   const inside = await gw.focused();
   expect(inside.id, 'the right pane is the one that descended').toBe(right.id);
   // textFocus is the persisted blob's spelling of "the content tile this pane
